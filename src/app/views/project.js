@@ -37,7 +37,7 @@ export async function updateManagerTable(retried = false) {
   try {
     toast('Обновляю таблицу для руководства…');
     const api = new URLSearchParams(location.search).get('mem') ? testApi() : realApi(await getToken());
-    const res = await syncManagers(api, p, state.ctx);
+    const res = await syncManagers(api, p, state.ctx, { uid: getRepo().user.uid });
     getRepo().saveProject(p.id, res.patch);
     toast(res.message);
   } catch (e) {

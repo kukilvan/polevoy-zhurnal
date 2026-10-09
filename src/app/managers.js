@@ -18,7 +18,7 @@ async function ensureGrid(api, fileId, need) {
 }
 
 // Возвращает { patch, message }: patch — поля проекта для сохранения (если что-то изменилось)
-export async function syncManagers(api, project, ctx, { force = false } = {}) {
+export async function syncManagers(api, project, ctx, { force = false, uid = '' } = {}) {
   const names = managerNames(project);
   if (!names.display) throw new Error('У проекта пустое название — заполните название, подрядчика или объект');
   const tables = managerTables(project, ctx);
@@ -27,10 +27,15 @@ export async function syncManagers(api, project, ctx, { force = false } = {}) {
   let fileId = fileIdOf(project);
   let oldHash = project.managerHash || '';
   let file = fileId ? await api.fileInfo(fileId) : null;
+  if (!file && fileId && project.managerBy && uid && project.managerBy !== uid) {
+    // файл создал другой участник: у вас к нему нет доступа — новую копию не создаём, чтобы не подменить ссылку
+    throw new Error('Таблицу руководства создал другой участник проекта, у вас нет к ней доступа. Обновить её может он.');
+  }
   if (!file) {
     file = await api.copy(TEMPLATE_ID, names.title);
-    fileId = file.id; oldHash = '';
+    fileId = file.id; oldHash = ''; if (uid) patch.managerBy = uid;
   }
+  if (uid && !project.managerBy && !patch.managerBy) patch.managerBy = uid; // файл виден — значит, он ваш
   const link = `https://docs.google.com/spreadsheets/d/${fileId}/edit`;
   if (fileId !== project.managerFileId) patch.managerFileId = fileId;
   if (link !== project.managerLink) patch.managerLink = link;
