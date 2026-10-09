@@ -1,0 +1,45 @@
+name: Server backup
+
+# Каждые 2 дня в 00:00 UTC (03:00 по Израилю летом, 02:00 зимой) копия всех проектов уходит в закрытый репозиторий kukilvan/polevoy-backups.
+on:
+  schedule:
+    - cron: '0 0 */2 * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write   # нужно, чтобы задача сама продлевала своё расписание (GitHub отключает расписание после 60 дней без активности)
+
+concurrency:
+  group: server-backup
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm i --no-save firebase-admin@13
+      - uses: actions/checkout@v4
+        with:
+          repository: kukilvan/polevoy-backups
+          token: ${{ secrets.BACKUP_REPO_TOKEN }}
+          path: backups
+      - name: Сделать копию
+        run: node scripts/server-backup.mjs backups
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - name: Сохранить копию в закрытый репозиторий
+        working-directory: backups
+        run: |
+          git config user.name "backup-bot"
+          git config user.email "backup-bot@users.noreply.github.com"
+          git add -A
+          git diff --cached --quiet || git commit -m "Копия $(date -u +%Y-%m-%d_%H%M)"
+          git push
+      - name: Продлить расписание
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/server-backup.yml/enable"
+        env:
+          GH_TOKEN: ${{ github.token }}

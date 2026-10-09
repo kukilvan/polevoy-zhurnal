@@ -82,6 +82,14 @@ function ctxMetres() {
   return m ? `Метраж по точкам с длиной: ${Math.round(m * 100) / 100} м` : '';
 }
 
+// Ночная копия на сервере: когда была последняя; красным, если давно (копии идут раз в 2 дня)
+function autoBackupLine(p) {
+  if (!p.serverBackupAt) return h('div', { class: 'mut', style: { width: '100%' } }, 'Автокопия на сервере ещё не запускалась');
+  const t = new Date(p.serverBackupAt); const days = (Date.now() - t.getTime()) / 86400000;
+  const when = t.toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
+  return h('div', { class: days > 4 ? 'pill st-bad' : 'mut', style: { width: '100%' } }, days > 4 ? `⚠️ Автокопия давно не делалась (последняя: ${when})` : `🛡 Автокопия на сервере: ${when}`);
+}
+
 function members(p, ui) {
   const me = getRepo().user.email?.toLowerCase();
   const invited = p.invitedEmails || [];
@@ -113,6 +121,7 @@ export function projectView(ui) {
     h('div', { class: 'btns' },
       h('button', { class: 'wide', onclick: () => openToday(ui) }, '📝 Сегодня'),
       h('button', { class: 'sec', onclick: () => ui.open('projects') }, 'Все проекты'),
+      autoBackupLine(p),
       h('button', { class: 'sec', onclick: backupNow }, p.backupAt ? `💾 Резервная копия (последняя: ${new Date(p.backupAt).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })})` : '💾 Резервная копия на Диск'),
       h('button', { class: 'sec', onclick: updateManagerTable }, '🔄 Обновить таблицу для руководства'),
       p.managerLink ? h('button', { class: 'sec', onclick: () => window.open(p.managerLink, '_blank') }, '📊 Открыть таблицу руководства') : null));
