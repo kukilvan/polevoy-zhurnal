@@ -226,6 +226,24 @@ export function createRepo(backend, user) {
       const list = [...new Set([...(project.invitedEmails || []), e])];
       api.saveProject(project.id, { invitedEmails: list });
     },
+    // Подпись участника (видна всем в проекте). Ключ — почта без точек, т.к. точка в ключе Firestore неудобна
+    renameMember(project, email, name) {
+      api.saveProject(project.id, { memberNames: { [String(email).toLowerCase().replace(/\./g, '_')]: String(name || '').trim() } });
+    },
+    // Убрать участника: он теряет доступ; его прежние правки остаются, а uid запоминается для отката в «Истории»
+    removeMember(project, email) {
+      const e = String(email).toLowerCase();
+      const emails = project.memberEmails || []; const uids = project.memberUids || [];
+      const i = emails.findIndex((x) => String(x).toLowerCase() === e);
+      if (i < 0 || emails.length !== uids.length) throw new Error('Не удалось определить участника');
+      if (uids[i] === user.uid) throw new Error('Себя убрать нельзя');
+      const uid = uids[i];
+      api.saveProject(project.id, {
+        memberUids: uids.filter((_, k) => k !== i), memberEmails: emails.filter((_, k) => k !== i),
+        removedMembers: { ...(project.removedMembers || {}), [uid]: e },
+      });
+      return uid;
+    },
     cancelInvite(project, email) {
       api.saveProject(project.id, { invitedEmails: (project.invitedEmails || []).filter((x) => x !== email) });
     },

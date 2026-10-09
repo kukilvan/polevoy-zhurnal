@@ -7,6 +7,7 @@ import { h, formModal, confirmDialog, toast } from '../ui.js';
 import { getToken, realApi, clearToken } from '../google.js';
 import { syncManagers } from '../managers.js';
 import { runBackup } from '../backup.js';
+import { memberLabel } from './members.js';
 
 // Тестовый режим (?mem=1): вместо Google — заглушка, вызовы пишутся в window.__gcalls
 function testApi() {
@@ -80,29 +81,14 @@ function ctxMetres() {
   return m ? `Метраж по точкам с длиной: ${Math.round(m * 100) / 100} м` : '';
 }
 
-function inviteForm(p) {
-  formModal({
-    title: 'Пригласить в проект', submitLabel: 'Пригласить',
-    fields: [{ key: 'email', label: 'Почта Google коллеги', required: true, hint: 'Коллега входит в приложение этой почтой и принимает приглашение. Права у всех равные.' }],
-    onSubmit: (v) => {
-      try { getRepo().invite(p, v.email); } catch (e) { toast(e.message); return false; }
-      toast('Приглашение отправлено — пусть коллега откроет приложение');
-    },
-  });
-}
-
-function members(p) {
+function members(p, ui) {
   const me = getRepo().user.email?.toLowerCase();
   const invited = p.invitedEmails || [];
   return h('div', { class: 'card' }, h('b', {}, 'Участники'),
     h('div', { style: { marginTop: '6px' } }, (p.memberEmails || []).map((e) =>
-      h('div', { class: 'mut' }, `${e}${e === me ? ' (вы)' : ''}`))),
-    invited.length ? h('div', { style: { marginTop: '8px' } }, h('div', { class: 'mut' }, 'Приглашены, ещё не вошли:'),
-      invited.map((e) => h('div', { class: 'item', style: { padding: '6px 0' } }, h('div', { class: 'name' }, e),
-        h('button', { class: 'sec', style: { flex: 'none' }, onclick: async () => {
-          if (await confirmDialog(`Отозвать приглашение для ${e}?`, { yes: 'Отозвать', danger: true })) getRepo().cancelInvite(p, e);
-        } }, '✕')))) : null,
-    h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => inviteForm(p) }, '➕ Пригласить коллегу')));
+      h('div', { class: 'mut' }, `${memberLabel(p, e)}${e === me ? ' (вы)' : ''}`))),
+    invited.length ? h('div', { class: 'mut', style: { marginTop: '6px' } }, `Приглашены: ${invited.join(', ')}`) : null,
+    h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => ui.open('members') }, '👥 Управлять участниками')));
 }
 
 export function projectView(ui) {
@@ -117,7 +103,7 @@ export function projectView(ui) {
       h('div', { class: 'mut' }, [p.contractor, p.object].filter(Boolean).join(' · ')),
       h('div', { class: 'mut' }, `Помощник по умолчанию: ${p.helper || 'сам'}${p.oneOff ? ' · разовый выезд' : ''}`),
       p.note ? h('div', { class: 'mut' }, p.note) : null),
-    members(p),
+    members(p, ui),
     h('div', { class: 'card' }, h('b', {}, 'Точки'), h('div', { style: { marginTop: '8px' } }, summary()),
       h('div', { class: 'btns' },
         h('button', { onclick: () => generatorForm() }, '➕ Добавить точки'),

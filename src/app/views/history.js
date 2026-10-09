@@ -56,6 +56,11 @@ export function historyView(ui) {
   if (!filter.from) { const d = new Date(); d.setDate(d.getDate() - 7); filter.from = d.toLocaleDateString('sv'); filter.to = todayIso(); }
   const box = h('div', {}, h('div', { class: 'empty' }, 'Загрузка…'));
   const names = new Map((p.memberUids || []).map((u, i) => [u, p.memberEmails?.[i] || u]));
+  Object.entries(p.removedMembers || {}).forEach(([u, e]) => { if (!names.has(u)) names.set(u, `${e} (убран)`); });
+  if (state.historyPreselect) { // переход из «Участники → убрать»: выбрать участника и смотреть месяц
+    filter.uid = state.historyPreselect; state.historyPreselect = null;
+    const d = new Date(); d.setDate(d.getDate() - 30); filter.from = d.toLocaleDateString('sv'); filter.to = todayIso();
+  }
 
   const users = h('select', { onchange: (e) => { filter.uid = e.target.value; fill(); } },
     h('option', { value: '' }, 'Все участники'),

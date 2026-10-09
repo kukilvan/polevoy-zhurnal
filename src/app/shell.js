@@ -3,6 +3,7 @@ import { h, openModal } from './ui.js';
 import { state, subscribe, currentProject, ready, getRepo, setCurrentProject } from './store.js';
 import { projectsView, projectForm } from './views/projects.js';
 import { settingsView, refView, REFS } from './views/settings.js';
+import { membersView } from './views/members.js';
 import { installView } from './views/install.js';
 import { PENDING } from './google.js';
 import { projectView, updateManagerTable, backupNow } from './views/project.js';
@@ -20,7 +21,7 @@ import { soonView } from './views/soon.js';
 const TABS = [
   ['project', 'Проект', '🏗'], ['meter', 'Метраж', '📏'], ['todos', 'Дела', '✅'], ['journal', 'Журнал', '📒'], ['doh', 'Дохот', '📝'], ['settings', 'Настройки', '⚙️'],
 ];
-const SCREEN_TITLES = { projects: 'Все проекты', cabinets: 'Настройки шкафа', month: 'Месяц', history: 'История', import: 'Импорт', install: 'Привязка установки', ref: 'Справочник', log: 'Журнал событий' };
+const SCREEN_TITLES = { projects: 'Все проекты', cabinets: 'Настройки шкафа', month: 'Месяц', history: 'История', import: 'Импорт', install: 'Привязка установки', ref: 'Справочник', members: 'Участники', log: 'Журнал событий' };
 
 export function createShell({ user, onLogout, diag }) {
   const root = document.getElementById('app');
@@ -61,6 +62,7 @@ export function createShell({ user, onLogout, diag }) {
     if (ui.screen === 'cabinets') return cabinetsView(ui);
     if (ui.screen === 'install') return installView();
     if (ui.screen === 'ref') return refView();
+    if (ui.screen === 'members') return membersView(ui);
     if (ui.screen === 'month') return monthView(ui);
     if (ui.screen === 'history') return historyView(ui);
     if (ui.screen === 'import') return importView();
