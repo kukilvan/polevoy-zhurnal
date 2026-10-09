@@ -5,6 +5,8 @@ import { createRepo, createMemoryBackend, createFirestoreBackend } from './app/r
 import * as store from './app/store.js';
 import { createShell } from './app/shell.js';
 
+import { captureTokenFromUrl } from './app/google.js';
+captureTokenFromUrl();
 const BUILD = typeof __BUILD__ !== 'undefined' ? __BUILD__ : 'dev';
 const app = document.getElementById('app');
 const standalone = !!(window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches);

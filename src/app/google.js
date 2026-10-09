@@ -1,12 +1,23 @@
 // Доступ к Google Диску и Таблицам от имени пользователя (по кнопке, нужно отдельное согласие).
-import { GoogleAuthProvider, reauthenticateWithPopup, reauthenticateWithRedirect } from 'firebase/auth';
+import { GoogleAuthProvider, reauthenticateWithPopup } from 'firebase/auth';
 import { auth } from '../firebase.js';
 
+export const CLIENT_ID = '473054171494-sin5sm8i45hi24oi23udnk13iduqtbrs.apps.googleusercontent.com'; // веб-клиент Firebase (публичный)
 const SCOPES = ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets'];
 let cached = { token: '', exp: 0 };
 
 const useRedirect = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
   || window.navigator.standalone === true || window.matchMedia?.('(display-mode: standalone)').matches;
+// Вызывается при запуске: если вернулись с Google с токеном в адресе — сохраняем его и чистим адрес
+export function captureTokenFromUrl() {
+  try {
+    const p = new URLSearchParams(location.hash.replace(/^#/, ''));
+    if (p.get('state') !== 'pz_gsync') return;
+    const token = p.get('access_token');
+    if (token) localStorage.setItem('pz_gtoken', JSON.stringify({ token, exp: Date.now() + (Number(p.get('expires_in')) || 3000) * 900 }));
+    history.replaceState(null, '', location.pathname + location.search);
+  } catch { /* ok */ }
+}
 export const PENDING = 'pz_gsync_pending';
 
 function stored() {
@@ -19,9 +30,13 @@ export async function getToken() {
   const provider = new GoogleAuthProvider();
   SCOPES.forEach((s) => provider.addScope(s));
   provider.setCustomParameters({ prompt: 'consent', login_hint: auth.currentUser?.email || '' });
-  if (useRedirect()) { // на iPhone (Safari и экран «Домой») всплывающие окна закрываются сами — идём через переход
+  if (useRedirect()) { // iPhone: окна Google закрываются, а результат Firebase-перехода Safari теряет — идём напрямую в Google и читаем токен из адреса
     try { localStorage.setItem(PENDING, '1'); } catch { /* ok */ }
-    await reauthenticateWithRedirect(auth.currentUser, provider);
+    const q = new URLSearchParams({
+      client_id: CLIENT_ID, redirect_uri: location.origin + location.pathname, response_type: 'token', scope: SCOPES.join(' '),
+      include_granted_scopes: 'true', state: 'pz_gsync', login_hint: auth.currentUser?.email || '',
+    });
+    location.href = `https://accounts.google.com/o/oauth2/v2/auth?${q}`;
     return new Promise(() => {}); // страница уходит на Google; продолжение после возврата
   }
   const res = await reauthenticateWithPopup(auth.currentUser, provider);
