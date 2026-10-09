@@ -71,23 +71,33 @@ export function createFirestoreBackend(db, uid) {
         (e) => error('Чтение проектов', `${e.code || ''} ${e.message || e}`));
     },
     listenColl(pid, name, cb) {
-      return onSnapshot(collection(db, 'projects', pid, name),
-        (snap) => cb(snap.docs.map((d) => ({ ...d.data(), _pending: d.metadata.hasPendingWrites }))),
-        (e) => error(`Чтение ${name}`, `${e.code || ''} ${e.message || e}`));
+      // Если проект ещё не дошёл до сервера, чтение отклоняется — повторяем попытку
+      let unsub = () => {}; let stopped = false; let tries = 0; let timer = null;
+      const start = () => {
+        unsub = onSnapshot(collection(db, 'projects', pid, name),
+          (snap) => { tries = 0; cb(snap.docs.map((d) => ({ ...d.data(), _pending: d.metadata.hasPendingWrites }))); },
+          (e) => {
+            if (stopped) return;
+            if (e.code === 'permission-denied' && tries < 15) { tries++; timer = setTimeout(() => { if (!stopped) start(); }, 1500); return; }
+            error(`Чтение ${name}`, `${e.code || ''} ${e.message || e}`);
+          });
+      };
+      start();
+      return () => { stopped = true; clearTimeout(timer); unsub(); };
     },
     // Запись пачками (в одной пачке до 500 операций). Не ждём ответа сервера: офлайн запись остаётся в очереди.
     commit(pid, writes) {
       const CHUNK = 400;
-      const jobs = [];
+      const chunks = [];
       for (let i = 0; i < writes.length; i += CHUNK) {
         const batch = writeBatch(db);
         writes.slice(i, i + CHUNK).forEach((w) => {
           const ref = w.coll === 'projects' ? doc(db, 'projects', w.id) : doc(db, 'projects', pid, w.coll, docKey(w.id));
           batch.set(ref, { ...w.data, updatedAtServer: serverTimestamp() }, { merge: true });
         });
-        jobs.push(batch.commit());
+        chunks.push(batch);
       }
-      return Promise.all(jobs);
+      return Promise.all(chunks.map((b) => b.commit())); // порядок отправки сохраняется
     },
     async loadSettings() { return {}; },
     async saveSettings() {},

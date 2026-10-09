@@ -17,8 +17,11 @@ service cloud.firestore {
       allow delete: if false; // удаление только «мягкое» (флаг в документе)
 
       match /{sub}/{docId=**} {
-        allow read, write: if signedIn() &&
+        allow read: if signedIn() &&
           request.auth.uid in get(/databases/$(database)/documents/projects/$(projectId)).data.memberUids;
+        // getAfter: проект и его справочники можно создать одной пачкой
+        allow write: if signedIn() &&
+          request.auth.uid in getAfter(/databases/$(database)/documents/projects/$(projectId)).data.memberUids;
       }
     }
   }
