@@ -41,7 +41,12 @@ export const logout = () => { info('Выход'); return signOut(auth); };
 
 export function watchAuth(cb) {
   getRedirectResult(auth)
-    .then((res) => info(res ? `Redirect-результат: вход OK ${res.user.email}` : 'Redirect-результата нет'))
+    .then((res) => {
+      info(res ? `Redirect-результат: вход OK ${res.user.email}` : 'Redirect-результата нет');
+      // Возврат после запроса доступа к Диску/Таблицам (iPhone): сохраняем токен для google.js
+      const token = res && GoogleAuthProvider.credentialFromResult(res)?.accessToken;
+      if (token) { try { localStorage.setItem('pz_gtoken', JSON.stringify({ token, exp: Date.now() + 50 * 60 * 1000 })); } catch { /* без хранилища */ } }
+    })
     .catch((e) => error('Redirect-результат ошибка', `${e.code || ''} ${e.message || e}`));
   return onAuthStateChanged(auth, (user) => {
     info(user ? `Пользователь: ${user.displayName || ''} <${user.email}>` : 'Пользователь: не вошёл');

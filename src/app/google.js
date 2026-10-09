@@ -1,15 +1,28 @@
 // Доступ к Google Диску и Таблицам от имени пользователя (по кнопке, нужно отдельное согласие).
-import { GoogleAuthProvider, reauthenticateWithPopup } from 'firebase/auth';
+import { GoogleAuthProvider, reauthenticateWithPopup, reauthenticateWithRedirect } from 'firebase/auth';
 import { auth } from '../firebase.js';
 
 const SCOPES = ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets'];
 let cached = { token: '', exp: 0 };
 
+const standalone = () => window.navigator.standalone === true || window.matchMedia?.('(display-mode: standalone)').matches;
+export const PENDING = 'pz_gsync_pending';
+
+function stored() {
+  try { const t = JSON.parse(localStorage.getItem('pz_gtoken') || 'null'); return t && Date.now() < t.exp ? t : null; } catch { return null; }
+}
+
 export async function getToken() {
   if (cached.token && Date.now() < cached.exp) return cached.token;
+  const st = stored(); if (st) { cached = st; return st.token; }
   const provider = new GoogleAuthProvider();
   SCOPES.forEach((s) => provider.addScope(s));
   provider.setCustomParameters({ prompt: 'consent', login_hint: auth.currentUser?.email || '' });
+  if (standalone()) { // на iPhone (приложение на экране «Домой») всплывающие окна закрываются сами — идём через переход
+    try { localStorage.setItem(PENDING, '1'); } catch { /* ok */ }
+    await reauthenticateWithRedirect(auth.currentUser, provider);
+    return new Promise(() => {}); // страница уходит на Google; продолжение после возврата
+  }
   const res = await reauthenticateWithPopup(auth.currentUser, provider);
   const token = GoogleAuthProvider.credentialFromResult(res)?.accessToken;
   if (!token) throw new Error('Google не выдал разрешение на Диск и Таблицы');

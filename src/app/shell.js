@@ -2,6 +2,7 @@
 import { h, openModal } from './ui.js';
 import { state, subscribe, currentProject, ready, getRepo, setCurrentProject } from './store.js';
 import { projectsView, projectForm } from './views/projects.js';
+import { PENDING } from './google.js';
 import { projectView, updateManagerTable } from './views/project.js';
 import { meterView } from './views/points.js';
 import { cabinetsView } from './views/cabinets.js';
@@ -89,5 +90,18 @@ export function createShell({ user, onLogout, diag }) {
   window.addEventListener('offline', () => { state.online = false; render(); });
   const unsub = subscribe(render);
   render();
+
+  // Возврат с Google после выдачи доступа (iPhone): дожидаемся загрузки проекта и запускаем обновление таблицы руководства
+  try {
+    if (localStorage.getItem(PENDING)) {
+      let tries = 0;
+      const timer = setInterval(() => {
+        tries += 1;
+        let ok = false; try { ok = !!JSON.parse(localStorage.getItem('pz_gtoken') || 'null'); } catch { /* ok */ }
+        if (ok && state.projectsLoaded && currentProject() && ready()) { clearInterval(timer); localStorage.removeItem(PENDING); updateManagerTable(); }
+        else if (tries > 60) { clearInterval(timer); localStorage.removeItem(PENDING); }
+      }, 500);
+    }
+  } catch { /* без хранилища */ }
   return { destroy: () => { unsub(); } };
 }
