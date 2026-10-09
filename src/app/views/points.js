@@ -1,5 +1,5 @@
 // Точки: форма точки, генератор пачкой, вкладка «Метраж» (ввод длины).
-import { h, formModal, confirmDialog, toast } from '../ui.js';
+import { h, formModal, openModal, confirmDialog, toast } from '../ui.js';
 import { state, getRepo, pointsSorted, infoOf, currentProject } from '../store.js';
 import { generateLabels, parseSuffixes, comparePoints } from '../../domain/index.js';
 import { statusClass } from './project.js';
@@ -75,30 +75,47 @@ export function generatorForm() {
 }
 
 // Ввод длины: «Сохранить и дальше» открывает следующую точку того же шкафа и типа
-export function meterForm(point) {
+export function meterForm(startPoint) {
   const repo = getRepo(); const pid = currentProject().id;
-  const next = () => {
+  let point = startPoint;
+  const nextOf = () => {
     const list = pointsSorted();
     const i = list.findIndex((p) => p.id === point.id);
     return list.slice(i + 1).find((p) => p.cabinet === point.cabinet && p.typeId === point.typeId);
   };
-  const save = (v) => {
-    if (v.length !== undefined && !(v.length >= 0)) { toast('Длина должна быть числом'); return false; }
-    repo.save(pid, [{ coll: 'points', id: point.id, data: { length: v.length } }]);
-    return true;
+  // Одно окно на всю серию точек: поле ввода не пересоздаётся, поэтому клавиатура на телефоне не закрывается
+  const titleEl = h('b', {});
+  const labelEl = h('span', {});
+  const input = h('input', { type: 'text', inputMode: 'decimal', autocomplete: 'off', autocapitalize: 'off', enterKeyHint: 'next' });
+  const errBox = h('div', { class: 'err' });
+  const okBtn = h('button', { type: 'submit', class: 'grow' });
+  // не даём кнопке забрать фокус у поля ввода (иначе iOS убирает клавиатуру)
+  okBtn.addEventListener('pointerdown', (e) => e.preventDefault());
+  okBtn.addEventListener('mousedown', (e) => e.preventDefault());
+  const more = h('button', { type: 'button', class: 'sec', onclick: () => { const pt = point; close(); setTimeout(() => pointForm(pt), 60); } }, 'Подробнее…');
+  const show = (pt) => {
+    point = pt;
+    titleEl.textContent = pt.label;
+    labelEl.textContent = `Длина, м на 1 кабель${pt.planName ? ` · ${pt.planName}` : ''}`;
+    input.value = pt.length ?? '';
+    errBox.textContent = '';
+    okBtn.textContent = nextOf() ? 'Сохранить и дальше' : 'Сохранить';
+    input.focus(); input.select();
   };
-  const nxt = next();
-  formModal({
-    title: point.label, submitLabel: nxt ? 'Сохранить и дальше' : 'Сохранить',
-    fields: [{ key: 'length', label: `Длина, м на 1 кабель${point.planName ? ` · ${point.planName}` : ''}`, type: 'number' }],
-    values: { length: point.length },
-    onSubmit: (v, { close }) => {
-      if (!save(v)) return false;
-      if (nxt) { close(); setTimeout(() => meterForm(state.ctx.points.get(nxt.id) || nxt), 60); return false; }
-      toast(next() ? 'Сохранено' : 'Это была последняя точка');
-    },
-    extra: [{ label: 'Подробнее…', closes: false, onClick: (v, { close }) => { close(); setTimeout(() => pointForm(point), 60); } }],
-  });
+  const form = h('form', { onsubmit: (e) => {
+    e.preventDefault();
+    const t = input.value.trim().replace(',', '.');
+    const length = t === '' ? undefined : Number(t);
+    if (length !== undefined && !(length >= 0)) { errBox.textContent = 'Длина должна быть числом'; return; }
+    repo.save(pid, [{ coll: 'points', id: point.id, data: { length } }]);
+    const nxt = nextOf();
+    if (nxt) { show(state.ctx.points.get(nxt.id) || nxt); return; }
+    toast('Это была последняя точка'); close();
+  } }, h('label', { class: 'field' }, labelEl, input), errBox, h('div', { class: 'row' }, okBtn, more));
+  const close = openModal('Метраж', form);
+  const head = form.closest('.sheet')?.querySelector('.sheet-head b');
+  if (head) head.replaceWith(titleEl);
+  show(point);
 }
 
 let searchText = '';
