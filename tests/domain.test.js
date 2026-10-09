@@ -165,3 +165,29 @@ test('генератор точек: диапазон, шаг, ведущие н
   assert.deepEqual(generateLabels({ from: 5, to: 1 }), []); // «до» меньше «от»
   assert.equal(generateLabels({ from: 1, to: 999999 }).length, 2000); // защита от случайного миллиона точек
 });
+
+test('месячный отчёт: дохи подряд, часы и сводка протяжки', async () => {
+  const { buildContext, monthReportRu, monthSummary, monthReportHe, CATALOG, CABLES, CULPRITS, UNITS, POINT_TYPES } = await import('../src/domain/index.js');
+  const mk = (a) => a.map((x) => ({ ...x }));
+  const data = {
+    projects: [{ id: 'p', name: 'P', contractor: 'Мегасон', object: 'Модиин', helper: 'Мариной', nameHe: 'מגה', objectHe: 'מודיעין', helperHe: 'מרינה' }],
+    points: [], catalog: mk(CATALOG), cables: mk(CABLES), culprits: mk(CULPRITS), units: mk(UNITS), types: mk(POINT_TYPES), configs: [], delayReasons: [], cabinetSettings: [], journal: [],
+    days: [{ id: 'd1', projectId: 'p', date: '2026-09-01' }, { id: 'd2', projectId: 'p', date: '2026-09-02' }, { id: 'd3', projectId: 'p', date: '2026-10-01' }],
+    entries: [
+      { id: 'e1', dayId: 'd1', workType: 'Протяжка', workId: 'PR_MAN', cableId: '6005', quantity: 5, meters: 60 },
+      { id: 'e2', dayId: 'd1', workType: 'Время', workId: 'T_WAIT', minutes: 90 },
+      { id: 'e3', dayId: 'd2', workType: 'Протяжка', workId: 'PR_MAN', cableId: '6005', quantity: 2, meters: 120 },
+      { id: 'e4', dayId: 'd2', workType: 'Доп. работа', workId: 'EX_MERIRON', quantity: 16 },
+      { id: 'e5', dayId: 'd3', workType: 'Время', workId: 'T_WAIT', minutes: 600 },
+    ],
+  };
+  const ctx = buildContext(data);
+  const ru = monthReportRu(ctx, '2026-09');
+  assert.ok(ru.startsWith('Дохот\n\n\n01.09.2026\nМегасон Модиин с Мариной'));
+  assert.ok(!ru.includes('01.10.2026'));
+  const s = monthSummary(ctx, '2026-09');
+  assert.equal(s.days, 2); assert.equal(s.hours, 1.5);
+  assert.deepEqual(s.pulls.map((p) => [p.cableId, p.count, p.meters]), [['6005', 7, 180]]);
+  assert.equal(s.works[0].qty, 16);
+  assert.ok(monthReportHe(ctx, '2026-09').includes('דוח חודשי – ספטמבר 2026'));
+});

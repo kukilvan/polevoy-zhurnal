@@ -4,3 +4,4 @@ export * from './context.js';
 export * from './status.js';
 export * from './doh.js';
 export * from './generator.js';
+export * from './month.js';

@@ -26,7 +26,7 @@ export function itogShtuk(entry, ctx) {
   return round2(base * (blank(work?.multiplier) ? 1 : Number(work.multiplier)));
 }
 
-function pullFigures(entry, ctx) {
+export function pullFigures(entry, ctx) {
   const pts = entryPoints(entry, ctx);
   if (pts.length) {
     return {
