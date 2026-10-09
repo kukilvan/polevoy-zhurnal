@@ -25,7 +25,6 @@ INS_LPTIHA|Лахцан птиха|התקנת לחצן פתיחה|Установ
 INS_EMAG|Электромагнит|התקנת אלקטרומגנט|Установка|шт|Дверь|1
 CHK_FLUKE|Проверка кабеля Fluke|בדיקת כבל Fluke|Проверка|шт|Камера,Вайфай,Бакар,Точка,TV|0
 CHK_DOOR|Проверка двери|בדיקת דלת|Проверка|шт|Дверь|0
-CHK_GALAI|Проверка галая|בדיקת גלאי|Проверка|шт|Галай|0
 SHL|Шилют|שילוט|Шилют|мин|Камера,Вайфай,Бакар,Точка,TV,Оптика|0
 EX_MERIRON|Установка мерирона|התקנת מרירון|Доп. работа|м||0
 EX_TAALA|Установка таалы|התקנת תעלה|Доп. работа|м||0
@@ -73,7 +72,7 @@ export const CATALOG = CATALOG_ROWS.split('\n').map((line) => {
 export const POINT_TYPES = [
   { id: 'Камера', installMode: 'works', installWorkIds: ['INS_CAM'], nameHe: 'מצלמה', defaultCable: 'cat7', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка', 'Шилют'], isDoor: false },
   { id: 'Дверь', installMode: 'config', installWorkIds: [], nameHe: 'דלת', defaultCable: '6005', defaultCables: 3, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка'], isDoor: true },
-  { id: 'Галай', installMode: 'works', installWorkIds: ['INS_GALAI'], nameHe: 'גלאי', defaultCable: '6005', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка'], isDoor: false },
+  { id: 'Галай', installMode: 'works', installWorkIds: ['INS_GALAI'], nameHe: 'גלאי', defaultCable: '6005', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Установка'], isDoor: false },
   { id: 'Вайфай', installMode: 'works', installWorkIds: ['INS_AP'], nameHe: 'נקודת גישה', defaultCable: 'cat7', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка', 'Шилют'], isDoor: false },
   { id: 'Бакар', installMode: 'none', installWorkIds: [], nameHe: 'בקר', defaultCable: 'cat7', defaultCables: 2, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка'], isDoor: false },
   { id: 'Точка', installMode: 'none', installWorkIds: [], nameHe: 'נקודת תקשורת', defaultCable: 'cat7', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Проверка', 'Шилют'], isDoor: false },

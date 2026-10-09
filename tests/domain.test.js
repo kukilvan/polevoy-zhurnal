@@ -256,3 +256,11 @@ test('таблица руководства учитывает привязку:
   assert.ok(rows.find((r) => r[0] === 'Вайфай')[4].includes('Установка'));
   assert.equal(rows.find((r) => r[0] === 'Дверь')[5], true);
 });
+
+test('галаи не проверяются: в таблице руководства у типа нет этапа «Проверка»', async () => {
+  const { buildContext, managerTables, POINT_TYPES, CATALOG } = await import('../src/domain/index.js');
+  const ctx = buildContext({ projects: [{ id: 'p' }], types: POINT_TYPES, configs: [], points: [], journal: [] });
+  const row = managerTables({ id: 'p' }, ctx)['Типы точек'].find((r) => r[0] === 'Галай');
+  assert.ok(!row[4].includes('Проверка') && row[4].includes('Установка'));
+  assert.ok(!CATALOG.some((w) => w.id === 'CHK_GALAI'));
+});
