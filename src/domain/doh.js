@@ -2,9 +2,9 @@
 import { round2 } from './points.js';
 import { pointInfo } from './status.js';
 
-// ВНИМАНИЕ: в описании не видно, чем разделены строки работ и дата/объект (в формулах AppSheet они
-// склеены через SUBSTITUTE). Разделители вынесены сюда; уточнить по образцу реального доха.
-export const DOH_SEP = { dateObject: ' ', lines: '; ' };
+// Формат доха как в настоящих дохах Ивана (WhatsApp): дата, на следующей строке объект и помощник,
+// затем каждая работа отдельным абзацем. Однострочная шапка (дата объект помощник) — для месячного списка.
+export const DOH_FORMAT = { headerSep: '\n', blockSep: '\n\n', oneLineSep: ' ' };
 
 const blank = (v) => v === undefined || v === null || v === '';
 const num = (v) => (blank(v) ? 0 : Number(v));
@@ -51,6 +51,8 @@ export function entryLine(entry, ctx, lang = 'ru') {
   const t = tail(entry, ctx, he);
   const unit = ctx.units.get(work?.unit);
 
+  if (entry.workType === 'Текст') return String(entry.note ?? ''); // свободная строка без цифр
+
   if (isTime(entry, work)) { // «Время» и любые работы в минутах
     return he
       ? `${name} ${entry.minutes ?? ''} דקות${t.culprit}${t.note}`
@@ -71,15 +73,20 @@ export function entryLine(entry, ctx, lang = 'ru') {
 
 const helperIsSelf = (h) => blank(h) || h === 'сам';
 
-// Шапка: «ДД.ММ.ГГГГ Подрядчик Объект сам/с Помощником» (для месячного списка и начала доха)
-export function dohHeader(day, ctx, lang = 'ru') {
+function headerParts(day, ctx, lang) {
   const he = lang === 'he';
   const p = ctx.projects.get(day.projectId) || {};
   const where = p.oneOff ? day.object
     : he ? `${p.nameHe || p.name} ${p.objectHe ?? ''}`.trim() : `${p.contractor ?? ''} ${p.object ?? ''}`.trim();
   const helper = he ? (day.helperHe ?? p.helperHe) : (day.helper ?? p.helper);
   const who = helperIsSelf(helper) ? (he ? ' לבד' : ' сам') : (he ? ` עם ${helper}` : ` с ${helper}`);
-  return `${dateText(day.date)}${DOH_SEP.dateObject}${where ?? ''}${who}`;
+  return { date: dateText(day.date), place: `${where ?? ''}${who}` };
+}
+
+// Однострочная шапка «ДД.ММ.ГГГГ Подрядчик Объект сам/с Помощником» (месячный список)
+export function dohHeader(day, ctx, lang = 'ru') {
+  const { date, place } = headerParts(day, ctx, lang);
+  return `${date}${DOH_FORMAT.oneLineSep}${place}`;
 }
 
 export function dayEntries(day, ctx) {
@@ -88,6 +95,9 @@ export function dayEntries(day, ctx) {
 }
 
 export function doh(day, ctx, lang = 'ru') {
-  const lines = dayEntries(day, ctx).map((e) => entryLine(e, ctx, lang)).join(DOH_SEP.lines);
-  return `${dohHeader(day, ctx, lang)} ${lines}${blank(day.comment) ? '' : ` ${day.comment}`}`;
+  const { date, place } = headerParts(day, ctx, lang);
+  const lines = dayEntries(day, ctx).map((e) => entryLine(e, ctx, lang)).filter((l) => l !== '');
+  const blocks = [`${date}${DOH_FORMAT.headerSep}${place}`, ...lines];
+  if (!blank(day.comment)) blocks.push(String(day.comment));
+  return blocks.join(DOH_FORMAT.blockSep);
 }

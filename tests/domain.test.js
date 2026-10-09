@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
   CATALOG, POINT_TYPES, CABLES, CONFIGS, UNITS, CULPRITS, DELAY_REASONS,
-  buildContext, pointInfo, pointKey, sortNumber, comparePoints, entryLine, itogShtuk, dohHeader, doh,
+  generateLabels, parseSuffixes, buildContext, pointInfo, pointKey, sortNumber, comparePoints, entryLine, itogShtuk, dohHeader, doh,
 } from '../src/domain/index.js';
 
 const project = { id: 'P1', name: 'Mega Or', contractor: 'Megason', object: 'Mega Or', helper: 'Марина', helperHe: 'מרינה',
@@ -118,6 +118,8 @@ test('строки записей RU/HE по формулам Приложени
   assert.equal(itogShtuk(e, mk(e)), 12.5);
   e = entry('e1', 'D1', 'Доп. работа', 'EX_ARON_HIV', [], { quantity: 1, minutes: 90 }); // единица «мин» → строка времени
   assert.equal(entryLine(e, mk(e)), 'Хивут арона бакары 90 мин'); assert.equal(itogShtuk(e, mk(e)), 0);
+  e = entry('e1', 'D1', 'Текст', undefined, [], { note: 'Продолжение протяжки оптики' }); // свободная строка
+  assert.equal(entryLine(e, mk(e)), 'Продолжение протяжки оптики');
 });
 
 test('дох дня: шапка (сам / с помощником / разовый) и строки работ', () => {
@@ -127,10 +129,10 @@ test('дох дня: шапка (сам / с помощником / разовы
   const ctx = scenario([p1], [d], [e1, e2]);
   assert.equal(dohHeader(d, ctx), '05.10.2026 Megason Mega Or с Марина');
   assert.equal(dohHeader(d, ctx, 'he'), '05.10.2026 מגה אור מגה אור עם מרינה');
-  assert.equal(doh(d, ctx), '05.10.2026 Megason Mega Or с Марина Хивут кистона 1 шт; Сиюр 20 мин');
+  assert.equal(doh(d, ctx), '05.10.2026\nMegason Mega Or с Марина\n\nХивут кистона 1 шт\n\nСиюр 20 мин');
   const solo = { ...d, helper: 'сам', helperHe: 'сам', comment: 'всё по плану' };
   const ctx2 = scenario([p1], [solo], [e1]);
-  assert.equal(doh(solo, ctx2), '05.10.2026 Megason Mega Or сам Хивут кистона 1 шт всё по плану');
+  assert.equal(doh(solo, ctx2), '05.10.2026\nMegason Mega Or сам\n\nХивут кистона 1 шт\n\nвсё по плану');
   assert.match(doh(solo, ctx2, 'he'), /לבד/);
   const oneOff = { ...d, object: 'Склад Хайфа' };
   const ctx3 = buildContext({ ...{ projects: [{ ...project, oneOff: true }], points: [p1], days: [oneOff], entries: [e1], journal: [], cabinetSettings: [],
@@ -153,4 +155,13 @@ test('даты этапов: берётся максимальная дата, �
   const es = [entry('e1', 'D2', 'Хивут', 'HIV_KEY', ['c1']), entry('e2', 'D1', 'Хивут', 'HIV_KEY', ['c1'])];
   const ctx = scenario([cam], [day('D1', '2026-10-01'), day('D2', '2026-10-07')], es);
   assert.equal(pointInfo(ctx.points.get('c1'), ctx).hived, '2026-10-07');
+});
+
+test('генератор точек: диапазон, шаг, ведущие нули, пара, суффиксы', () => {
+  assert.deepEqual(generateLabels({ prefix: '1A-', from: 1, to: 3 }), ['1A-1', '1A-2', '1A-3']);
+  assert.deepEqual(generateLabels({ prefix: '1A-', from: 1, to: 6, step: 2, digits: 2 }), ['1A-01', '1A-03', '1A-05']);
+  assert.deepEqual(generateLabels({ prefix: '1A-', from: 1, to: 5, step: 2, digits: 2, pair: true }), ['1A-01-02', '1A-03-04', '1A-05-06']);
+  assert.deepEqual(generateLabels({ prefix: 'C', from: 7, to: 8, suffixes: parseSuffixes(' A, B ,, ') }), ['C7A', 'C7B', 'C8A', 'C8B']);
+  assert.deepEqual(generateLabels({ from: 5, to: 1 }), []); // «до» меньше «от»
+  assert.equal(generateLabels({ from: 1, to: 999999 }).length, 2000); // защита от случайного миллиона точек
 });

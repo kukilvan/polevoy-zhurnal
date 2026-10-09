@@ -27,3 +27,45 @@ pre.log { background:#020617; border:1px solid var(--line); border-radius: 10px;
 nav { position: fixed; left:0; right:0; bottom:0; display:flex; background:#0b1220; border-top:1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
 nav button { flex:1; border-radius:0; border:0; background:transparent; color: var(--mut); padding: 16px 8px; }
 nav button.on { color: var(--acc); }
+
+/* ---- формы и всплывающие окна ---- */
+body.noscroll { overflow: hidden; }
+.backdrop { position: fixed; inset: 0; background: rgba(2,6,23,.65); display: flex; align-items: flex-end; justify-content: center; z-index: 50; }
+.sheet { width: 100%; max-width: 640px; max-height: 92vh; background: var(--card); border: 1px solid var(--line); border-radius: 16px 16px 0 0; display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom); }
+.sheet-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px 8px; }
+.sheet-head .x { background: transparent; border: 0; color: var(--mut); padding: 4px 10px; font-size: 18px; }
+.sheet-body { padding: 4px 16px 16px; overflow: auto; }
+.field { display: block; margin-bottom: 12px; }
+.field > span { display: block; font-size: 13px; color: var(--mut); margin-bottom: 4px; }
+.field small { display: block; color: var(--mut); font-size: 12px; margin-top: 3px; }
+.field.check { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.field.check > span { margin: 0; color: var(--txt); font-size: 16px; }
+.field.check input { width: 22px; height: 22px; }
+select, textarea { width: 100%; font: inherit; border-radius: 10px; border: 1px solid var(--line); background: #0b1220; color: var(--txt); padding: 12px 14px; }
+.err { color: var(--err); font-size: 14px; margin: 4px 0 10px; min-height: 0; }
+.preview { background: #020617; border: 1px dashed var(--line); border-radius: 10px; padding: 8px 10px; color: var(--mut); font-size: 13px; margin-bottom: 10px; white-space: pre-wrap; }
+.toast { position: fixed; left: 50%; bottom: calc(80px + env(safe-area-inset-bottom)); transform: translate(-50%, 20px); background: #0b1220; border: 1px solid var(--line); padding: 10px 16px; border-radius: 999px; opacity: 0; transition: .25s; z-index: 80; max-width: 90vw; }
+.toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---- оболочка, списки ---- */
+.topbar { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 10px; background: var(--bg); padding: 10px 14px; border-bottom: 1px solid var(--line); }
+.topbar .title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.topbar button { padding: 8px 12px; }
+.menu-item { display: block; width: 100%; text-align: left; background: transparent; color: var(--txt); border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 14px 4px; font-weight: 400; }
+.group { position: sticky; top: 53px; background: var(--bg); padding: 10px 2px 6px; color: var(--mut); font-size: 13px; text-transform: uppercase; letter-spacing: .04em; }
+.item { display: flex; align-items: center; gap: 10px; padding: 12px 10px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.item:active { background: #0b1220; }
+.item .name { flex: 1; min-width: 0; font-weight: 600; }
+.item .sub { color: var(--mut); font-size: 13px; font-weight: 400; }
+.item .len { color: var(--mut); min-width: 52px; text-align: right; }
+.pill.st-ok { color: var(--ok); border-color: var(--ok); } .pill.st-mid { color: var(--acc); border-color: var(--acc); }
+.pill.st-bad { color: var(--err); border-color: var(--err); }
+table.sum { width: 100%; border-collapse: collapse; font-size: 14px; }
+table.sum th, table.sum td { text-align: right; padding: 6px 4px; border-bottom: 1px solid var(--line); }
+table.sum th:first-child, table.sum td:first-child { text-align: left; }
+table.sum th { color: var(--mut); font-weight: 600; }
+.btns { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.btns button { flex: 1 1 140px; }
+.empty { text-align: center; color: var(--mut); padding: 30px 10px; }
+input[type=search] { width: 100%; }
+.group { z-index: 5; }
