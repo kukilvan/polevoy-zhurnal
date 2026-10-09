@@ -45,28 +45,50 @@ export function openModal(title, content, { onClose } = {}) {
 export function formModal({ title, fields, values = {}, submitLabel = 'Сохранить', extra = [], preview, onSubmit }) {
   const inputs = {};
   const rows = {};
+  const customs = {};
   const read = () => {
     const out = {};
     fields.forEach((f) => {
       const el = inputs[f.key]; if (!el) return;
-      if (f.type === 'checkbox') out[f.key] = el.checked;
+      if (f.type === 'custom') out[f.key] = customs[f.key].get();
+      else if (f.type === 'checkbox') out[f.key] = el.checked;
       else if (f.type === 'number') { const t = el.value.trim().replace(',', '.'); out[f.key] = t === '' ? undefined : Number(t); }
       else out[f.key] = el.value.trim() === '' ? undefined : el.value.trim();
     });
     return out;
   };
+  // зависимые списки: варианты считаются по текущим значениям других полей
+  const fillOptions = (f, v) => {
+    const el = inputs[f.key]; const opts = f.optionsFn(v) || [];
+    const sig = JSON.stringify(opts.map((o) => o.value));
+    if (el.dataset.sig === sig) return;
+    const keep = el.value || el.dataset.init || '';
+    delete el.dataset.init;
+    el.replaceChildren(h('option', { value: '' }, f.emptyLabel ?? '—'),
+      ...opts.map((o) => h('option', { value: o.value }, o.label)));
+    el.dataset.sig = sig;
+    el.value = opts.some((o) => String(o.value) === keep) ? keep : (opts.length === 1 ? String(opts[0].value) : '');
+  };
   const previewBox = preview ? h('div', { class: 'preview' }) : null;
   const refresh = () => {
+    // сначала зависимые списки (по порядку полей), потом видимость по свежим значениям
+    fields.forEach((f) => { if (f.optionsFn && f.type === 'select') fillOptions(f, read()); });
     const v = read();
-    fields.forEach((f) => { if (f.visible) rows[f.key].style.display = f.visible(v) ? '' : 'none'; });
+    fields.forEach((f) => {
+      if (f.visible) rows[f.key].style.display = f.visible(v) ? '' : 'none';
+      customs[f.key]?.update?.(v);
+    });
     if (previewBox) previewBox.textContent = preview(v);
   };
 
   fields.forEach((f) => {
     let input;
     const val = values[f.key];
-    if (f.type === 'select') {
-      input = h('select', {}, h('option', { value: '' }, f.emptyLabel ?? '—'),
+    if (f.type === 'custom') {
+      const c = f.build({ value: val, changed: () => refresh(), values: () => read() });
+      customs[f.key] = c; input = c.el;
+    } else if (f.type === 'select') {
+      input = h('select', f.optionsFn ? { 'data-init': String(val ?? '') } : {}, h('option', { value: '' }, f.emptyLabel ?? '—'),
         (f.options || []).map((o) => h('option', { value: o.value, selected: String(val ?? '') === String(o.value) }, o.label)));
     } else if (f.type === 'textarea') input = h('textarea', { rows: 3, value: val ?? '', placeholder: f.placeholder });
     else if (f.type === 'checkbox') input = h('input', { type: 'checkbox', checked: !!val });
@@ -74,7 +96,8 @@ export function formModal({ title, fields, values = {}, submitLabel = 'Сохр�
     else input = h('input', { type: 'text', inputMode: f.type === 'number' ? 'decimal' : undefined, value: val ?? '', placeholder: f.placeholder, autocomplete: 'off', autocapitalize: 'off' });
     input.addEventListener('input', refresh); input.addEventListener('change', refresh);
     inputs[f.key] = input;
-    rows[f.key] = f.type === 'checkbox'
+    rows[f.key] = f.type === 'custom' ? h('div', { class: 'field' }, h('span', {}, f.label, f.required ? ' *' : ''), input, f.hint && h('small', {}, f.hint))
+      : f.type === 'checkbox'
       ? h('label', { class: 'field check' }, input, h('span', {}, f.label), f.hint && h('small', {}, f.hint))
       : h('label', { class: 'field' }, h('span', {}, f.label, f.required ? ' *' : ''), input, f.hint && h('small', {}, f.hint));
   });
@@ -84,7 +107,8 @@ export function formModal({ title, fields, values = {}, submitLabel = 'Сохр�
   const submit = async (e) => {
     e?.preventDefault();
     const v = read();
-    const missing = fields.filter((f) => f.required && (!f.visible || f.visible(v)) && (v[f.key] === undefined || v[f.key] === ''));
+    const emptyVal = (x) => x === undefined || x === '' || (Array.isArray(x) && !x.length);
+    const missing = fields.filter((f) => f.required && (!f.visible || f.visible(v)) && emptyVal(v[f.key]));
     if (missing.length) { errBox.textContent = `Заполните: ${missing.map((f) => f.label).join(', ')}`; return; }
     const res = await onSubmit(v, { close });
     if (res !== false) close();
@@ -98,6 +122,8 @@ export function formModal({ title, fields, values = {}, submitLabel = 'Сохр�
         if (res !== false && x.closes !== false) close();
       } }, x.label))));
   close = openModal(title, form);
+  // programmatic setter for cross-field defaults
+  close.set = (key, value) => { const el = inputs[key]; if (el && !customs[key]) { el.value = value ?? ''; refresh(); } };
   refresh();
   const first = form.querySelector('input[type=text], textarea');
   // автофокус в первое поле, только если пользователь ещё не успел нажать в другое

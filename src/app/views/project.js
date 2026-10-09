@@ -3,6 +3,7 @@ import { h } from '../ui.js';
 import { state, currentProject, pointsSorted, infoOf } from '../store.js';
 import { projectForm } from './projects.js';
 import { pointForm, generatorForm } from './points.js';
+import { openToday } from './doh.js';
 
 export function statusClass(status) {
   if (status === 'Неисправна') return 'pill st-bad';
@@ -54,6 +55,7 @@ export function projectView(ui) {
         h('button', { class: 'sec', onclick: () => pointForm(null) }, 'Новая точка'),
         h('button', { class: 'sec', onclick: () => ui.go('meter') }, '📏 Метраж'))),
     h('div', { class: 'btns' },
+      h('button', { onclick: () => openToday(ui) }, '📝 Сегодня'),
       h('button', { class: 'sec', onclick: () => projectForm(p, ui) }, 'Редактировать проект'),
       h('button', { class: 'sec', onclick: () => ui.open('projects') }, 'Все проекты'),
       p.managerLink ? h('button', { class: 'sec', onclick: () => window.open(p.managerLink, '_blank') }, '📊 Таблица для руководства') : null));
