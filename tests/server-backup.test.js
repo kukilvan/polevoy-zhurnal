@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { readProject, writeProjectBackup, pruneOld, stamp } from '../scripts/server-backup-lib.mjs';
+import { isDeleted, readProject, writeProjectBackup, pruneOld, stamp } from '../scripts/server-backup-lib.mjs';
 
 // Минимальная подделка Firestore: документ с данными и подколлекциями
 const doc = (id, data, subs = {}) => ({ id, get: async () => ({ data: () => data }), listCollections: async () => Object.entries(subs).map(([n, items]) => ({ id: n, get: async () => ({ docs: items.map((x) => ({ id: x.id, data: () => { const { id: _i, ...rest } = x; return rest; } })) }) })) });
@@ -34,4 +34,10 @@ test('хранятся только последние 15 копий', () => {
   const dropped = pruneOld(root, 15);
   assert.equal(dropped.length, 3); assert.equal(dropped[0], '2026-10-01_0000');
   assert.equal(fs.readdirSync(root).length, 16);
+});
+
+test('удалённый проект распознаётся и в копию не идёт', () => {
+  assert.equal(isDeleted({ name: 'x', deleted: true }), true);
+  assert.equal(isDeleted({ name: 'x' }), false);
+  assert.equal(isDeleted(undefined), false);
 });

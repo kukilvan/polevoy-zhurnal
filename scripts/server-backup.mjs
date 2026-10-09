@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import admin from 'firebase-admin';
-import { readProject, writeProjectBackup, pruneOld, stamp } from './server-backup-lib.mjs';
+import { isDeleted, readProject, writeProjectBackup, pruneOld, stamp } from './server-backup-lib.mjs';
 
 const KEEP = 15;
 const root = process.argv[2];
@@ -22,6 +22,7 @@ if (!refs.length) { console.error('В базе нет проектов: копи
 const done = [];
 for (const ref of refs) {
   const p = await readProject(ref);
+  if (isDeleted(p.project)) { console.log(`Пропущен удалённый проект: ${p.project.name}`); continue; }
   done.push(writeProjectBackup(dir, p, now));
   // отметка в проекте, чтобы приложение показывало дату последней автокопии
   await ref.set({ serverBackupAt: now.toISOString() }, { merge: true });

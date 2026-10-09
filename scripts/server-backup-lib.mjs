@@ -18,6 +18,9 @@ export async function readProject(projectRef) {
   return { project, data };
 }
 
+// Удалённые в приложении проекты (мягкое удаление) в копию не попадают
+export const isDeleted = (project) => project?.deleted === true;
+
 // Имя папки копии по времени: 2026-10-10_0000 (UTC), сортируется как дата
 export const stamp = (now) => now.toISOString().slice(0, 16).replace('T', '_').replace(':', '');
 
