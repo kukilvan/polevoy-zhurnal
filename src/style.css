@@ -25,7 +25,7 @@ input { width:100%; }
 pre.log { background:#020617; border:1px solid var(--line); border-radius: 10px; padding: 10px; font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-word; max-height: 55vh; overflow:auto; margin: 0; }
 .l-error { color: var(--err); } .l-warn { color: var(--warn); }
 nav { position: fixed; left:0; right:0; bottom:0; display:flex; background:#0b1220; border-top:1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
-nav button { flex:1; border-radius:0; border:0; background:transparent; color: var(--mut); padding: 16px 8px; }
+nav button { flex:1; border-radius:0; border:0; background:transparent; color: var(--mut); padding: 14px 2px; min-width:0; }
 nav button.on { color: var(--acc); }
 
 /* ---- формы и всплывающие окна ---- */

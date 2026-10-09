@@ -29,16 +29,22 @@ function worksPicker(ctx) {
   };
 }
 
+// Поля привязки установки (используются и в окне типа точек, и в быстром окне «Привязка установки»)
+export function installFields(ctx, setPicker) {
+  return [
+    { key: 'mode', label: 'Что считается установкой', type: 'select', required: true, options: MODES, emptyLabel: 'Выберите' },
+    { key: 'workIds', label: 'Какие работы', type: 'custom', build: (api) => { const pk = worksPicker(ctx); pk.set(api.value); setPicker?.(pk); return pk; },
+      hint: 'Если выбрано несколько — точка «установлена», когда выполнены все. Нужную работу создайте в Настройках → Каталог работ (тип работы «Установка»).', visible: (v) => v.mode === 'works' },
+  ];
+}
+
 function bindingForm(type) {
   const repo = getRepo(); const p = currentProject(); const ctx = state.ctx;
   const cur = installBinding(type);
-  let picker;
   formModal({
     title: `Установка: ${type.id}`,
     fields: [
-      { key: 'mode', label: 'Что считается установкой', type: 'select', required: true, options: MODES, emptyLabel: 'Выберите' },
-      { key: 'workIds', label: 'Какие работы', type: 'custom', build: (api) => { picker = worksPicker(ctx); picker.set(api.value); return picker; },
-        hint: 'Если выбрано несколько — точка «установлена», когда выполнены все.', visible: (v) => v.mode === 'works' },
+      ...installFields(ctx),
       { key: 'asDefault', label: 'Сделать так по умолчанию для новых проектов', type: 'checkbox' },
     ],
     values: { mode: cur.mode, workIds: cur.workIds },

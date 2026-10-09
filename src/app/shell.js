@@ -2,6 +2,7 @@
 import { h, openModal } from './ui.js';
 import { state, subscribe, currentProject, ready, getRepo, setCurrentProject } from './store.js';
 import { projectsView, projectForm } from './views/projects.js';
+import { settingsView, refView, REFS } from './views/settings.js';
 import { installView } from './views/install.js';
 import { PENDING } from './google.js';
 import { projectView, updateManagerTable, backupNow } from './views/project.js';
@@ -17,9 +18,9 @@ import { monthView } from './views/month.js';
 import { soonView } from './views/soon.js';
 
 const TABS = [
-  ['project', 'Проект', '🏗'], ['meter', 'Метраж', '📏'], ['todos', 'Дела', '✅'], ['journal', 'Журнал', '📒'], ['doh', 'Дохот', '📝'],
+  ['project', 'Проект', '🏗'], ['meter', 'Метраж', '📏'], ['todos', 'Дела', '✅'], ['journal', 'Журнал', '📒'], ['doh', 'Дохот', '📝'], ['settings', 'Настройки', '⚙️'],
 ];
-const SCREEN_TITLES = { projects: 'Все проекты', cabinets: 'Настройки шкафа', month: 'Месяц', history: 'История', import: 'Импорт', install: 'Привязка установки', log: 'Журнал событий' };
+const SCREEN_TITLES = { projects: 'Все проекты', cabinets: 'Настройки шкафа', month: 'Месяц', history: 'История', import: 'Импорт', install: 'Привязка установки', ref: 'Справочник', log: 'Журнал событий' };
 
 export function createShell({ user, onLogout, diag }) {
   const root = document.getElementById('app');
@@ -35,12 +36,7 @@ export function createShell({ user, onLogout, diag }) {
       item('➕ Новый проект', () => projectForm(null, ui)),
       item('📅 Месяц (отчёт начальнику)', () => open('month')),
       item('🕘 История и откат', () => open('history')),
-      item('📥 Импорт данных', () => open('import')),
-      item('🗄 Настройки шкафа', () => open('cabinets')),
-      item('🔧 Привязка установки', () => open('install')),
-      item('🔄 Обновить таблицу руководства', updateManagerTable),
-      item('💾 Резервная копия на Диск', backupNow),
-      p?.managerLink && item('📊 Таблица для руководства', () => window.open(p.managerLink, '_blank')),
+      item('⚙️ Настройки', () => go('settings')),
       item('🧾 Журнал событий', () => open('log')),
       h('div', { class: 'mut', style: { padding: '10px 4px' } }, user.displayName || user.email),
       item('🚪 Выйти', onLogout)));
@@ -64,6 +60,7 @@ export function createShell({ user, onLogout, diag }) {
     if (!ready()) return h('div', { class: 'empty' }, 'Загрузка данных проекта…');
     if (ui.screen === 'cabinets') return cabinetsView(ui);
     if (ui.screen === 'install') return installView();
+    if (ui.screen === 'ref') return refView();
     if (ui.screen === 'month') return monthView(ui);
     if (ui.screen === 'history') return historyView(ui);
     if (ui.screen === 'import') return importView();
@@ -71,6 +68,7 @@ export function createShell({ user, onLogout, diag }) {
       case 'project': return projectView(ui);
       case 'meter': return meterView(ui);
       case 'doh': return dohView(ui);
+      case 'settings': return settingsView(ui);
       case 'todos': return todosView();
       case 'journal': return journalView();
       default: return soonView(ui.tab);
@@ -79,7 +77,7 @@ export function createShell({ user, onLogout, diag }) {
 
   function render() {
     const p = currentProject();
-    const title = ui.screen ? SCREEN_TITLES[ui.screen] : (p?.name || 'Полевой журнал');
+    const title = ui.screen === 'ref' ? REFS[state.settingsRef]?.title : ui.screen ? SCREEN_TITLES[ui.screen] : (p?.name || 'Полевой журнал');
     root.replaceChildren(
       h('div', { class: 'topbar' },
         ui.screen ? h('button', { class: 'sec', onclick: () => ui.back() }, '←') : h('button', { class: 'sec', onclick: menu }, '☰'),
