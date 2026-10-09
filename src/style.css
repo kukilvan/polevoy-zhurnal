@@ -1,0 +1,29 @@
+:root { --bg:#0f172a; --card:#1e293b; --line:#334155; --txt:#f1f5f9; --mut:#94a3b8; --acc:#0ea5e9; --ok:#22c55e; --warn:#f59e0b; --err:#ef4444; }
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin:0; background:var(--bg); color:var(--txt); font:16px/1.4 -apple-system, system-ui, 'Segoe UI', Roboto, sans-serif; }
+body { padding: env(safe-area-inset-top) env(safe-area-inset-right) calc(64px + env(safe-area-inset-bottom)) env(safe-area-inset-left); min-height:100vh; }
+.wrap { max-width: 640px; margin: 0 auto; padding: 14px; }
+h1 { font-size: 20px; margin: 6px 0 12px; }
+h2 { font-size: 15px; margin: 18px 0 8px; color: var(--mut); font-weight: 600; text-transform: uppercase; letter-spacing: .04em; }
+.card { background: var(--card); border:1px solid var(--line); border-radius: 12px; padding: 12px 14px; margin-bottom: 10px; }
+.row { display:flex; gap:8px; align-items:center; flex-wrap: wrap; }
+.grow { flex:1; min-width: 0; }
+button, input { font: inherit; border-radius: 10px; border:1px solid var(--line); background:#0b1220; color: var(--txt); padding: 12px 14px; }
+button { background: var(--acc); border-color: var(--acc); color:#04121c; font-weight: 600; cursor:pointer; }
+button.sec { background: transparent; color: var(--txt); border-color: var(--line); }
+button.danger { background: transparent; color: var(--err); border-color: var(--err); }
+button:disabled { opacity:.5; }
+input { width:100%; }
+.pill { display:inline-block; padding:2px 8px; border-radius: 999px; font-size: 12px; border:1px solid var(--line); color: var(--mut); }
+.pill.ok { color: var(--ok); border-color: var(--ok); }
+.pill.warn { color: var(--warn); border-color: var(--warn); }
+.pill.err { color: var(--err); border-color: var(--err); }
+.mut { color: var(--mut); font-size: 13px; }
+.rec { border-top:1px solid var(--line); padding: 10px 0; }
+.rec:first-child { border-top: 0; }
+.rec .t { font-weight: 600; }
+pre.log { background:#020617; border:1px solid var(--line); border-radius: 10px; padding: 10px; font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-word; max-height: 55vh; overflow:auto; margin: 0; }
+.l-error { color: var(--err); } .l-warn { color: var(--warn); }
+nav { position: fixed; left:0; right:0; bottom:0; display:flex; background:#0b1220; border-top:1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+nav button { flex:1; border-radius:0; border:0; background:transparent; color: var(--mut); padding: 16px 8px; }
+nav button.on { color: var(--acc); }
