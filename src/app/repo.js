@@ -3,7 +3,7 @@
 //  - память (для автотестов интерфейса, включается адресом ?mem=1).
 // Общая логика здесь: кто и когда изменил, история изменений, мягкое удаление.
 import {
-  collection, doc, onSnapshot, query, where, writeBatch, serverTimestamp,
+  collection, doc, onSnapshot, query, where, writeBatch, serverTimestamp, getDocs, orderBy, limit as fbLimit,
 } from 'firebase/firestore';
 import { info, error } from '../log.js';
 import {
@@ -24,6 +24,7 @@ export function newId(len = 12) {
 }
 
 const clean = (obj) => JSON.parse(JSON.stringify(obj, (k, v) => (v === undefined ? null : v)));
+const strip = (obj) => { const c = clean(obj); delete c._pending; return c; };
 
 // ---------- хранилище: память ----------
 export function createMemoryBackend() {
@@ -42,6 +43,9 @@ export function createMemoryBackend() {
     listenProjects(uid, cb) {
       const run = () => cb([...projects.values()].filter((p) => (p.memberUids || []).includes(uid)).map((p) => ({ ...p })));
       listeners.add(run); run(); return () => listeners.delete(run);
+    },
+    async loadHistory(pid, since, max) {
+      return [...bucket(pid, 'history').values()].filter((x) => x.at >= since).sort((a, b) => b.at - a.at).slice(0, max);
     },
     listenInvitations(email, uid, cb) {
       const run = () => cb([...projects.values()].filter((p) => (p.invitedEmails || []).includes(email) && !(p.memberUids || []).includes(uid)).map((p) => ({ ...p })));
@@ -73,6 +77,11 @@ export function createFirestoreBackend(db, uid) {
       const q = query(collection(db, 'projects'), where('memberUids', 'array-contains', uid));
       return onSnapshot(q, (snap) => cb(snap.docs.map((d) => ({ ...d.data(), _pending: d.metadata.hasPendingWrites }))),
         (e) => error('Чтение проектов', `${e.code || ''} ${e.message || e}`));
+    },
+    async loadHistory(pid, since, max) {
+      const q = query(collection(db, 'projects', pid, 'history'), where('at', '>=', since), orderBy('at', 'desc'), fbLimit(max));
+      const snap = await getDocs(q);
+      return snap.docs.map((d) => d.data());
     },
     listenInvitations(email, uid, cb) {
       const q = query(collection(db, 'projects'), where('invitedEmails', 'array-contains', email));
@@ -127,7 +136,7 @@ export function createRepo(backend, user) {
     if (!existing) Object.assign(stamped, { createdBy: by.uid, createdByName: by.name, createdAt: now });
     const history = {
       id: newId(), coll, docId: id, action, at: now, by: by.uid, byName: by.name,
-      before: existing ? clean(existing) : null, after: clean({ ...existing, ...stamped }),
+      before: existing ? strip(existing) : null, after: strip({ ...existing, ...stamped }),
     };
     return [{ coll, id, data: clean(stamped) }, { coll: 'history', id: history.id, data: history }];
   }
@@ -186,6 +195,18 @@ export function createRepo(backend, user) {
       const data = clean({ ...patch, id: pid, updatedBy: by.uid, updatedByName: by.name, updatedAt: now });
       backend.commit(pid, [{ coll: 'projects', id: pid, data }])?.catch?.((e) => error('Запись проекта отклонена', `${e.code || ''} ${e.message || e}`));
     },
+    // История изменений и откат. Откат сам записывается в историю, поэтому его тоже можно отменить.
+    loadHistory: (pid, since, max = 2000) => backend.loadHistory(pid, since, max),
+    // Вернуть запись к состоянию «до» указанного события (before === null → запись была создана этим событием → убрать)
+    revertTo(pid, coll, docId, before) {
+      if (!before) { api.remove(pid, coll, docId); return; }
+      const now = api.cacheGet(pid, coll, docId) || {};
+      const data = { ...before };
+      Object.keys(now).forEach((k) => { if (!(k in before) && !['id', 'projectId', 'updatedAt', 'updatedBy', 'updatedByName'].includes(k)) data[k] = null; });
+      delete data._pending;
+      api.save(pid, [{ coll, id: docId, action: 'rollback', data }]);
+    },
+    cacheGet: (pid, coll, id) => cache.get(keyOf(pid, coll, id)),
     // Приглашения по почте Google: приглашённый видит проект и сам вступает (правила базы это проверяют)
     listenInvitations: (cb) => backend.listenInvitations(emailOf(user), user.uid, cb),
     invite(project, email) {
