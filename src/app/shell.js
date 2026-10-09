@@ -9,6 +9,7 @@ import { logView } from './views/log.js';
 import { dohView } from './views/doh.js';
 import { todosView } from './views/todos.js';
 import { journalView } from './views/journal.js';
+import { importView } from './views/import.js';
 import { historyView } from './views/history.js';
 import { monthView } from './views/month.js';
 import { soonView } from './views/soon.js';
@@ -16,7 +17,7 @@ import { soonView } from './views/soon.js';
 const TABS = [
   ['project', 'Проект', '🏗'], ['meter', 'Метраж', '📏'], ['todos', 'Дела', '✅'], ['journal', 'Журнал', '📒'], ['doh', 'Дохот', '📝'],
 ];
-const SCREEN_TITLES = { projects: 'Все проекты', cabinets: 'Настройки шкафа', month: 'Месяц', history: 'История', log: 'Журнал событий' };
+const SCREEN_TITLES = { projects: 'Все проекты', cabinets: 'Настройки шкафа', month: 'Месяц', history: 'История', import: 'Импорт', log: 'Журнал событий' };
 
 export function createShell({ user, onLogout, diag }) {
   const root = document.getElementById('app');
@@ -32,6 +33,7 @@ export function createShell({ user, onLogout, diag }) {
       item('➕ Новый проект', () => projectForm(null, ui)),
       item('📅 Месяц (отчёт начальнику)', () => open('month')),
       item('🕘 История и откат', () => open('history')),
+      item('📥 Импорт данных', () => open('import')),
       item('🗄 Настройки шкафа', () => open('cabinets')),
       p?.managerLink && item('📊 Таблица для руководства', () => window.open(p.managerLink, '_blank')),
       item('🧾 Журнал событий', () => open('log')),
@@ -58,6 +60,7 @@ export function createShell({ user, onLogout, diag }) {
     if (ui.screen === 'cabinets') return cabinetsView(ui);
     if (ui.screen === 'month') return monthView(ui);
     if (ui.screen === 'history') return historyView(ui);
+    if (ui.screen === 'import') return importView();
     switch (ui.tab) {
       case 'project': return projectView(ui);
       case 'meter': return meterView(ui);
