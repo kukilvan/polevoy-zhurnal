@@ -208,3 +208,20 @@ test('рабочие дни месяца по всем проектам: тол�
   assert.equal(r.count, 2);
   assert.equal(r.text, 'Рабочие дни за сентябрь 2026\n\n22.09.2026\nЭлектра Тель-Авив с Лешей и Ильёй\n\n23.09.2026\nМегасон Модиин с Мариной');
 });
+
+test('таблица руководства: без длин, даты числом, названия', async () => {
+  const { buildContext, managerTables, managerNames, sheetSerial, TYPES_FOR_TEST } = await import('../src/domain/index.js');
+  const { POINT_TYPES, CONFIGS } = await import('../src/domain/index.js');
+  const data = {
+    projects: [{ id: 'p1', name: 'Mega Or', contractor: 'Megason', object: 'Mega Or', nameHe: 'מגה אור', objectHe: 'מגה אור', defaultConfigId: 'CFG1' }],
+    points: [{ id: 'a', projectId: 'p1', label: '1A-C34', typeId: 'Камера', cabinet: '1A', length: 70 }],
+    types: POINT_TYPES, configs: CONFIGS, catalog: [{ id: 'PR_PTS', workType: 'Протяжка' }],
+    journal: [{ id: 'j1', pointId: 'a', editDate: '2026-10-03', editWorkId: 'PR_PTS' }],
+  };
+  const ctx = buildContext(data); const t = managerTables(data.projects[0], ctx);
+  assert.equal(managerNames(data.projects[0]).title, 'סטטוס נקודות – מגה אור – Megason');
+  assert.equal(t['Точки'][0][9], ''); assert.equal(t['Точки'][0][10], '');
+  assert.equal(t['Журнал'][0][2], sheetSerial('2026-10-03')); assert.equal(sheetSerial('2026-10-03'), 46298);
+  assert.equal(t['Журнал'][0][8], 'Протяжка'); assert.equal(t['Журнал'][0][4], 'a');
+  assert.equal(t['Типы точек'][1][4], 'Протяжка , Хивут , Установка , Проверка'); assert.equal(t['Конфигурации'][0][2], 'INS_KORE , INS_MANUL , INS_MAGNIT');
+});

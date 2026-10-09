@@ -2,7 +2,7 @@
 import { h, openModal } from './ui.js';
 import { state, subscribe, currentProject, ready, getRepo, setCurrentProject } from './store.js';
 import { projectsView, projectForm } from './views/projects.js';
-import { projectView } from './views/project.js';
+import { projectView, updateManagerTable } from './views/project.js';
 import { meterView } from './views/points.js';
 import { cabinetsView } from './views/cabinets.js';
 import { logView } from './views/log.js';
@@ -35,6 +35,7 @@ export function createShell({ user, onLogout, diag }) {
       item('🕘 История и откат', () => open('history')),
       item('📥 Импорт данных', () => open('import')),
       item('🗄 Настройки шкафа', () => open('cabinets')),
+      item('🔄 Обновить таблицу руководства', updateManagerTable),
       p?.managerLink && item('📊 Таблица для руководства', () => window.open(p.managerLink, '_blank')),
       item('🧾 Журнал событий', () => open('log')),
       h('div', { class: 'mut', style: { padding: '10px 4px' } }, user.displayName || user.email),

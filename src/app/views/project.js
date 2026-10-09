@@ -4,6 +4,31 @@ import { projectForm } from './projects.js';
 import { pointForm, generatorForm } from './points.js';
 import { openToday } from './doh.js';
 import { h, formModal, confirmDialog, toast } from '../ui.js';
+import { getToken, realApi } from '../google.js';
+import { syncManagers } from '../managers.js';
+
+// Тестовый режим (?mem=1): вместо Google — заглушка, вызовы пишутся в window.__gcalls
+function testApi() {
+  const calls = (window.__gcalls = []); const rec = (n) => (...a) => { calls.push([n, ...a]); return Promise.resolve(n === 'sheetsOf' ? [] : { id: 'FILE1', name: 'x' }); };
+  return { fileInfo: rec('fileInfo').bind(null), copy: rec('copy'), rename: rec('rename'), batch: rec('batch'), clear: rec('clear'), write: rec('write'),
+    sheetsOf: async (...a) => { calls.push(['sheetsOf', ...a]); return ['Проекты', 'Точки', 'Журнал', 'Типы точек', 'Конфигурации', 'Статус'].map((title, i) => ({ sheetId: i, title, gridProperties: { rowCount: 1000, columnCount: 26 } })); } };
+}
+let syncing = false;
+export async function updateManagerTable() {
+  const p = currentProject(); if (!p || syncing) return;
+  syncing = true;
+  try {
+    toast('Обновляю таблицу для руководства…');
+    const api = new URLSearchParams(location.search).get('mem') ? testApi() : realApi(await getToken());
+    const res = await syncManagers(api, p, state.ctx);
+    getRepo().saveProject(p.id, res.patch);
+    toast(res.message);
+  } catch (e) {
+    const msg = e.code === 'auth/popup-blocked' ? 'Браузер заблокировал окно разрешения Google' : e.code === 'auth/popup-closed-by-user' ? 'Окно разрешения закрыто'
+      : e.status === 403 ? `Нет доступа (${e.message}). Включены ли Google Drive API и Google Sheets API? Открыт ли шаблон по ссылке?` : e.message || String(e);
+    toast(`Не получилось: ${msg}`); console.error('managers sync', e);
+  } finally { syncing = false; }
+}
 
 export function statusClass(status) {
   if (status === 'Неисправна') return 'pill st-bad';
@@ -84,5 +109,6 @@ export function projectView(ui) {
       h('button', { onclick: () => openToday(ui) }, '📝 Сегодня'),
       h('button', { class: 'sec', onclick: () => projectForm(p, ui) }, 'Редактировать проект'),
       h('button', { class: 'sec', onclick: () => ui.open('projects') }, 'Все проекты'),
-      p.managerLink ? h('button', { class: 'sec', onclick: () => window.open(p.managerLink, '_blank') }, '📊 Таблица для руководства') : null));
+      h('button', { class: 'sec', onclick: updateManagerTable }, '🔄 Обновить таблицу для руководства'),
+      p.managerLink ? h('button', { class: 'sec', onclick: () => window.open(p.managerLink, '_blank') }, '📊 Открыть таблицу руководства') : null));
 }
