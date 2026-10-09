@@ -6,6 +6,7 @@ import { openToday } from './doh.js';
 import { h, formModal, confirmDialog, toast } from '../ui.js';
 import { getToken, realApi } from '../google.js';
 import { syncManagers } from '../managers.js';
+import { runBackup } from '../backup.js';
 
 // Тестовый режим (?mem=1): вместо Google — заглушка, вызовы пишутся в window.__gcalls
 function testApi() {
@@ -14,6 +15,19 @@ function testApi() {
     sheetsOf: async (...a) => { calls.push(['sheetsOf', ...a]); return ['Проекты', 'Точки', 'Журнал', 'Типы точек', 'Конфигурации', 'Статус'].map((title, i) => ({ sheetId: i, title, gridProperties: { rowCount: 1000, columnCount: 26 } })); } };
 }
 let syncing = false;
+export async function backupNow() {
+  const p = currentProject(); if (!p || syncing) return;
+  syncing = true;
+  try {
+    toast('Сохраняю резервную копию на Диск…');
+    let api;
+    if (new URLSearchParams(location.search).get('mem')) { const t = testApi(); api = { folder: async () => 'F', putJson: async (...a) => { window.__gcalls.push(['putJson', ...a]); return 'X'; } }; void t; }
+    else api = realApi(await getToken('backup'));
+    const res = await runBackup(api, p, state.data);
+    getRepo().saveProject(p.id, res.patch);
+    toast(res.message);
+  } catch (e) { toast(`Не получилось: ${e.message || e}`); console.error('backup', e); } finally { syncing = false; }
+}
 export async function updateManagerTable() {
   const p = currentProject(); if (!p || syncing) return;
   syncing = true;
@@ -109,6 +123,7 @@ export function projectView(ui) {
       h('button', { onclick: () => openToday(ui) }, '📝 Сегодня'),
       h('button', { class: 'sec', onclick: () => projectForm(p, ui) }, 'Редактировать проект'),
       h('button', { class: 'sec', onclick: () => ui.open('projects') }, 'Все проекты'),
+      h('button', { class: 'sec', onclick: backupNow }, p.backupAt ? `💾 Резервная копия (последняя: ${new Date(p.backupAt).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })})` : '💾 Резервная копия на Диск'),
       h('button', { class: 'sec', onclick: updateManagerTable }, '🔄 Обновить таблицу для руководства'),
       p.managerLink ? h('button', { class: 'sec', onclick: () => window.open(p.managerLink, '_blank') }, '📊 Открыть таблицу руководства') : null));
 }

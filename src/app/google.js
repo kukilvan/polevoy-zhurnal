@@ -24,14 +24,14 @@ function stored() {
   try { const t = JSON.parse(localStorage.getItem('pz_gtoken') || 'null'); return t && Date.now() < t.exp ? t : null; } catch { return null; }
 }
 
-export async function getToken() {
+export async function getToken(action = 'managers') {
   if (cached.token && Date.now() < cached.exp) return cached.token;
   const st = stored(); if (st) { cached = st; return st.token; }
   const provider = new GoogleAuthProvider();
   SCOPES.forEach((s) => provider.addScope(s));
   provider.setCustomParameters({ prompt: 'consent', login_hint: auth.currentUser?.email || '' });
   if (useRedirect()) { // iPhone: окна Google закрываются, а результат Firebase-перехода Safari теряет — идём напрямую в Google и читаем токен из адреса
-    try { localStorage.setItem(PENDING, '1'); } catch { /* ok */ }
+    try { localStorage.setItem(PENDING, action); } catch { /* ok */ }
     const q = new URLSearchParams({
       client_id: CLIENT_ID, redirect_uri: location.origin + location.pathname, response_type: 'token', scope: SCOPES.join(' '),
       include_granted_scopes: 'true', state: 'pz_gsync', login_hint: auth.currentUser?.email || '',
@@ -72,6 +72,26 @@ export function realApi(token) {
     sheetsOf: async (id) => (await call(token, 'GET', `${S}/${id}?fields=sheets.properties(sheetId,title,gridProperties)`)).sheets.map((x) => x.properties),
     batch: (id, requests) => call(token, 'POST', `${S}/${id}:batchUpdate`, { requests }),
     clear: (id, ranges) => call(token, 'POST', `${S}/${id}/values:batchClear`, { ranges }),
+    async folder(name) {
+      const q = encodeURIComponent(`name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+      const f = (await call(token, 'GET', `${D}?q=${q}&fields=files(id)`)).files?.[0];
+      if (f) return f.id;
+      return (await call(token, 'POST', `${D}?fields=id`, { name, mimeType: 'application/vnd.google-apps.folder' })).id;
+    },
+    // Создаёт или перезаписывает JSON-файл в папке (по имени)
+    async putJson(folderId, name, text) {
+      const q = encodeURIComponent(`name='${name.replace(/'/g, "\\'")}' and '${folderId}' in parents and trashed=false`);
+      const old = (await call(token, 'GET', `${D}?q=${q}&fields=files(id)`)).files?.[0];
+      const boundary = 'pzb' + Math.random().toString(36).slice(2);
+      const meta = old ? { name } : { name, parents: [folderId], mimeType: 'application/json' };
+      const body = `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${JSON.stringify(meta)}\r\n--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${text}\r\n--${boundary}--`;
+      const url = `https://www.googleapis.com/upload/drive/v3/files${old ? `/${old.id}` : ''}?uploadType=multipart&fields=id`;
+      const r = await fetch(url, { method: old ? 'PATCH' : 'POST', headers: { Authorization: `Bearer ${token}`, 'Content-Type': `multipart/related; boundary=${boundary}` }, body });
+      if (!r.ok) { const e = new Error(`HTTP ${r.status}`); e.status = r.status; throw e; }
+      return (await r.json()).id;
+    },
     write: (id, data) => call(token, 'POST', `${S}/${id}/values:batchUpdate`, { valueInputOption: 'RAW', data }),
   };
 }
+
+export function storedTokenValid() { return !!stored(); }

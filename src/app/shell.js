@@ -3,7 +3,7 @@ import { h, openModal } from './ui.js';
 import { state, subscribe, currentProject, ready, getRepo, setCurrentProject } from './store.js';
 import { projectsView, projectForm } from './views/projects.js';
 import { PENDING } from './google.js';
-import { projectView, updateManagerTable } from './views/project.js';
+import { projectView, updateManagerTable, backupNow } from './views/project.js';
 import { meterView } from './views/points.js';
 import { cabinetsView } from './views/cabinets.js';
 import { logView } from './views/log.js';
@@ -37,6 +37,7 @@ export function createShell({ user, onLogout, diag }) {
       item('📥 Импорт данных', () => open('import')),
       item('🗄 Настройки шкафа', () => open('cabinets')),
       item('🔄 Обновить таблицу руководства', updateManagerTable),
+      item('💾 Резервная копия на Диск', backupNow),
       p?.managerLink && item('📊 Таблица для руководства', () => window.open(p.managerLink, '_blank')),
       item('🧾 Журнал событий', () => open('log')),
       h('div', { class: 'mut', style: { padding: '10px 4px' } }, user.displayName || user.email),
@@ -98,7 +99,7 @@ export function createShell({ user, onLogout, diag }) {
       const timer = setInterval(() => {
         tries += 1;
         let ok = false; try { ok = !!JSON.parse(localStorage.getItem('pz_gtoken') || 'null'); } catch { /* ok */ }
-        if (ok && state.projectsLoaded && currentProject() && ready()) { clearInterval(timer); localStorage.removeItem(PENDING); updateManagerTable(); }
+        if (ok && state.projectsLoaded && currentProject() && ready()) { clearInterval(timer); const what = localStorage.getItem(PENDING); localStorage.removeItem(PENDING); (what === 'backup' ? backupNow : updateManagerTable)(); }
         else if (tries > 60) { clearInterval(timer); localStorage.removeItem(PENDING); }
       }, 500);
     }
