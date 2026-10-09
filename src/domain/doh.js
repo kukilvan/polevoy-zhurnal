@@ -101,3 +101,9 @@ export function doh(day, ctx, lang = 'ru') {
   if (!blank(day.comment)) blocks.push(String(day.comment));
   return blocks.join(DOH_FORMAT.blockSep);
 }
+
+// Две первые строки доха: дата и место работы (для списка рабочих дней месяца)
+export function dohTop(day, ctx, lang = 'ru') {
+  const { date, place } = headerParts(day, ctx, lang);
+  return `${date}${DOH_FORMAT.headerSep}${place}`;
+}

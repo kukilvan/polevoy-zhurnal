@@ -9,6 +9,8 @@ let unsubProjects = null;
 let unsubColls = [];
 let rebuildTimer = null;
 const infoCache = new WeakMap();
+let unsubAllDays = new Map(); // дни всех проектов (для вкладки «Месяц»)
+const allDaysByProject = new Map();
 
 export const state = {
   projects: [], currentProjectId: null, projectsLoaded: false,
@@ -49,11 +51,22 @@ export function setCurrentProject(pid, { pending = false } = {}) {
   openProjectData(pid); rebuild();
 }
 
+function syncAllDays(live) {
+  const ids = new Set(live.map((p) => p.id));
+  unsubAllDays.forEach((u, id) => { if (!ids.has(id)) { u(); unsubAllDays.delete(id); allDaysByProject.delete(id); } });
+  ids.forEach((id) => {
+    if (unsubAllDays.has(id)) return;
+    unsubAllDays.set(id, repo.listenColl(id, 'days', (docs) => { allDaysByProject.set(id, docs); emit(); }));
+  });
+}
+export const allDays = () => [...allDaysByProject.entries()].flatMap(([pid, docs]) => docs.map((d) => ({ ...d, projectId: d.projectId || pid })));
+
 export function start(r) {
   repo = r;
   unsubProjects = repo.listenProjects((docs) => {
     state.projects = docs; state.projectsLoaded = true;
     const live = liveProjects();
+    syncAllDays(live);
     // только что созданный проект может ещё не прийти в список — не уходим с него
     if (state.pendingProjectId && state.pendingProjectId === state.currentProjectId) {
       if (!live.some((p) => p.id === state.pendingProjectId)) { rebuild(); return; }
@@ -68,6 +81,7 @@ export function start(r) {
 
 export function stop() {
   unsubProjects?.(); unsubColls.forEach((u) => u()); unsubColls = [];
+  unsubAllDays.forEach((u) => u()); unsubAllDays = new Map(); allDaysByProject.clear();
   repo = null; state.projects = []; state.currentProjectId = null; state.projectsLoaded = false; state.ctx = null;
   state.data = Object.fromEntries(COLLECTIONS.map((c) => [c, []])); state.loaded = new Set();
 }

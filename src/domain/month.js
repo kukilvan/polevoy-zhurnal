@@ -1,6 +1,6 @@
 // Месячный отчёт: сумма всех дохов месяца (RU) и «דוח חודשי» на иврите (раздел 5.2 ТЗ).
 import { round2 } from './points.js';
-import { doh, dohHeader, dayEntries, itogShtuk, pullFigures } from './doh.js';
+import { doh, dohTop, dohHeader, dayEntries, itogShtuk, pullFigures } from './doh.js';
 
 export const MONTHS_RU = ['Январь', 'Февраль', 'Март', 'Апрель', 'Май', 'Июнь', 'Июль', 'Август', 'Сентябрь', 'Октябрь', 'Ноябрь', 'Декабрь'];
 export const MONTHS_HE = ['ינואר', 'פברואר', 'מרץ', 'אפריל', 'מאי', 'יוני', 'יולי', 'אוגוסט', 'ספטמבר', 'אוקטובר', 'נובמבר', 'דצמבר'];
@@ -51,4 +51,17 @@ export function monthReportHe(ctx, ym) {
   if (s.works.length) lines.push('כמויות:', ...s.works.map((w) => `${w.nameHe}: ${w.qty} ${w.unitHe ?? ''}`.trim()), '');
   if (s.pulls.length) lines.push('השחלות:', ...s.pulls.map((p) => (p.accounting === 'Метры' ? `${p.nameHe}: ${p.count} כבלים, ${p.meters} מטר` : `${p.nameHe}: ${p.count} נקודות`)));
   return lines.join('\n').trim();
+}
+
+// Список рабочих дней месяца по ВСЕМ проектам: «Рабочие дни за <месяц>» + шапка каждого доха (дата и место)
+export function workdaysList(days, projects, ym) {
+  const ctx = { projects: new Map(projects.map((p) => [p.id, p])) };
+  return days.filter((d) => !d.deleted && String(d.date).startsWith(ym) && ctx.projects.has(d.projectId))
+    .sort((a, b) => (a.date < b.date ? -1 : a.date > b.date ? 1 : (a.createdAt ?? 0) - (b.createdAt ?? 0)))
+    .map((d) => dohTop(d, ctx, 'ru'));
+}
+export function workdaysReport(days, projects, ym) {
+  const blocks = workdaysList(days, projects, ym);
+  const [y, m] = ym.split('-').map(Number);
+  return { count: blocks.length, text: [`Рабочие дни за ${MONTHS_RU[m - 1].toLowerCase()} ${y}`, ...blocks].join('\n\n') };
 }

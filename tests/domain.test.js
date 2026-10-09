@@ -191,3 +191,20 @@ test('месячный отчёт: дохи подряд, часы и сводк
   assert.equal(s.works[0].qty, 16);
   assert.ok(monthReportHe(ctx, '2026-09').includes('דוח חודשי – ספטמבר 2026'));
 });
+
+test('рабочие дни месяца по всем проектам: только дата и место', async () => {
+  const { workdaysReport } = await import('../src/domain/index.js');
+  const projects = [
+    { id: 'a', name: 'A', contractor: 'Мегасон', object: 'Модиин', helper: 'Мариной' },
+    { id: 'b', name: 'B', contractor: 'Электра', object: 'Тель-Авив', helper: 'Лешей и Ильёй' },
+  ];
+  const days = [
+    { id: '3', projectId: 'a', date: '2026-09-23', comment: 'не должен попасть' },
+    { id: '1', projectId: 'b', date: '2026-09-22', helper: 'Лешей и Ильёй' },
+    { id: '2', projectId: 'a', date: '2026-10-01' },
+    { id: '4', projectId: 'a', date: '2026-09-01', deleted: true },
+  ];
+  const r = workdaysReport(days, projects, '2026-09');
+  assert.equal(r.count, 2);
+  assert.equal(r.text, 'Рабочие дни за сентябрь 2026\n\n22.09.2026\nЭлектра Тель-Авив с Лешей и Ильёй\n\n23.09.2026\nМегасон Модиин с Мариной');
+});
