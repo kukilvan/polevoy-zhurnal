@@ -9,13 +9,14 @@ let unsubProjects = null;
 let unsubColls = [];
 let rebuildTimer = null;
 const infoCache = new WeakMap();
+let unsubInvites = null;
 let unsubAllDays = new Map(); // дни всех проектов (для вкладки «Месяц»)
 const allDaysByProject = new Map();
 
 export const state = {
   projects: [], currentProjectId: null, projectsLoaded: false,
   data: Object.fromEntries(COLLECTIONS.map((c) => [c, []])), loaded: new Set(),
-  ctx: null, online: navigator.onLine, pendingProjectId: null,
+  ctx: null, online: navigator.onLine, pendingProjectId: null, invitations: [],
 };
 
 export const subscribe = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
@@ -63,6 +64,7 @@ export const allDays = () => [...allDaysByProject.entries()].flatMap(([pid, docs
 
 export function start(r) {
   repo = r;
+  unsubInvites = repo.listenInvitations((docs) => { state.invitations = docs; emit(); });
   unsubProjects = repo.listenProjects((docs) => {
     state.projects = docs; state.projectsLoaded = true;
     const live = liveProjects();
@@ -80,6 +82,7 @@ export function start(r) {
 }
 
 export function stop() {
+  unsubInvites?.(); state.invitations = [];
   unsubProjects?.(); unsubColls.forEach((u) => u()); unsubColls = [];
   unsubAllDays.forEach((u) => u()); unsubAllDays = new Map(); allDaysByProject.clear();
   repo = null; state.projects = []; state.currentProjectId = null; state.projectsLoaded = false; state.ctx = null;

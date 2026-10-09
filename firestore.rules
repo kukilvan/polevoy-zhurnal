@@ -13,7 +13,21 @@ service cloud.firestore {
     // Точки, дни, записи и т.д. лежат внутри проекта как подколлекции.
     match /projects/{projectId} {
       allow create: if signedIn() && request.auth.uid in request.resource.data.memberUids;
-      allow read, update: if signedIn() && request.auth.uid in resource.data.memberUids;
+      // Приглашённый (по почте Google) видит проект и сам вступает или отказывается
+      allow read: if signedIn() && (request.auth.uid in resource.data.memberUids
+        || request.auth.token.email in resource.data.get('invitedEmails', []));
+      allow update: if signedIn() && (
+        request.auth.uid in resource.data.memberUids
+        || (request.auth.token.email in resource.data.get('invitedEmails', [])
+            && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
+                 ['memberUids', 'memberEmails', 'invitedEmails', 'updatedAt', 'updatedBy', 'updatedByName', 'updatedAtServer'])
+            && (
+              // принять: добавить только себя
+              (request.resource.data.memberUids.size() == resource.data.memberUids.size() + 1
+                && request.auth.uid in request.resource.data.memberUids
+                && request.resource.data.memberUids.hasAll(resource.data.memberUids))
+              // отказаться: список участников не меняется
+              || request.resource.data.memberUids == resource.data.memberUids)));
       allow delete: if false; // удаление только «мягкое» (флаг в документе)
 
       match /{sub}/{docId=**} {

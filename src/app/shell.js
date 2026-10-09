@@ -1,6 +1,6 @@
 // Оболочка: верхняя панель, нижняя панель из 5 экранов, меню, переключение экранов.
 import { h, openModal } from './ui.js';
-import { state, subscribe, currentProject, ready } from './store.js';
+import { state, subscribe, currentProject, ready, getRepo, setCurrentProject } from './store.js';
 import { projectsView, projectForm } from './views/projects.js';
 import { projectView } from './views/project.js';
 import { meterView } from './views/points.js';
@@ -37,6 +37,16 @@ export function createShell({ user, onLogout, diag }) {
       item('🚪 Выйти', onLogout)));
   }
 
+  function invitesBanner() {
+    if (!state.invitations.length) return null;
+    return h('div', {}, state.invitations.map((p) => h('div', { class: 'card', style: { borderColor: 'var(--accent, #0ea5e9)' } },
+      h('b', {}, `Вас приглашают в проект «${p.name}»`),
+      h('div', { class: 'mut' }, `От: ${p.memberEmails?.[0] || '—'}${p.object ? ` · ${p.object}` : ''}`),
+      h('div', { class: 'btns' },
+        h('button', { onclick: () => { getRepo().acceptInvite(p); setCurrentProject(p.id, { pending: true }); ui.go('project'); } }, 'Принять'),
+        h('button', { class: 'sec', onclick: () => getRepo().declineInvite(p) }, 'Отклонить')))));
+  }
+
   function content() {
     if (ui.screen === 'log') return logView(ui, diag);
     if (!state.projectsLoaded) return h('div', { class: 'empty' }, 'Загрузка…');
@@ -64,7 +74,7 @@ export function createShell({ user, onLogout, diag }) {
         h('div', { class: 'title' }, title),
         h('span', { class: `pill ${state.online ? 'ok' : 'warn'}` }, state.online ? 'онлайн' : 'офлайн'),
         ui.screen ? null : h('button', { class: 'sec', onclick: menu }, '⋯')),
-      h('div', { class: 'wrap' }, content()),
+      h('div', { class: 'wrap' }, invitesBanner(), content()),
       h('nav', {}, TABS.map(([id, label, icon]) => h('button', { class: !ui.screen && ui.tab === id ? 'on' : '', onclick: () => go(id) }, icon, h('br'), h('small', {}, label)))));
   }
 

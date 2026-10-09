@@ -43,6 +43,10 @@ export function createMemoryBackend() {
       const run = () => cb([...projects.values()].filter((p) => (p.memberUids || []).includes(uid)).map((p) => ({ ...p })));
       listeners.add(run); run(); return () => listeners.delete(run);
     },
+    listenInvitations(email, uid, cb) {
+      const run = () => cb([...projects.values()].filter((p) => (p.invitedEmails || []).includes(email) && !(p.memberUids || []).includes(uid)).map((p) => ({ ...p })));
+      listeners.add(run); run(); return () => listeners.delete(run);
+    },
     listenColl(pid, name, cb) {
       const run = () => cb([...bucket(pid, name).values()].map((d) => ({ ...d })));
       listeners.add(run); run(); return () => listeners.delete(run);
@@ -69,6 +73,11 @@ export function createFirestoreBackend(db, uid) {
       const q = query(collection(db, 'projects'), where('memberUids', 'array-contains', uid));
       return onSnapshot(q, (snap) => cb(snap.docs.map((d) => ({ ...d.data(), _pending: d.metadata.hasPendingWrites }))),
         (e) => error('Чтение проектов', `${e.code || ''} ${e.message || e}`));
+    },
+    listenInvitations(email, uid, cb) {
+      const q = query(collection(db, 'projects'), where('invitedEmails', 'array-contains', email));
+      return onSnapshot(q, (snap) => cb(snap.docs.map((d) => d.data()).filter((p) => !(p.memberUids || []).includes(uid))),
+        (e) => error('Чтение приглашений', `${e.code || ''} ${e.message || e}`));
     },
     listenColl(pid, name, cb) {
       // Если проект ещё не дошёл до сервера, чтение отклоняется — повторяем попытку
@@ -103,6 +112,8 @@ export function createFirestoreBackend(db, uid) {
     async saveSettings() {},
   };
 }
+
+const emailOf = (u) => String(u.email || '').toLowerCase();
 
 // ---------- общий слой: автор/время, история, мягкое удаление ----------
 export function createRepo(backend, user) {
@@ -174,6 +185,28 @@ export function createRepo(backend, user) {
       const now = Date.now();
       const data = clean({ ...patch, id: pid, updatedBy: by.uid, updatedByName: by.name, updatedAt: now });
       backend.commit(pid, [{ coll: 'projects', id: pid, data }])?.catch?.((e) => error('Запись проекта отклонена', `${e.code || ''} ${e.message || e}`));
+    },
+    // Приглашения по почте Google: приглашённый видит проект и сам вступает (правила базы это проверяют)
+    listenInvitations: (cb) => backend.listenInvitations(emailOf(user), user.uid, cb),
+    invite(project, email) {
+      const e = String(email).trim().toLowerCase();
+      if (!/^\S+@\S+\.\S+$/.test(e)) throw new Error('Некорректная почта');
+      const list = [...new Set([...(project.invitedEmails || []), e])];
+      api.saveProject(project.id, { invitedEmails: list });
+    },
+    cancelInvite(project, email) {
+      api.saveProject(project.id, { invitedEmails: (project.invitedEmails || []).filter((x) => x !== email) });
+    },
+    acceptInvite(project) {
+      const me = emailOf(user);
+      api.saveProject(project.id, {
+        memberUids: [...new Set([...(project.memberUids || []), user.uid])],
+        memberEmails: [...new Set([...(project.memberEmails || []), me])],
+        invitedEmails: (project.invitedEmails || []).filter((x) => x !== me),
+      });
+    },
+    declineInvite(project) {
+      api.saveProject(project.id, { invitedEmails: (project.invitedEmails || []).filter((x) => x !== emailOf(user)) });
     },
     loadSettings: () => backend.loadSettings(),
     saveSettings: (p) => backend.saveSettings(p),

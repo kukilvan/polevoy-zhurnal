@@ -44,6 +44,7 @@ function showLogin(message = '', busy = false) {
 function startSession(user) {
   const backend = memoryMode ? createMemoryBackend() : createFirestoreBackend(fb.db, user.uid);
   const repo = createRepo(backend, user);
+  if (memoryMode) window.__pzRepo = repo;
   store.start(repo);
   shell = createShell({
     user,
@@ -53,7 +54,7 @@ function startSession(user) {
 }
 
 async function boot() {
-  if (memoryMode) { startSession({ uid: 'test-user', displayName: 'Тестовый пользователь', email: 'test@example.com' }); window.__pz = { store }; return; }
+  if (memoryMode) { startSession({ uid: 'test-user', displayName: 'Тестовый пользователь', email: 'test@example.com' }); window.__pz = { store, repo: window.__pzRepo }; return; }
   showMessage('Проверяю вход…');
   fb = await import('./firebase.js');
   fb.watchAuth((user) => {
