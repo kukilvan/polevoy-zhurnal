@@ -71,7 +71,7 @@ function dayForm(day, ui) {
 }
 
 // ---------- выбор точек ----------
-function pointsPicker({ typesOf, onPick }) {
+export function pointsPicker({ typesOf, onPick }) {
   let ids = [];
   const btn = h('button', { type: 'button', class: 'sec', style: { width: '100%', textAlign: 'left' } }, 'Выбрать точки…');
   const label = () => { btn.textContent = ids.length ? `Выбрано точек: ${ids.length} — изменить` : 'Выбрать точки…'; };
@@ -283,9 +283,9 @@ function dayScreen(day, ui) {
         h('button', { onclick: () => entryForm(day, null) }, '➕ Добавить работу'),
         h('button', { class: 'sec', onclick: () => batchForm(day) }, 'Несколько работ'))),
     h('div', { class: 'card' }, h('b', {}, 'Дох (русский)'), textBlock(ru, false),
-      h('div', { class: 'btns' }, act('📋 Копировать RU', ru, ''), link('➡️ В Shortcut «Doh»', ru))),
+      h('div', { class: 'btns' }, act('📋 Копировать RU', ru, ''), link('➡️ Отправить', ru))),
     h('div', { class: 'card' }, h('b', {}, 'Дох (иврит)'), textBlock(he, true),
-      h('div', { class: 'btns' }, act('📋 Копировать HE', he, ''), link('➡️ В Shortcut «Doh»', he))));
+      h('div', { class: 'btns' }, act('📋 Копировать HE', he, ''), link('➡️ Отправить', he))));
 }
 
 // ---------- вкладка ----------

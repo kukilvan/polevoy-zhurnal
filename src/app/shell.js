@@ -7,6 +7,8 @@ import { meterView } from './views/points.js';
 import { cabinetsView } from './views/cabinets.js';
 import { logView } from './views/log.js';
 import { dohView } from './views/doh.js';
+import { todosView } from './views/todos.js';
+import { journalView } from './views/journal.js';
 import { soonView } from './views/soon.js';
 
 const TABS = [
@@ -44,6 +46,8 @@ export function createShell({ user, onLogout, diag }) {
       case 'project': return projectView(ui);
       case 'meter': return meterView(ui);
       case 'doh': return dohView(ui);
+      case 'todos': return todosView();
+      case 'journal': return journalView();
       default: return soonView(ui.tab);
     }
   }

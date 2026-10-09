@@ -15,6 +15,8 @@ export function buildContext(data) {
     units: byId(data.units),
     culprits: byId(data.culprits),
     delayReasons: byId(data.delayReasons),
+    todos: byId(data.todos),
+    notes: byId(data.notes),
     cabinetSettings: live(data.cabinetSettings),
     journalByPoint: new Map(),
   };
@@ -34,7 +36,7 @@ export function buildContext(data) {
         result: undefined, projectId: point.projectId,
       };
     }
-    const full = { id: row.id, pointId: row.pointId, order, ...resolved };
+    const full = { id: row.id, pointId: row.pointId, order, fromEdit: !row.entryId, ...resolved };
     if (!ctx.journalByPoint.has(row.pointId)) ctx.journalByPoint.set(row.pointId, []);
     ctx.journalByPoint.get(row.pointId).push(full);
   });
