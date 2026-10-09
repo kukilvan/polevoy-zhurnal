@@ -5,7 +5,8 @@ import { auth } from '../firebase.js';
 const SCOPES = ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets'];
 let cached = { token: '', exp: 0 };
 
-const standalone = () => window.navigator.standalone === true || window.matchMedia?.('(display-mode: standalone)').matches;
+const useRedirect = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+  || window.navigator.standalone === true || window.matchMedia?.('(display-mode: standalone)').matches;
 export const PENDING = 'pz_gsync_pending';
 
 function stored() {
@@ -18,7 +19,7 @@ export async function getToken() {
   const provider = new GoogleAuthProvider();
   SCOPES.forEach((s) => provider.addScope(s));
   provider.setCustomParameters({ prompt: 'consent', login_hint: auth.currentUser?.email || '' });
-  if (standalone()) { // на iPhone (приложение на экране «Домой») всплывающие окна закрываются сами — идём через переход
+  if (useRedirect()) { // на iPhone (Safari и экран «Домой») всплывающие окна закрываются сами — идём через переход
     try { localStorage.setItem(PENDING, '1'); } catch { /* ok */ }
     await reauthenticateWithRedirect(auth.currentUser, provider);
     return new Promise(() => {}); // страница уходит на Google; продолжение после возврата
