@@ -86,3 +86,4 @@ input[type=search] { width: 100%; }
 .card .group { position: static; background: transparent; }
 nav button small { font-size: 11px; }
 html, body { overflow-x: hidden; }
+.btns button.wide { flex: 1 1 100%; }
