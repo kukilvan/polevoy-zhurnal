@@ -15,7 +15,6 @@ HIV_DEV|Подключение в шкафу|חיווט בארון|Хивут|ш
 INS_CAM|Установка камеры|התקנת מצלמה|Установка|шт|Камера|0
 INS_GALAI|Установка галая|התקנת גלאי|Установка|шт|Галай|0
 INS_AP|Установка вайфая|התקנת נקודת Wi-Fi|Установка|шт|Вайфай|0
-INS_BAKAR|Установка бакара|התקנת בקר|Установка|шт|Бакар|0
 INS_KORE|Коре картисим|קורא כרטיסים|Установка|шт|Дверь|1
 INS_BIO|Коре биометри|קורא ביומטרי|Установка|шт|Дверь|1
 INS_KEYB|Киборд|התקנת קיבורד|Установка|шт|Дверь|1
@@ -72,22 +71,22 @@ export const CATALOG = CATALOG_ROWS.split('\n').map((line) => {
 
 // Этапы типов точек: Протяжка / Хивут / Установка / Проверка / Шилют
 export const POINT_TYPES = [
-  { id: 'Камера', nameHe: 'מצלמה', defaultCable: 'cat7', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка', 'Шилют'], isDoor: false },
-  { id: 'Дверь', nameHe: 'דלת', defaultCable: '6005', defaultCables: 3, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка'], isDoor: true },
-  { id: 'Галай', nameHe: 'גלאי', defaultCable: '6005', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка'], isDoor: false },
-  { id: 'Вайфай', nameHe: 'נקודת גישה', defaultCable: 'cat7', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка', 'Шилют'], isDoor: false },
-  { id: 'Бакар', nameHe: 'בקר', defaultCable: 'cat7', defaultCables: 2, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка'], isDoor: false },
-  { id: 'Точка', nameHe: 'נקודת תקשורת', defaultCable: 'cat7', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Проверка', 'Шилют'], isDoor: false },
-  { id: 'TV', nameHe: 'נקודת TV', defaultCable: 'cat7', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Проверка', 'Шилют'], isDoor: false },
-  { id: 'Оптика', nameHe: 'סיב אופטי', defaultCable: 'Оптика', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Проверка'], isDoor: false },
-  { id: 'Другое', nameHe: 'אחר', defaultCable: 'cat7', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка'], isDoor: false },
+  { id: 'Камера', installMode: 'works', installWorkIds: ['INS_CAM'], nameHe: 'מצלמה', defaultCable: 'cat7', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка', 'Шилют'], isDoor: false },
+  { id: 'Дверь', installMode: 'config', installWorkIds: [], nameHe: 'דלת', defaultCable: '6005', defaultCables: 3, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка'], isDoor: true },
+  { id: 'Галай', installMode: 'works', installWorkIds: ['INS_GALAI'], nameHe: 'גלאי', defaultCable: '6005', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка'], isDoor: false },
+  { id: 'Вайфай', installMode: 'works', installWorkIds: ['INS_AP'], nameHe: 'נקודת גישה', defaultCable: 'cat7', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка', 'Шилют'], isDoor: false },
+  { id: 'Бакар', installMode: 'none', installWorkIds: [], nameHe: 'בקר', defaultCable: 'cat7', defaultCables: 2, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка'], isDoor: false },
+  { id: 'Точка', installMode: 'none', installWorkIds: [], nameHe: 'נקודת תקשורת', defaultCable: 'cat7', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Проверка', 'Шилют'], isDoor: false },
+  { id: 'TV', installMode: 'none', installWorkIds: [], nameHe: 'נקודת TV', defaultCable: 'cat7', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Проверка', 'Шилют'], isDoor: false },
+  { id: 'Оптика', installMode: 'none', installWorkIds: [], nameHe: 'סיב אופטי', defaultCable: 'Оптика', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Проверка'], isDoor: false },
+  { id: 'Другое', installMode: 'none', installWorkIds: [], nameHe: 'אחר', defaultCable: 'cat7', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка'], isDoor: false },
 ];
 
 // accounting: 'Точки' — в доху считаются точки, 'Метры' — кабели и метры
 export const CABLES = [
   { id: 'cat7', nameHe: 'כבל CAT7', accounting: 'Точки' },
   { id: '6005', nameHe: 'כבל 6005', accounting: 'Метры' },
-  { id: 'Оптика', nameHe: 'סיב אופטי', accounting: 'Метры' },
+  { id: 'Оптика', installMode: 'none', installWorkIds: [], nameHe: 'סיב אופטי', accounting: 'Метры' },
 ];
 
 export const CONFIGS = [
@@ -111,3 +110,9 @@ export const DELAY_REASONS = [
   { id: 'Нет кабеля', he: 'אין כבל' }, { id: 'Нет электричества', he: 'אין חשמל' }, { id: 'Нет оборудования', he: 'אין ציוד' },
   { id: 'Ждём другую бригаду', he: 'ממתין לצוות' }, { id: 'Столы', he: 'שולחנות' }, { id: 'Другое', he: 'אחר' },
 ];
+
+// Что считается «установкой» точки (привязка по умолчанию): none — не требуется, works — перечисленные работы, config — набор двери (конфигурация)
+export const defaultInstallBinding = (typeId) => {
+  const t = POINT_TYPES.find((x) => x.id === typeId);
+  return t ? { mode: t.installMode, workIds: [...t.installWorkIds] } : null;
+};

@@ -3,7 +3,7 @@
 //  - память (для автотестов интерфейса, включается адресом ?mem=1).
 // Общая логика здесь: кто и когда изменил, история изменений, мягкое удаление.
 import {
-  collection, doc, onSnapshot, query, where, writeBatch, serverTimestamp, getDocs, orderBy, limit as fbLimit,
+  collection, doc, onSnapshot, setDoc, query, where, writeBatch, serverTimestamp, getDocs, orderBy, limit as fbLimit,
 } from 'firebase/firestore';
 import { info, error } from '../log.js';
 import {
@@ -55,6 +55,8 @@ export function createMemoryBackend() {
       const run = () => cb([...bucket(pid, name).values()].map((d) => ({ ...d })));
       listeners.add(run); run(); return () => listeners.delete(run);
     },
+    listenUserPrefs(uid, cb) { const run = () => cb({ ...settings }); listeners.add(run); run(); return () => listeners.delete(run); },
+    async saveUserPrefs(uid, patch) { settings = { ...settings, ...patch }; notify(); },
     async commit(pid, writes) {
       for (const w of writes) {
         if (w.coll === 'projects') { projects.set(w.id, { ...(projects.get(w.id) || {}), ...w.data }); continue; }
@@ -117,8 +119,12 @@ export function createFirestoreBackend(db, uid) {
       }
       return Promise.all(chunks.map((b) => b.commit())); // порядок отправки сохраняется
     },
-    async loadSettings() { return {}; },
-    async saveSettings() {},
+    // Личные настройки пользователя (например, привязки установки по умолчанию для новых проектов)
+    listenUserPrefs(_uid, cb) {
+      return onSnapshot(doc(db, 'users', uid, 'prefs', 'main'), (snap) => cb(snap.data() || {}),
+        (e) => error('Чтение настроек пользователя', `${e.code || ''} ${e.message || e}`));
+    },
+    saveUserPrefs(_uid, patch) { return setDoc(doc(db, 'users', uid, 'prefs', 'main'), patch, { merge: true }); },
   };
 }
 
@@ -144,6 +150,9 @@ export function createRepo(backend, user) {
   const api = {
     backend, user, by,
     listenProjects: (cb) => backend.listenProjects(user.uid, cb),
+    listenUserPrefs: (cb) => backend.listenUserPrefs(user.uid, (p) => { api.prefs = p || {}; cb(api.prefs); }),
+    saveUserPrefs: (patch) => backend.saveUserPrefs(user.uid, patch),
+    prefs: {},
     listenColl(pid, name, cb) {
       return backend.listenColl(pid, name, (docs) => {
         docs.forEach((d) => cache.set(keyOf(pid, name, d.id), d));
@@ -183,7 +192,9 @@ export function createRepo(backend, user) {
       });
       const seed = [];
       const add = (coll, items, idOf = (x) => x.id) => items.forEach((x) => seed.push({ coll, id: idOf(x), data: { ...x, projectId: pid, id: idOf(x), createdBy: by.uid, createdAt: now, updatedBy: by.uid, updatedAt: now } }));
-      add('catalog', CATALOG); add('types', POINT_TYPES); add('cables', CABLES); add('configs', CONFIGS);
+      const inst = api.prefs?.installDefaults || {}; // личные привязки установки по умолчанию
+      const types = POINT_TYPES.map((t) => (inst[t.id] ? { ...t, installMode: inst[t.id].mode, installWorkIds: inst[t.id].workIds || [] } : t));
+      add('catalog', CATALOG); add('types', types); add('cables', CABLES); add('configs', CONFIGS);
       add('units', UNITS); add('culprits', CULPRITS); add('delayReasons', DELAY_REASONS);
       info(`Создаю проект «${data.name}», справочников: ${seed.length}`);
       backend.commit(pid, [{ coll: 'projects', id: pid, data: project }, ...seed.map((w) => ({ ...w, data: clean(w.data) }))])

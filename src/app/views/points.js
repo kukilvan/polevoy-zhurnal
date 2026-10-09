@@ -1,11 +1,11 @@
 // Точки: форма точки, генератор пачкой, вкладка «Метраж» (ввод длины).
 import { h, formModal, openModal, confirmDialog, toast } from '../ui.js';
 import { state, getRepo, pointsSorted, infoOf, currentProject } from '../store.js';
-import { generateLabels, parseSuffixes, comparePoints } from '../../domain/index.js';
+import { generateLabels, parseSuffixes, comparePoints, usesConfig } from '../../domain/index.js';
 import { statusClass } from './project.js';
 
 const typeOptions = () => [...state.ctx.types.values()].map((t) => ({ value: t.id, label: t.id }));
-const isDoorType = (id) => !!state.ctx.types.get(id)?.isDoor;
+const isDoorType = (id) => usesConfig(state.ctx.types.get(id));
 const configOptions = () => [...state.ctx.configs.values()].map((c) => ({ value: c.id, label: c.name }));
 const reasonOptions = () => [...state.ctx.delayReasons.values()].map((r) => ({ value: r.id, label: r.id }));
 

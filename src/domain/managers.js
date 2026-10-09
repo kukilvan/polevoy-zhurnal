@@ -1,6 +1,7 @@
 // Таблица для руководства: данные одного проекта в формате листов шаблона (без длин и метража).
 // Названия листов и колонок совпадают с прежним скриптом syncAll(): на них опираются формулы шаблона.
 import { sortNumber } from './points.js';
+import { installBinding } from './status.js';
 
 export const TITLE_PREFIX = 'סטטוס נקודות – ';
 export const HEADERS = {
@@ -53,7 +54,13 @@ export function managerTables(project, ctx) {
       r.action, r.workId, '', '', '', '', r.result].map((v) => v ?? ''));
   }
   tables['Журнал'] = jr;
-  tables['Типы точек'] = types.map((t) => [t.id, t.nameHe, t.defaultCable, t.defaultCables, (t.stages || []).join(' , '), !!t.isDoor].map((v) => v ?? ''));
+  // Этапы типа под привязку установки: без установки — этап «Установка» убираем (шаблон покажет «—»), с установкой — добавляем
+  tables['Типы точек'] = types.map((t) => {
+    const mode = installBinding(t).mode;
+    let stages = (t.stages || []).filter((x) => x !== 'Установка');
+    if (mode !== 'none') { const i = stages.indexOf('Проверка'); stages.splice(i >= 0 ? i : stages.length, 0, 'Установка'); }
+    return [t.id, t.nameHe, t.defaultCable, t.defaultCables, stages.join(' , '), mode === 'config'].map((v) => v ?? '');
+  });
   tables['Конфигурации'] = configs.map((c) => [c.id, c.name, (c.components || []).join(' , ')]);
   return tables;
 }

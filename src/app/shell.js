@@ -2,6 +2,7 @@
 import { h, openModal } from './ui.js';
 import { state, subscribe, currentProject, ready, getRepo, setCurrentProject } from './store.js';
 import { projectsView, projectForm } from './views/projects.js';
+import { installView } from './views/install.js';
 import { PENDING } from './google.js';
 import { projectView, updateManagerTable, backupNow } from './views/project.js';
 import { meterView } from './views/points.js';
@@ -18,7 +19,7 @@ import { soonView } from './views/soon.js';
 const TABS = [
   ['project', 'Проект', '🏗'], ['meter', 'Метраж', '📏'], ['todos', 'Дела', '✅'], ['journal', 'Журнал', '📒'], ['doh', 'Дохот', '📝'],
 ];
-const SCREEN_TITLES = { projects: 'Все проекты', cabinets: 'Настройки шкафа', month: 'Месяц', history: 'История', import: 'Импорт', log: 'Журнал событий' };
+const SCREEN_TITLES = { projects: 'Все проекты', cabinets: 'Настройки шкафа', month: 'Месяц', history: 'История', import: 'Импорт', install: 'Привязка установки', log: 'Журнал событий' };
 
 export function createShell({ user, onLogout, diag }) {
   const root = document.getElementById('app');
@@ -36,6 +37,7 @@ export function createShell({ user, onLogout, diag }) {
       item('🕘 История и откат', () => open('history')),
       item('📥 Импорт данных', () => open('import')),
       item('🗄 Настройки шкафа', () => open('cabinets')),
+      item('🔧 Привязка установки', () => open('install')),
       item('🔄 Обновить таблицу руководства', updateManagerTable),
       item('💾 Резервная копия на Диск', backupNow),
       p?.managerLink && item('📊 Таблица для руководства', () => window.open(p.managerLink, '_blank')),
@@ -61,6 +63,7 @@ export function createShell({ user, onLogout, diag }) {
     if (!currentProject()) return projectView(ui); // «Создать проект»
     if (!ready()) return h('div', { class: 'empty' }, 'Загрузка данных проекта…');
     if (ui.screen === 'cabinets') return cabinetsView(ui);
+    if (ui.screen === 'install') return installView();
     if (ui.screen === 'month') return monthView(ui);
     if (ui.screen === 'history') return historyView(ui);
     if (ui.screen === 'import') return importView();

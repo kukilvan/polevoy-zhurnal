@@ -225,3 +225,34 @@ test('таблица руководства: без длин, даты числ�
   assert.equal(t['Журнал'][0][8], 'Протяжка'); assert.equal(t['Журнал'][0][4], 'a');
   assert.equal(t['Типы точек'][1][4], 'Протяжка , Хивут , Установка , Проверка'); assert.equal(t['Конфигурации'][0][2], 'INS_KORE , INS_MANUL , INS_MAGNIT');
 });
+
+test('привязка установки: бакар без установки, вайфай по работе, переопределение проектом', async () => {
+  const { buildContext, pointInfo, POINT_TYPES, CATALOG, CONFIGS, installBinding } = await import('../src/domain/index.js');
+  const mk = (types) => buildContext({
+    projects: [{ id: 'p', defaultConfigId: 'CFG1' }], types, catalog: CATALOG, configs: CONFIGS,
+    points: [{ id: 'b', projectId: 'p', label: 'B-1', typeId: 'Бакар', length: 5 }, { id: 'w', projectId: 'p', label: 'W-1', typeId: 'Вайфай', length: 5 }, { id: 'c', projectId: 'p', label: 'C-1', typeId: 'Камера', length: 5 }],
+    journal: [{ id: 'j1', pointId: 'w', editDate: '2026-10-01', editWorkId: 'INS_AP' }, { id: 'j2', pointId: 'b', editDate: '2026-10-01', editWorkId: 'CHK_FLUKE' }, { id: 'j3', pointId: 'c', editDate: '2026-10-01', editWorkId: 'INS_CAM' }],
+  });
+  const ctx = mk(POINT_TYPES);
+  assert.equal(pointInfo(ctx.points.get('w'), ctx).install, 'Установлено');
+  assert.equal(pointInfo(ctx.points.get('b'), ctx).status, 'Проверена');
+  assert.equal(pointInfo(ctx.points.get('b'), ctx).install, '');
+  // старые данные без полей привязки: берётся стандартная по названию типа
+  const legacy = mk(POINT_TYPES.map(({ installMode, installWorkIds, ...t }) => t));
+  assert.equal(installBinding(legacy.types.get('Бакар')).mode, 'none');
+  // проект переопределил: камеры только протягиваем — установка не требуется
+  const noCam = mk(POINT_TYPES.map((t) => (t.id === 'Камера' ? { ...t, installMode: 'none', installWorkIds: [] } : t)));
+  assert.equal(installBinding(noCam.types.get('Камера')).mode, 'none');
+  // несколько работ: частично → k/n
+  const two = mk(POINT_TYPES.map((t) => (t.id === 'Камера' ? { ...t, installMode: 'works', installWorkIds: ['INS_CAM', 'HIV_KEY'] } : t)));
+  assert.equal(pointInfo(two.points.get('c'), two).install, 'Установлено 1/2');
+});
+
+test('таблица руководства учитывает привязку: у «Бакар» нет этапа «Установка»', async () => {
+  const { buildContext, managerTables, POINT_TYPES } = await import('../src/domain/index.js');
+  const ctx = buildContext({ projects: [{ id: 'p' }], types: POINT_TYPES, configs: [], points: [], journal: [] });
+  const rows = managerTables({ id: 'p' }, ctx)['Типы точек'];
+  assert.ok(!rows.find((r) => r[0] === 'Бакар')[4].includes('Установка'));
+  assert.ok(rows.find((r) => r[0] === 'Вайфай')[4].includes('Установка'));
+  assert.equal(rows.find((r) => r[0] === 'Дверь')[5], true);
+});
