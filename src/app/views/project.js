@@ -4,7 +4,7 @@ import { projectForm } from './projects.js';
 import { pointForm, generatorForm } from './points.js';
 import { openToday } from './doh.js';
 import { h, formModal, confirmDialog, toast } from '../ui.js';
-import { getToken, realApi } from '../google.js';
+import { getToken, realApi, clearToken } from '../google.js';
 import { syncManagers } from '../managers.js';
 import { runBackup } from '../backup.js';
 
@@ -15,7 +15,7 @@ function testApi() {
     sheetsOf: async (...a) => { calls.push(['sheetsOf', ...a]); return ['Проекты', 'Точки', 'Журнал', 'Типы точек', 'Конфигурации', 'Статус'].map((title, i) => ({ sheetId: i, title, gridProperties: { rowCount: 1000, columnCount: 26 } })); } };
 }
 let syncing = false;
-export async function backupNow() {
+export async function backupNow(retried = false) {
   const p = currentProject(); if (!p || syncing) return;
   syncing = true;
   try {
@@ -26,9 +26,12 @@ export async function backupNow() {
     const res = await runBackup(api, p, state.data);
     getRepo().saveProject(p.id, res.patch);
     toast(res.message);
-  } catch (e) { toast(`Не получилось: ${e.message || e}`); console.error('backup', e); } finally { syncing = false; }
+  } catch (e) {
+    if (e.status === 401 && retried !== true) { clearToken(); syncing = false; toast('Доступ Google истёк — запрашиваю заново…'); return backupNow(true); }
+    toast(`Не получилось: ${e.message || e}`); console.error('backup', e);
+  } finally { syncing = false; }
 }
-export async function updateManagerTable() {
+export async function updateManagerTable(retried = false) {
   const p = currentProject(); if (!p || syncing) return;
   syncing = true;
   try {
@@ -38,6 +41,7 @@ export async function updateManagerTable() {
     getRepo().saveProject(p.id, res.patch);
     toast(res.message);
   } catch (e) {
+    if (e.status === 401 && retried !== true) { clearToken(); syncing = false; toast('Доступ Google истёк — запрашиваю заново…'); return updateManagerTable(true); }
     const msg = e.code === 'auth/popup-blocked' ? 'Браузер заблокировал окно разрешения Google' : e.code === 'auth/popup-closed-by-user' ? 'Окно разрешения закрыто'
       : e.status === 403 ? `Нет доступа (${e.message}). Включены ли Google Drive API и Google Sheets API? Открыт ли шаблон по ссылке?` : e.message || String(e);
     toast(`Не получилось: ${msg}`); console.error('managers sync', e);
