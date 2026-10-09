@@ -3,6 +3,7 @@ import { h, formModal, openModal, confirmDialog, toast } from '../ui.js';
 import { state, getRepo, pointsSorted, infoOf, currentProject } from '../store.js';
 import { generateLabels, parseSuffixes, comparePoints, usesConfig } from '../../domain/index.js';
 import { statusClass } from './project.js';
+import { hint } from './guide.js';
 
 const typeOptions = () => [...state.ctx.types.values()].map((t) => ({ value: t.id, label: t.id }));
 const isDoorType = (id) => usesConfig(state.ctx.types.get(id));
@@ -128,7 +129,7 @@ export function meterView(ui) {
     const pts = pointsSorted().filter((p) => (!q || `${p.label} ${p.planName ?? ''}`.toLowerCase().includes(q))
       && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && (!fType || p.typeId === fType));
     list.replaceChildren();
-    if (!pts.length) { list.append(h('div', { class: 'empty' }, total.length ? 'Ничего не найдено' : 'Точек пока нет. Добавьте их пачкой или по одной.')); return; }
+    if (!pts.length) { list.append(total.length ? h('div', { class: 'empty' }, 'Ничего не найдено') : hint(ui, 'Точек пока нет. Добавьте их пачкой («Точки пачкой») или по одной. Потом здесь вносится длина кабеля к каждой точке: нажмите точку, введите метры.', 'meter', '📖 Как вносить метраж')); return; }
     let lastKey = null;
     pts.forEach((p) => {
       const key = `${p.cabinet || ''}\u0000${p.typeId}`;

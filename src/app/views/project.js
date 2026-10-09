@@ -8,6 +8,7 @@ import { getToken, realApi, clearToken } from '../google.js';
 import { syncManagers } from '../managers.js';
 import { runBackup } from '../backup.js';
 import { memberLabel } from './members.js';
+import { hint } from './guide.js';
 
 // Тестовый режим (?mem=1): вместо Google — заглушка, вызовы пишутся в window.__gcalls
 function testApi() {
@@ -56,7 +57,7 @@ export function statusClass(status) {
   return 'pill st-mid';
 }
 
-function summary() {
+function summary(ui) {
   const ctx = state.ctx; const rows = new Map();
   pointsSorted().forEach((pt) => {
     const info = infoOf(pt);
@@ -66,7 +67,7 @@ function summary() {
     if (info.checked) r.checked += 1; if (info.status === 'Неисправна') r.bad += 1;
     rows.set(pt.typeId, r);
   });
-  if (!rows.size) return h('div', { class: 'mut' }, 'Точек пока нет. Добавьте их кнопкой ниже.');
+  if (!rows.size) return hint(ui, 'Точек пока нет. Сначала создайте все точки проекта по плану заказчика: кнопка «Добавить точки» ниже создаёт их пачкой (например, 1A-01 … 1A-24).', 'points', '📖 Как добавить точки');
   const sum = [...rows.values()].reduce((a, r) => ({ total: a.total + r.total, pulled: a.pulled + r.pulled, installed: a.installed + r.installed, checked: a.checked + r.checked, bad: a.bad + r.bad }), { total: 0, pulled: 0, installed: 0, checked: 0, bad: 0 });
   const line = (name, r, bold) => h('tr', {}, h('td', {}, bold ? h('b', {}, name) : name), ...['total', 'pulled', 'installed', 'checked'].map((k) => h('td', {}, bold ? h('b', {}, r[k]) : r[k])));
   return h('div', {},
@@ -104,7 +105,7 @@ export function projectView(ui) {
       h('div', { class: 'mut' }, `Помощник по умолчанию: ${p.helper || 'сам'}${p.oneOff ? ' · разовый выезд' : ''}`),
       p.note ? h('div', { class: 'mut' }, p.note) : null),
     members(p, ui),
-    h('div', { class: 'card' }, h('b', {}, 'Точки'), h('div', { style: { marginTop: '8px' } }, summary()),
+    h('div', { class: 'card' }, h('b', {}, 'Точки'), h('div', { style: { marginTop: '8px' } }, summary(ui)),
       h('div', { class: 'btns' },
         h('button', { onclick: () => generatorForm() }, '➕ Добавить точки'),
         h('button', { class: 'sec', onclick: () => pointForm(null) }, 'Новая точка'),

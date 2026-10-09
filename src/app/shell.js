@@ -16,12 +16,13 @@ import { journalView } from './views/journal.js';
 import { importView } from './views/import.js';
 import { historyView } from './views/history.js';
 import { monthView } from './views/month.js';
+import { guideView, maybeWelcome } from './views/guide.js';
 import { soonView } from './views/soon.js';
 
 const TABS = [
   ['project', 'Проект', '🏗'], ['meter', 'Метраж', '📏'], ['todos', 'Дела', '✅'], ['journal', 'Журнал', '📒'], ['doh', 'Дохот', '📝'], ['settings', 'Настройки', '⚙️'],
 ];
-const SCREEN_TITLES = { projects: 'Все проекты', cabinets: 'Настройки шкафа', month: 'Месяц', history: 'История', import: 'Импорт', install: 'Привязка установки', ref: 'Справочник', members: 'Участники', log: 'Журнал событий' };
+const SCREEN_TITLES = { projects: 'Все проекты', cabinets: 'Настройки шкафа', month: 'Месяц', history: 'История', import: 'Импорт', install: 'Привязка установки', ref: 'Справочник', members: 'Участники', guide: 'Как пользоваться', log: 'Журнал событий' };
 
 export function createShell({ user, onLogout, diag }) {
   const root = document.getElementById('app');
@@ -37,6 +38,7 @@ export function createShell({ user, onLogout, diag }) {
       item('➕ Новый проект', () => projectForm(null, ui)),
       item('📅 Месяц (отчёт начальнику)', () => open('month')),
       item('🕘 История и откат', () => open('history')),
+      item('📖 Как пользоваться', () => open('guide')),
       item('⚙️ Настройки', () => go('settings')),
       item('🧾 Журнал событий', () => open('log')),
       h('div', { class: 'mut', style: { padding: '10px 4px' } }, user.displayName || user.email),
@@ -63,6 +65,7 @@ export function createShell({ user, onLogout, diag }) {
     if (ui.screen === 'install') return installView();
     if (ui.screen === 'ref') return refView();
     if (ui.screen === 'members') return membersView(ui);
+    if (ui.screen === 'guide') return guideView(ui);
     if (ui.screen === 'month') return monthView(ui);
     if (ui.screen === 'history') return historyView(ui);
     if (ui.screen === 'import') return importView();
@@ -72,7 +75,7 @@ export function createShell({ user, onLogout, diag }) {
       case 'doh': return dohView(ui);
       case 'settings': return settingsView(ui);
       case 'todos': return todosView();
-      case 'journal': return journalView();
+      case 'journal': return journalView(ui);
       default: return soonView(ui.tab);
     }
   }
@@ -92,7 +95,7 @@ export function createShell({ user, onLogout, diag }) {
 
   window.addEventListener('online', () => { state.online = true; render(); });
   window.addEventListener('offline', () => { state.online = false; render(); });
-  const unsub = subscribe(render);
+  const unsub = subscribe(() => { render(); if (ready()) maybeWelcome(ui, user); });
   render();
 
   // Возврат с Google после выдачи доступа (iPhone): дожидаемся загрузки проекта и запускаем обновление таблицы руководства

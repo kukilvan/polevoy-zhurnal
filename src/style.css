@@ -87,3 +87,16 @@ input[type=search] { width: 100%; }
 nav button small { font-size: 11px; }
 html, body { overflow-x: hidden; }
 .btns button.wide { flex: 1 1 100%; }
+
+/* руководство и подсказки */
+.guide-title { font-weight: 700; font-size: 16px; }
+.guide-short { margin-top: 6px; line-height: 1.45; }
+.guide-btn { margin-top: 10px; width: 100%; }
+.guide-more { margin-top: 10px; padding-top: 8px; border-top: 1px solid var(--line); }
+.guide-sub { font-weight: 700; margin: 10px 0 4px; color: var(--mut); font-size: 13px; text-transform: uppercase; }
+.guide-li { position: relative; padding-left: 16px; margin: 6px 0; line-height: 1.45; }
+.guide-li::before { content: '•'; position: absolute; left: 4px; color: var(--mut); }
+.guide-p { margin: 6px 0; line-height: 1.45; }
+.guide-he { color: var(--mut); font-weight: 400; margin-inline-start: 8px; }
+.guide-hint { border: 1px dashed var(--line); border-radius: 12px; padding: 12px 14px; color: var(--mut); line-height: 1.45; }
+.guide-hint .btns { margin-top: 8px; }

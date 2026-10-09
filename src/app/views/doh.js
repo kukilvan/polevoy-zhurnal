@@ -1,5 +1,6 @@
 // Вкладка «Дохот»: дни работ, записи дня, текст доха RU/HE, копирование и ссылка на команду «Doh».
 import { h, formModal, openModal, confirmDialog, toast } from '../ui.js';
+import { hint } from './guide.js';
 import { state, getRepo, currentProject, pointsSorted, infoOf } from '../store.js';
 import { newId } from '../repo.js';
 import { doh, entryLine, dateText, dayEntries } from '../../domain/index.js';
@@ -278,7 +279,7 @@ function dayScreen(day, ui) {
       entries.length ? h('div', { style: { marginTop: '8px' } }, entries.map((e) =>
         h('div', { class: 'item', onclick: () => entryForm(day, e) },
           h('div', { class: 'name' }, entryLine(e, ctx, 'ru') || '—', e.updatedByName ? h('div', { class: 'sub' }, e.updatedByName) : null))))
-        : h('div', { class: 'mut', style: { marginTop: '8px' } }, 'Записей пока нет.'),
+        : hint(ui, 'Записей пока нет. «Добавить работу» — одна работа (можно сразу на много точек). «Несколько работ» — выбрать точки один раз и отметить сразу несколько работ.', 'doh', '📖 Что такое дох и как его заполнять'),
       h('div', { class: 'btns' },
         h('button', { onclick: () => entryForm(day, null) }, '➕ Добавить работу'),
         h('button', { class: 'sec', onclick: () => batchForm(day) }, 'Несколько работ'))),
@@ -303,5 +304,5 @@ export function dohView(ui) {
       const n = dayEntries(d, ctx).length;
       return h('div', { class: 'item', onclick: () => { openDayId = d.id; ui.render(); } },
         h('div', { class: 'name' }, dateText(d.date), h('div', { class: 'sub' }, `${n ? `записей: ${n}` : 'пока без записей'}${d.createdByName ? ` · ${d.createdByName}` : ''}`)));
-    })) : h('div', { class: 'empty' }, 'Дней пока нет. Нажмите «Сегодня».'));
+    })) : hint(ui, 'Дней пока нет. Нажмите «Сегодня» и внесите сделанные работы: из них соберётся дох — отчёт за день.', 'doh', '📖 Что такое дох и как его заполнять'));
 }

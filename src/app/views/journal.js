@@ -2,6 +2,7 @@
 import { h, formModal, toast } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { dateText } from '../../domain/index.js';
+import { hint } from './guide.js';
 import { memberName } from './members.js';
 import { pointsPicker, todayIso } from './doh.js';
 
@@ -71,7 +72,7 @@ function editForm() {
   });
 }
 
-export function journalView() {
+export function journalView(ui) {
   const all = rows();
   const info = h('div', { class: 'mut', style: { margin: '10px 2px' } });
   const box = h('div', {});
@@ -84,7 +85,7 @@ export function journalView() {
       h('div', { class: 'item' },
         h('div', { class: 'name' }, `${r.label} · ${r.work}`,
           h('div', { class: 'sub' }, `${dateText(r.date)}${r.result === 'Не работает' ? ' · не работает' : ''}${r.fromEdit ? ' · правка' : ''}${whoIs(currentProject(), r.by) ? ` · ${whoIs(currentProject(), r.by)}` : ''}`)))))
-      : h('div', { class: 'empty' }, all.length ? 'Ничего не найдено' : 'Строк журнала пока нет. Они появляются, когда в дохе отмечены точки.'));
+      : (all.length ? h('div', { class: 'empty' }, 'Ничего не найдено') : hint(ui, 'Строк журнала пока нет. Они появляются сами, когда в дохе отмечены работы на точках.', 'status', '📖 Как это работает')));
   };
   fill();
   return h('div', {},
