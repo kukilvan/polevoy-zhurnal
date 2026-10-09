@@ -2,9 +2,18 @@
 import { h, formModal, toast } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { dateText } from '../../domain/index.js';
+import { memberName } from './members.js';
 import { pointsPicker, todayIso } from './doh.js';
 
 let search = '';
+
+function whoIs(p, uid) {
+  if (!uid) return '';
+  const i = (p.memberUids || []).indexOf(uid);
+  const email = i >= 0 ? (p.memberEmails || [])[i] : (p.removedMembers || {})[uid];
+  if (!email) return '';
+  return memberName(p, email) || email;
+}
 
 function rows() {
   const ctx = state.ctx; const out = [];
@@ -74,7 +83,7 @@ export function journalView() {
     box.replaceChildren(shown.length ? h('div', { class: 'card', style: { padding: 0 } }, shown.map((r) =>
       h('div', { class: 'item' },
         h('div', { class: 'name' }, `${r.label} · ${r.work}`,
-          h('div', { class: 'sub' }, `${dateText(r.date)}${r.result === 'Не работает' ? ' · не работает' : ''}${r.fromEdit ? ' · правка' : ''}`)))))
+          h('div', { class: 'sub' }, `${dateText(r.date)}${r.result === 'Не работает' ? ' · не работает' : ''}${r.fromEdit ? ' · правка' : ''}${whoIs(currentProject(), r.by) ? ` · ${whoIs(currentProject(), r.by)}` : ''}`)))))
       : h('div', { class: 'empty' }, all.length ? 'Ничего не найдено' : 'Строк журнала пока нет. Они появляются, когда в дохе отмечены точки.'));
   };
   fill();

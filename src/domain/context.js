@@ -29,11 +29,11 @@ export function buildContext(data) {
       const entry = ctx.entries.get(row.entryId);
       const day = entry && ctx.days.get(entry.dayId);
       if (!entry || !day) return; // запись/день удалены — строка не считается
-      resolved = { date: day.date, action: entry.workType, workId: entry.workId, result: entry.result, projectId: day.projectId };
+      resolved = { date: day.date, action: entry.workType, workId: entry.workId, result: entry.result, projectId: day.projectId, by: entry.updatedBy || entry.createdBy };
     } else {
       resolved = {
         date: row.editDate, workId: row.editWorkId, action: ctx.catalog.get(row.editWorkId)?.workType,
-        result: undefined, projectId: point.projectId,
+        result: undefined, projectId: point.projectId, by: row.updatedBy || row.createdBy,
       };
     }
     const full = { id: row.id, pointId: row.pointId, order, fromEdit: !row.entryId, ...resolved };
