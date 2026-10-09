@@ -118,14 +118,15 @@ export function meterForm(startPoint) {
   show(point);
 }
 
-let searchText = '';
+let searchText = ''; let fCab = ''; let fType = '';
 export function meterView(ui) {
   const list = h('div', { class: 'card', style: { padding: 0 } });
   const total = pointsSorted();
   const withLen = total.filter((p) => p.length !== undefined && p.length !== null && p.length !== '').length;
   function fill() {
     const q = searchText.trim().toLowerCase();
-    const pts = pointsSorted().filter((p) => !q || `${p.label} ${p.planName ?? ''}`.toLowerCase().includes(q));
+    const pts = pointsSorted().filter((p) => (!q || `${p.label} ${p.planName ?? ''}`.toLowerCase().includes(q))
+      && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && (!fType || p.typeId === fType));
     list.replaceChildren();
     if (!pts.length) { list.append(h('div', { class: 'empty' }, total.length ? 'Ничего не найдено' : 'Точек пока нет. Добавьте их пачкой или по одной.')); return; }
     let lastKey = null;
@@ -140,11 +141,20 @@ export function meterView(ui) {
     });
   }
   const search = h('input', { type: 'search', placeholder: 'Поиск по обозначению', value: searchText, oninput: (e) => { searchText = e.target.value; fill(); } });
+  const cabs = [...new Set(total.map((p) => p.cabinet || ''))].sort((a, b) => a.localeCompare(b, 'ru', { numeric: true }));
+  const types = [...new Set(total.map((p) => p.typeId))].sort((a, b) => String(a).localeCompare(String(b), 'ru'));
+  if (!cabs.includes(fCab) && fCab !== '__none') fCab = '';
+  if (!types.includes(fType)) fType = '';
+  const sel = (all, opts, cur, set) => h('select', { onchange: (e) => { set(e.target.value); fill(); } },
+    h('option', { value: '' }, all), ...opts.map(([v, t]) => h('option', { value: v, selected: v === cur }, t)));
+  const filters = h('div', { style: { display: 'flex', gap: '8px', marginTop: '8px' } },
+    sel('Все шкафы', cabs.map((c) => (c ? [c, `Шкаф ${c}`] : ['__none', 'Без шкафа'])), fCab, (v) => { fCab = v; }),
+    sel('Все типы', types.map((t) => [t, t]), fType, (v) => { fType = v; }));
   fill();
   return h('div', {},
     h('div', { class: 'btns', style: { marginTop: 0 } },
       h('button', { onclick: () => generatorForm() }, '➕ Точки пачкой'),
       h('button', { class: 'sec', onclick: () => pointForm(null) }, 'Новая точка')),
     h('div', { class: 'mut', style: { margin: '10px 2px' } }, `Точек: ${total.length} · с длиной: ${withLen}`),
-    search, h('div', { style: { height: '10px' } }), list);
+    search, filters, h('div', { style: { height: '10px' } }), list);
 }
