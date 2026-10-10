@@ -6,12 +6,13 @@ import path from 'node:path';
 const safe = (s) => String(s || 'проект').replace(/[\\/:*?"<>|]/g, '_').trim() || 'проект';
 
 // Читает проект целиком: сам документ и все его подколлекции (списки подколлекций берутся из базы, ничего не пропустит)
-export async function readProject(projectRef) {
+export async function readProject(projectRef, only) {
   const snap = await projectRef.get();
   const project = { id: projectRef.id, ...snap.data() };
   const data = {};
   const cols = await projectRef.listCollections();
   for (const col of cols) {
+    if (only && !only.includes(col.id)) continue;
     const docs = await col.get();
     data[col.id] = docs.docs.map((d) => ({ id: d.id, ...d.data() }));
   }

@@ -31,13 +31,15 @@ const api = {
   write: (id, data) => call('POST', `${S}/${id}/values:batchUpdate`, { valueInputOption: 'RAW', data }),
 };
 
+// для сборки таблиц журнал изменений (history), дела и заметки не нужны — не читаем их, чтобы экономить лимит чтений
+const NEED = ['points', 'days', 'entries', 'journal', 'catalog', 'types', 'cables', 'configs', 'units', 'culprits', 'delayReasons', 'cabinetSettings'];
 const now = new Date();
 let failed = 0;
 // ошибки выводим как аннотации GitHub (видны в сводке запуска и через API)
 const fail = (m, e) => { console.log(`::error::${m}: ${String(e?.stack || e).replace(/\n/g, ' | ')}`); failed += 1; };
 try {
 for (const ref of await db.collection('projects').listDocuments()) {
-  const { project, data } = await readProject(ref);
+  const { project, data } = await readProject(ref, NEED);
   if (isDeleted(project)) continue;
   // адрес сервера записываем в проект: приложение откроет ему доступ к файлам таблиц
   await ref.set({ serverEmail: cred.client_email }, { merge: true });

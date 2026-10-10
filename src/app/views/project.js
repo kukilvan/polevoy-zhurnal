@@ -51,7 +51,7 @@ export async function updateTable(tableId, retried = false) {
     toast(`Обновляю таблицу «${table.name}»…`);
     const api = new URLSearchParams(location.search).get('mem') ? testApi() : realApi(await getToken(`table:${table.id}`));
     const res = await syncTable(api, p, state.ctx, table, { uid: getRepo().user.uid, nameOf: (u) => memberNameByUid(p, u), shareWith: p.serverEmail || '' });
-    getRepo().saveProject(p.id, { tables: withTable(p, table.id, res.patch) });
+    getRepo().saveProject(p.id, { tables: withTable(p, table.id, { ...res.patch, serverError: '' }) });
     toast(res.message);
   } catch (e) {
     if (e.status === 401 && retried !== true) { clearToken(); syncing = false; toast('Доступ Google истёк — запрашиваю заново…'); return updateTable(tableId, true); }

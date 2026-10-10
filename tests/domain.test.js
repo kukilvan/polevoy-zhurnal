@@ -359,14 +359,18 @@ test('сервер: ночное автообновление таблиц', asy
 });
 
 test('экономия чтений: когда читать всё, а когда только изменения', async () => {
-  const { decideMode, maxMillis, FULL_EVERY } = await import('../src/domain/sync.js');
+  const { decideMode, maxMillis, lastSaturday } = await import('../src/domain/sync.js');
   const now = 1_800_000_000_000; const ok = { last: now - 1000, full: now - 1000, n: 100 };
   assert.equal(decideMode(null, 100, now), 'full');                         // первый запуск
   assert.equal(decideMode(ok, 100, now), 'delta');                          // кэш полный
   assert.equal(decideMode(ok, 120, now), 'delta');                          // в кэше больше, чем помнили
   assert.equal(decideMode(ok, 80, now), 'full');                            // кэш неполон (например, очищен частично)
   assert.equal(decideMode(ok, 0, now), 'full');                             // кэш пуст
-  assert.equal(decideMode({ ...ok, full: now - FULL_EVERY - 1 }, 100, now), 'full'); // еженедельная полная сверка
+  // полная сверка раз в неделю, по субботам: 2026-10-10 суббота, 2026-10-11 воскресенье, 2026-10-16 пятница, 2026-10-17 суббота
+  const at = (s) => new Date(`${s}T12:00:00`).getTime();
+  assert.equal(new Date(lastSaturday(at('2026-10-10'))).getDay(), 6); assert.equal(new Date(lastSaturday(at('2026-10-14'))).getDate(), 10);
+  assert.equal(decideMode({ ...ok, last: at('2026-10-10'), full: at('2026-10-10') }, 100, at('2026-10-16')), 'delta'); // пятница: всё ещё после субботней сверки
+  assert.equal(decideMode({ ...ok, last: at('2026-10-10'), full: at('2026-10-10') }, 100, at('2026-10-17')), 'full');  // следующая суббота
   assert.equal(decideMode({ ...ok, last: 0 }, 100, now), 'full');           // нет отметки времени сервера
   assert.equal(maxMillis([0, 5, undefined, 9, 3]), 9);
 });
