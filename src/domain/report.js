@@ -170,6 +170,9 @@ function rulesFor(cols, lang) {
   return rules;
 }
 
+// Цвет «информационных» столбцов строки по общему статусу точки (статус-столбец красится своими правилами)
+const ROW_COLOR = { 'Неисправна': COLORS.red, 'Проверена': COLORS.green, 'Установлена': COLORS.green, 'Частично установлена': COLORS.orange,
+  'Захивучена': COLORS.yellow, 'Протянута': COLORS.yellow };
 function pointsFor(project, ctx, table, nameOf) {
   const cabs = new Set(table.cabinets || []); const types = new Set(table.types || []); const sts = new Set(table.statuses || []);
   return [...ctx.points.values()].filter((p) => p.projectId === project.id).sort(comparePoints)
@@ -192,7 +195,8 @@ function sheetOf(title, items, project, ctx, table, cols, nameOf) {
   rows.push(cols.map((c) => c[lang]));
   items.forEach(({ point, info }) => rows.push(cols.map((c) => cellOf(c, point, info, ctx, project, lang, nameOf))));
   return { title, rtl: lang === 'he', rows, headerRow, summaryRows: table.summary ? [2, 3] : [],
-    cols: cols.map((c) => ({ id: c.id, kind: c.kind || 'text', width: c.w })), rules: rulesFor(cols, lang), count: items.length };
+    cols: cols.map((c) => ({ id: c.id, kind: c.kind || 'text', width: c.w })), rules: rulesFor(cols, lang), count: items.length,
+    rowColors: items.map(({ info }) => ROW_COLOR[statusKeyOf(info)] || '') };
 }
 
 // Возвращает { title, sheets, hash, pointCount, colCount } для записи в Google Таблицу
@@ -214,5 +218,5 @@ export function buildReport(project, ctx, table, { nameOf } = {}) {
     });
   } else sheets = [sheetOf(lang === 'he' ? 'סטטוס' : 'Статус', items, project, ctx, table, cols, nameOf)];
   const title = fileTitle(project, table);
-  return { title, sheets, pointCount: items.length, colCount: cols.length, hash: hashOf([title, lang, sheets.map((x) => [x.title, x.rtl, x.rows, x.cols.map((c) => c.id)])]) };
+  return { title, sheets, pointCount: items.length, colCount: cols.length, hash: hashOf([title, lang, sheets.map((x) => [x.title, x.rtl, x.rows, x.cols.map((c) => c.id), x.rowColors])]) };
 }

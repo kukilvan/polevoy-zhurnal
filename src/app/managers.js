@@ -23,6 +23,15 @@ export function sheetRequests(sheetId, sh) {
     if (c.kind === 'stage') out.push({ repeatCell: { range: range(first, lastRow, i, i + 1), cell: { userEnteredFormat: { numberFormat: { type: 'DATE', pattern: 'dd/mm/yyyy' }, horizontalAlignment: 'CENTER' } }, fields: 'userEnteredFormat(numberFormat,horizontalAlignment)' } });
     else if (c.kind === 'num' || c.kind === 'status') out.push({ repeatCell: { range: range(first, lastRow, i, i + 1), cell: { userEnteredFormat: { horizontalAlignment: 'CENTER' } }, fields: 'userEnteredFormat.horizontalAlignment' } });
   });
+  // цвет информационных столбцов по статусу точки: подряд идущие строки одного цвета — одним запросом
+  const infoCols = []; sh.cols.forEach((c, i) => { if (c.kind !== 'stage' && c.kind !== 'status' && c.id !== 'checkResult') infoCols.push(i); });
+  const groups = []; infoCols.forEach((i) => { const g = groups[groups.length - 1]; if (g && g[1] === i) g[1] = i + 1; else groups.push([i, i + 1]); });
+  const rc = sh.rowColors || [];
+  for (let i = 0; i < rc.length;) {
+    let j = i; while (j < rc.length && rc[j] === rc[i]) j += 1;
+    if (rc[i]) groups.forEach(([c0, c1]) => out.push({ repeatCell: { range: range(first + i, first + j, c0, c1), cell: { userEnteredFormat: { backgroundColor: rgb(rc[i]) } }, fields: 'userEnteredFormat.backgroundColor' } }));
+    i = j;
+  }
   // подсветка: условное форматирование (в ячейках только значения)
   const rowNo = first + 1; // номер первой строки данных в A1
   sh.rules.forEach((r) => {
@@ -46,7 +55,7 @@ export async function rebuildSheets(api, fileId, sheets) {
   sheets.forEach((sh, i) => requests.push({ addSheet: { properties: { sheetId: ids[i], title: `__pz${i}`, index: i, rightToLeft: sh.rtl,
     gridProperties: { rowCount: Math.max(50, sh.rows.length + 20), columnCount: Math.max(sh.cols.length, ...sh.rows.map((r) => r.length), 7), frozenRowCount: sh.headerRow + 1 } } } }));
   old.forEach((o) => requests.push({ deleteSheet: { sheetId: o.sheetId } }));
-  sheets.forEach((sh, i) => requests.push({ updateSheetProperties: { properties: { sheetId: ids[i], title: sh.title }, fields: 'title' } }));
+  sheets.forEach((sh, i) => requests.push({ updateSheetProperties: { properties: { sheetId: ids[i], title: sh.title, rightToLeft: !!sh.rtl }, fields: 'title,rightToLeft' } }));
   sheets.forEach((sh, i) => requests.push(...sheetRequests(ids[i], sh)));
   await api.batch(fileId, requests);
   await api.write(fileId, sheets.map((sh) => ({ range: `'${esc(sh.title)}'!A1`, values: sh.rows })));
