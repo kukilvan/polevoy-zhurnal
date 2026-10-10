@@ -1,7 +1,7 @@
 // Экран «Таблицы для руководства»: профили (какие шкафы, типы, статусы и столбцы попадут в Google-таблицу).
 import { h, formModal, confirmDialog, toast } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
-import { COLUMNS, STATUS_KEYS, NO_CABINET, tablesOf, buildReport } from '../../domain/index.js';
+import { COLUMNS, STATUS_KEYS, NO_CABINET, tablesOf, buildReport, fileTitle } from '../../domain/index.js';
 import { updateTable } from './project.js';
 
 const when = (iso) => new Date(iso).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
@@ -50,9 +50,10 @@ export function tableForm(table) {
     columns: ['label', 'planName', 'cabinet', 'floor', 'type', 'cable', 'status', 'pulled', 'hived', 'installed', 'checked'] };
   formModal({
     title: table ? `Таблица «${table.name}»` : 'Новая таблица', submitLabel: 'Сохранить',
-    values: { name: base.name, lang: base.lang, layout: base.layout || 'one', summary: base.summary !== false, main: !!base.main },
+    values: { name: base.name, fileName: base.fileName || fileTitle(p, base), lang: base.lang, layout: base.layout || 'one', summary: base.summary !== false, main: !!base.main },
     fields: [
       { key: 'name', label: 'Название таблицы', required: true, hint: 'Для себя: например «Для руководства» или «Для заказчика»' },
+      { key: 'fileName', label: 'Название файла в Google Диске', hint: 'Применится при следующем «Обновить». Пусто — название по умолчанию' },
       { key: 'lang', label: 'Язык таблицы', type: 'select', options: [{ value: 'he', label: 'Иврит (справа налево)' }, { value: 'ru', label: 'Русский' }] },
       { key: 'cabinets', label: 'Шкафы', type: 'custom', build: (api) => pickList(cabs.map((c) => ({ value: c, label: c === NO_CABINET ? 'Без шкафа' : `Шкаф ${c}` })), base.cabinets, api.changed) },
       { key: 'types', label: 'Типы точек', type: 'custom', build: (api) => pickList(types.map((t) => ({ value: t, label: t })), base.types, api.changed) },
@@ -74,6 +75,7 @@ export function tableForm(table) {
     onSubmit: (v) => {
       const t = {
         ...(table || {}), id: table?.id || `t_${Date.now().toString(36)}`, name: v.name, lang: v.lang || 'he', cabinets: v.cabinets || [], types: v.types || [],
+        fileName: (v.fileName || '').trim() && (v.fileName || '').trim() !== fileTitle(p, { ...(table || {}), name: v.name, lang: v.lang || 'he', fileName: '' }) ? v.fileName.trim() : '',
         statuses: v.statuses || [], columns: v.columns, layout: v.layout || 'one', summary: !!v.summary, main: table?.main || !!v.main,
       };
       let next = table ? list.map((x) => (x.id === t.id ? t : x)) : [...list, t];

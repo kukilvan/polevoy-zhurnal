@@ -80,6 +80,7 @@ export function displayName(project, lang) {
   return parts.filter((x, i) => parts.indexOf(x) === i).join(' – ');
 }
 export function fileTitle(project, table) {
+  if (table.fileName) return table.fileName;
   const d = displayName(project, table.lang);
   if (table.main) return table.lang === 'he' ? TITLE_PREFIX + d : `Статус точек – ${d}`;
   return `${d} – ${table.name}`;

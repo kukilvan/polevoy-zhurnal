@@ -55,6 +55,7 @@ export async function updateTable(tableId, retried = false) {
     if (e.status === 401 && retried !== true) { clearToken(); syncing = false; toast('Доступ Google истёк — запрашиваю заново…'); return updateTable(tableId, true); }
     const msg = e.code === 'auth/popup-blocked' ? 'Браузер заблокировал окно разрешения Google' : e.code === 'auth/popup-closed-by-user' ? 'Окно разрешения закрыто'
       : e.status === 403 ? `Нет доступа (${e.message}). Включены ли Google Drive API и Google Sheets API?` : e.message || String(e);
+    if (e.patch && Object.keys(e.patch).length) getRepo().saveProject(p.id, { tables: withTable(p, table.id, e.patch) });
     toast(`Не получилось: ${msg}`); console.error('table sync', e);
   } finally { syncing = false; }
 }

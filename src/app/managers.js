@@ -28,7 +28,7 @@ export function sheetRequests(sheetId, sh) {
   sh.rules.forEach((r) => {
     const cell = `${colLetter(r.col)}${rowNo}`;
     const cond = r.kind === 'number' ? { type: 'CUSTOM_FORMULA', values: [{ userEnteredValue: `=ISNUMBER(${cell})` }] }
-      : r.kind === 'blank' ? { type: 'CUSTOM_FORMULA', values: [{ userEnteredValue: `=AND(COUNTA($A${rowNo}:$${colLetter(Math.max(nCols - 1, 0))}${rowNo})>0,LEN(${cell})=0)` }] }
+      : r.kind === 'blank' ? { type: 'CUSTOM_FORMULA', values: [{ userEnteredValue: `=(COUNTA($A${rowNo}:$${colLetter(Math.max(nCols - 1, 0))}${rowNo})>0)*(LEN(${cell})=0)` }] }
         : { type: r.kind === 'eq' ? 'TEXT_EQ' : 'TEXT_STARTS_WITH', values: [{ userEnteredValue: r.text }] };
     const format = { backgroundColor: rgb(r.color), ...(r.textColor ? { textFormat: { foregroundColor: rgb(r.textColor) } } : {}) };
     out.push({ addConditionalFormatRule: { rule: { ranges: [range(first, lastRow, r.col, r.col + 1)], booleanRule: { condition: cond, format } }, index: 0 } });
@@ -69,11 +69,13 @@ export async function syncTable(api, project, ctx, table, { force = false, uid =
   if (fileId !== table.fileId) patch.fileId = fileId;
   if (link !== table.link) patch.link = link;
   let changed = false;
-  if (force || rep.hash !== oldHash) {
-    await rebuildSheets(api, fileId, rep.sheets);
+  try {
+    if (force || rep.hash !== oldHash) {
+      await rebuildSheets(api, fileId, rep.sheets);
+      patch.hash = rep.hash; changed = true;
+    }
     if (file.name !== rep.title) await api.rename(fileId, rep.title);
-    patch.hash = rep.hash; changed = true;
-  }
+  } catch (e) { e.patch = patch; throw e; } // файл уже создан: запоминаем его, чтобы следующая попытка не плодила новые
   patch.syncedAt = new Date().toISOString();
   return { patch, link, changed, rep, message: changed ? `Таблица «${table.name}» обновлена: точек ${rep.pointCount}, столбцов ${rep.colCount}` : `Таблица «${table.name}»: данные не менялись, она актуальна` };
 }
