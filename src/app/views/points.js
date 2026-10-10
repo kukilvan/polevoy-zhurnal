@@ -180,12 +180,58 @@ export function pointCard(startPoint) {
   close = openModal(startPoint.label, body);
 }
 
+// Массовые действия: выбранные точки (живёт, пока открыто приложение)
+let selMode = false; const selected = new Set();
+
+function bulkEditForm(ids, done) {
+  const repo = getRepo(); const pid = currentProject().id;
+  formModal({
+    title: `Изменить точек: ${ids.length}`, submitLabel: 'Применить',
+    fields: [
+      { key: 'cabinet', label: 'Шкаф', hint: 'Пусто — не менять' }, { key: 'floor', label: 'Этаж', hint: 'Пусто — не менять' },
+      { key: 'typeId', label: 'Тип', type: 'select', options: typeOptions(), emptyLabel: 'Не менять' },
+    ],
+    onSubmit: (v) => {
+      if (!v.cabinet && !v.floor && !v.typeId) { toast('Ничего не выбрано для изменения'); return false; }
+      const ops = ids.map((id) => {
+        const data = {};
+        if (v.cabinet) data.cabinet = v.cabinet;
+        if (v.floor) data.floor = v.floor;
+        if (v.typeId) { data.typeId = v.typeId; if (!isDoorType(v.typeId)) data.configId = undefined; }
+        return { coll: 'points', id, data };
+      });
+      repo.save(pid, ops); toast(`Изменено точек: ${ids.length}`); done();
+    },
+  });
+}
+
 let searchText = ''; let fCab = ''; let fType = '';
 export function meterView(ui) {
   const list = h('div', { class: 'card', style: { padding: 0 } });
   const total = pointsSorted();
   const withLen = total.filter((p) => p.length !== undefined && p.length !== null && p.length !== '').length;
+  const bar = h('div', { class: 'card selbar', style: { position: 'sticky', top: '53px', zIndex: 6, margin: '8px 0 0' } });
+  const shown = () => pointsSorted().filter((p) => { const q = searchText.trim().toLowerCase();
+    return (!q || `${p.label} ${p.planName ?? ''}`.toLowerCase().includes(q)) && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && (!fType || p.typeId === fType); });
+  function updateBar() {
+    for (const id of [...selected]) if (!state.ctx.points.has(id)) selected.delete(id);
+    bar.style.display = selMode ? '' : 'none';
+    const ids = [...selected];
+    bar.replaceChildren(h('b', {}, `Выбрано: ${ids.length}`),
+      h('div', { class: 'btns', style: { marginTop: '8px' } },
+        h('button', { class: 'sec', onclick: () => { shown().forEach((p) => selected.add(p.id)); fill(); } }, 'Все в списке'),
+        h('button', { class: 'sec', onclick: () => { selected.clear(); fill(); } }, 'Снять')),
+      h('div', { class: 'btns' },
+        h('button', { disabled: !ids.length, onclick: () => bulkEditForm(ids, () => { selected.clear(); selMode = false; ui.render(); }) }, '✏️ Изменить'),
+        h('button', { class: 'danger', disabled: !ids.length, onclick: async () => {
+          if (!(await confirmDialog(`Удалить точек: ${ids.length}? Их можно будет вернуть из истории.`, { yes: 'Удалить', danger: true }))) return;
+          const repo = getRepo(); const pid = currentProject().id;
+          ids.forEach((id) => repo.remove(pid, 'points', id)); toast(`Удалено точек: ${ids.length}`); selected.clear(); selMode = false; ui.render();
+        } }, '🗑 Удалить')),
+      h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => { selMode = false; selected.clear(); ui.render(); } }, 'Готово')));
+  }
   function fill() {
+    updateBar();
     const q = searchText.trim().toLowerCase();
     const pts = pointsSorted().filter((p) => (!q || `${p.label} ${p.planName ?? ''}`.toLowerCase().includes(q))
       && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && (!fType || p.typeId === fType));
@@ -196,7 +242,12 @@ export function meterView(ui) {
       const key = `${p.cabinet || ''}\u0000${p.typeId}`;
       if (key !== lastKey) { list.append(h('div', { class: 'group', style: { padding: '10px 12px 6px' } }, `${p.cabinet ? `Шкаф ${p.cabinet}` : 'Без шкафа'} · ${p.typeId}`)); lastKey = key; }
       const info = infoOf(p);
-      list.append(h('div', { class: 'item', onclick: () => pointCard(p) },
+      const cb = selMode ? h('input', { type: 'checkbox', checked: selected.has(p.id), style: { width: '22px', height: '22px', flex: 'none' } }) : null;
+      list.append(h('div', { class: 'item', onclick: () => {
+        if (!selMode) { pointCard(p); return; }
+        if (selected.has(p.id)) selected.delete(p.id); else selected.add(p.id);
+        cb.checked = selected.has(p.id); updateBar();
+      } }, cb,
         h('div', { class: 'name' }, p.label, p.planName ? h('div', { class: 'sub' }, p.planName) : null),
         h('div', { class: 'len' }, p.length !== undefined && p.length !== null && p.length !== '' ? `${p.length} м` : '—'),
         h('span', { class: statusClass(info.status) }, info.status)));
@@ -217,6 +268,8 @@ export function meterView(ui) {
     h('div', { class: 'btns', style: { marginTop: 0 } },
       h('button', { onclick: () => generatorForm() }, '➕ Точки пачкой'),
       h('button', { class: 'sec', onclick: () => pointForm(null) }, 'Новая точка')),
-    h('div', { class: 'mut', style: { margin: '10px 2px' } }, `Точек: ${total.length} · с длиной: ${withLen}`),
-    search, filters, h('div', { style: { height: '10px' } }), list);
+    h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '10px 2px' } },
+      h('span', { class: 'mut' }, `Точек: ${total.length} · с длиной: ${withLen}`),
+      selMode ? null : h('button', { class: 'sec', style: { padding: '6px 12px' }, onclick: () => { selMode = true; ui.render(); } }, '☑ Выбрать')),
+    search, filters, bar, h('div', { style: { height: '10px' } }), list);
 }
