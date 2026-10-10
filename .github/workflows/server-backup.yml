@@ -39,6 +39,10 @@ jobs:
           git add -A
           git diff --cached --quiet || git commit -m "Копия $(date -u +%Y-%m-%d_%H%M)"
           git push
+      - name: Очистка (удаляет навсегда то, что удалено больше года назад)
+        run: node scripts/server-cleanup.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
       - name: Продлить расписание
         run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/server-backup.yml/enable"
         env:

@@ -374,3 +374,16 @@ test('экономия чтений: когда читать всё, а когд
   assert.equal(decideMode({ ...ok, last: 0 }, 100, now), 'full');           // нет отметки времени сервера
   assert.equal(maxMillis([0, 5, undefined, 9, 3]), 9);
 });
+
+test('срок хранения удалённого: год, затем удаление навсегда', async () => {
+  const { isExpiredDeleted, purgeDate, historyCutoff, RETENTION_DAYS } = await import('../src/domain/sync.js');
+  const DAY = 86400000; const now = Date.UTC(2027, 9, 10);
+  assert.equal(RETENTION_DAYS, 365);
+  assert.equal(isExpiredDeleted({ deleted: true, deletedAt: now - 364 * DAY }, now), false);   // ещё хранится
+  assert.equal(isExpiredDeleted({ deleted: true, deletedAt: now - 366 * DAY }, now), true);    // срок вышел
+  assert.equal(isExpiredDeleted({ deleted: false, deletedAt: now - 900 * DAY }, now), false);  // не удалено — не трогаем
+  assert.equal(isExpiredDeleted({ deleted: true }, now), false);                               // нет даты удаления — не трогаем
+  assert.equal(isExpiredDeleted(null, now), false);
+  assert.equal(purgeDate(now), now + 365 * DAY); assert.equal(purgeDate(0), 0);
+  assert.equal(historyCutoff(now), now - 365 * DAY);
+});

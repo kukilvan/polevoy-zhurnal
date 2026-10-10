@@ -10,3 +10,13 @@ export function decideMode(meta, cached, now = Date.now()) {
   return 'delta';
 }
 export const maxMillis = (list) => list.reduce((m, v) => (v && v > m ? v : m), 0);
+
+// ---------- хранение удалённого ----------
+// Удалённое (запись или проект) хранится в базе год, затем ночная серверная задача удаляет его навсегда.
+export const RETENTION_DAYS = 365;
+const DAY = 24 * 3600 * 1000;
+export const purgeDate = (deletedAt) => (deletedAt ? deletedAt + RETENTION_DAYS * DAY : 0);
+// Пора ли удалить навсегда: помечено deleted и с момента удаления прошёл срок (без отметки времени не удаляем никогда)
+export const isExpiredDeleted = (doc, now = Date.now()) => !!doc && doc.deleted === true && Number(doc.deletedAt) > 0 && now >= purgeDate(Number(doc.deletedAt));
+// Записи журнала изменений старше срока (поле at — время в миллисекундах)
+export const historyCutoff = (now = Date.now()) => now - RETENTION_DAYS * DAY;

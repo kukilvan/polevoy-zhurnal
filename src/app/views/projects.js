@@ -1,6 +1,7 @@
 // Все проекты, создание и правка проекта.
 import { h, formModal, confirmDialog, toast } from '../ui.js';
-import { state, liveProjects, currentProject, setCurrentProject, getRepo } from '../store.js';
+import { state, liveProjects, archivedProjects, deletedProjects, currentProject, setCurrentProject, getRepo } from '../store.js';
+import { purgeDate } from '../../domain/index.js';
 
 const PROJECT_FIELDS = (configs) => [
   { key: 'name', label: 'Название проекта', required: true, hint: 'Например: Mega Or' },
@@ -25,8 +26,12 @@ export function projectForm(existing, ui) {
     title: isNew ? 'Новый проект' : 'Проект',
     fields, values: isNew ? { helper: 'Марина', helperHe: 'מרינה' } : existing,
     submitLabel: isNew ? 'Создать' : 'Сохранить',
-    extra: isNew ? [] : [{ label: 'Удалить', kind: 'danger', onClick: async () => {
-      if (!(await confirmDialog(`Удалить проект «${existing.name}»? Данные останутся в базе, проект можно будет вернуть.`, { yes: 'Удалить', danger: true }))) return false;
+    extra: isNew ? [] : [{ label: '📦 В архив', onClick: async () => {
+      if (!(await confirmDialog(`Убрать проект «${existing.name}» в архив? Он пропадёт из списка, все данные сохранятся. Вернуть можно в «Все проекты» → «Архив».`, { yes: 'В архив' }))) return false;
+      repo.saveProject(existing.id, { archived: true, archivedAt: Date.now(), archivedBy: repo.by.uid });
+      toast('Проект в архиве'); return true;
+    } }, { label: 'Удалить', kind: 'danger', onClick: async () => {
+      if (!(await confirmDialog(`Удалить проект «${existing.name}»? Данные хранятся ещё год, до этого проект можно вернуть («Все проекты» → «Удалённые»). Если проект просто не нужен сейчас, лучше «В архив».`, { yes: 'Удалить', danger: true }))) return false;
       repo.saveProject(existing.id, { deleted: true, deletedAt: Date.now(), deletedBy: repo.by.uid });
       toast('Проект удалён'); return true;
     } }],
@@ -53,5 +58,19 @@ export function projectsView(ui) {
         h('div', { class: 'name' }, p.name, h('div', { class: 'sub' }, [p.contractor, p.object].filter(Boolean).join(' · ') || '—')),
         p.active === false ? h('span', { class: 'pill' }, 'не активен') : null,
         cur?.id === p.id ? h('span', { class: 'pill ok' }, 'текущий') : null)))
-      : h('div', { class: 'empty' }, 'Проектов пока нет. Создайте первый.'));
+      : h('div', { class: 'empty' }, 'Проектов пока нет. Создайте первый.'),
+    sideList(`📦 Архив`, archivedProjects(), (p) => `В архиве с ${dateOf(p.archivedAt)}`, (p) => repo().saveProject(p.id, { archived: false, archivedAt: null, archivedBy: null }), 'Проект возвращён из архива'),
+    sideList('🗑 Удалённые проекты', deletedProjects(), (p) => (p.deletedAt ? `Удалится навсегда ${dateOf(purgeDate(p.deletedAt))}` : 'Удалён'), (p) => repo().saveProject(p.id, { deleted: false, deletedAt: null, deletedBy: null }), 'Проект возвращён'));
+}
+
+const repo = () => getRepo();
+const dateOf = (ms) => (ms ? new Date(ms).toLocaleDateString('ru-RU') : '—');
+// Свёрнутый список проектов не из основного списка (архив, удалённые) с кнопкой «Вернуть»
+function sideList(title, list, subOf, restore, doneText) {
+  if (!list.length) return null;
+  return h('details', { class: 'card', style: { marginTop: '12px', padding: '10px 14px' } },
+    h('summary', { style: { cursor: 'pointer', fontWeight: 600 } }, `${title} (${list.length})`),
+    list.map((p) => h('div', { class: 'item', style: { padding: '8px 0' } },
+      h('div', { class: 'name' }, p.name, h('div', { class: 'sub' }, subOf(p))),
+      h('button', { class: 'sec', onclick: () => { restore(p); toast(doneText); } }, 'Вернуть'))));
 }

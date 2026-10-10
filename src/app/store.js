@@ -33,8 +33,10 @@ function rebuild() {
   }, 0);
 }
 
-export const liveProjects = () => state.projects.filter((p) => !p.deleted);
-export const currentProject = () => state.projects.find((p) => p.id === state.currentProjectId && !p.deleted) || null;
+export const liveProjects = () => state.projects.filter((p) => !p.deleted && !p.archived);
+export const archivedProjects = () => state.projects.filter((p) => !p.deleted && p.archived);
+export const deletedProjects = () => state.projects.filter((p) => p.deleted);
+export const currentProject = () => state.projects.find((p) => p.id === state.currentProjectId && !p.deleted && !p.archived) || null;
 
 function openProjectData(pid) {
   unsubColls.forEach((u) => u()); unsubColls = [];
