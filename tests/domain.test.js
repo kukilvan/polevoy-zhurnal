@@ -495,3 +495,71 @@ test('несколько видов кабеля: протяжка каждог�
   ctx = make({ types, points: [int], cabinetSettings: [{ id: 's', projectId: 'P1', cabinet: '1A', typeId: 'Интерком', extraCables: [] }] });
   assert.equal(pointInfo(ctx.points.get('i1'), ctx).cables, 1);
 });
+
+test('точка из устройств: задачи по устройствам, галочки, протяжка по видам, установка k/n, дох', async () => {
+  const { pullFigures, missingStages, isFinished, buildReport, tasksOf, devicesForWork, missingDetails } = await import('../src/domain/index.js');
+  const cables = [{ id: 'cat7', nameHe: 'CAT7', accounting: 'Точки', workIds: ['HIV_KEY', 'HIV_DEV', 'CHK_FLUKE', 'SHL'] },
+    { id: '6005', nameHe: '6005', accounting: 'Метры', workIds: ['HIV_DEV'] }];
+  const devices = [
+    { id: 'DV_KORE', name: 'Коре картисим', cables: [{ cable: '6005', count: 1 }], workIds: ['INS_KORE'] },
+    { id: 'DV_MAG', name: 'Магнит индикация', cables: [{ cable: '6005', count: 1 }], workIds: ['INS_MAGNIT'] },
+    { id: 'DV_MAN', name: 'Мануль хашмали', cables: [{ cable: '6005', count: 1 }], workIds: ['INS_MANUL'] },
+    { id: 'DV_NIP', name: 'Лахцан нипуц', cables: [], workIds: ['INS_LNIPUTZ'] },
+    { id: 'DV_BIO', name: 'Коре биометри', cables: [{ cable: '6005', count: 1 }, { cable: 'cat7', count: 1 }], workIds: ['INS_BIO'] },
+  ];
+  const types = POINT_TYPES.map((t) => (t.id === 'Дверь' ? { ...t, devices: [{ deviceId: 'DV_KORE', count: 1 }, { deviceId: 'DV_MAG', count: 1 }, { deviceId: 'DV_MAN', count: 1 }], workIds: ['CHK_DOOR'] } : t));
+  types.push({ id: 'Коре биометри', nameHe: 'קורא ביומטרי', devices: [{ deviceId: 'DV_BIO', count: 1 }] });
+  const d1 = { id: 'd1', projectId: 'P1', label: '1A-1.1', cabinet: '1A', typeId: 'Дверь', length: 10 };
+  const d2 = { ...d1, id: 'd2', label: '1A-1.2', devices: [{ deviceId: 'DV_KORE', count: 2 }, { deviceId: 'DV_MAN', count: 1 }, { deviceId: 'DV_NIP', count: 1 }] };
+  const bio = { id: 'b1', projectId: 'P1', label: '1A-BIO1', cabinet: '1A', typeId: 'Коре биометри', length: 5 };
+  const D = day('D1', '2026-10-05');
+  const mk = (entries) => make({ cables, devices, types, points: [d1, d2, bio], days: [D], entries,
+    journal: entries.flatMap((e) => e.pointIds.map((p) => ({ id: `${e.id}-${p}`, entryId: e.id, pointId: p }))) });
+  const CAT = { ...Object.fromEntries(CATALOG.map((w) => [w.id, w])) };
+  assert.ok(CAT.CHK_DOOR && CAT.INS_BIO);
+
+  let ctx = mk([]);
+  // задачи двери: 3 протяжки, 3 хивута в шкафу (по устройствам), 3 установки, проверка двери
+  const t1 = tasksOf(ctx.points.get('d1'), ctx);
+  assert.equal(t1.filter((t) => t.stage === 'Протяжка').length, 3);
+  assert.equal(t1.filter((t) => t.workId === 'HIV_DEV').length, 3);
+  assert.equal(pointInfo(ctx.points.get('d1'), ctx).cables, 3);
+  assert.equal(pointInfo(ctx.points.get('d2'), ctx).cables, 3); // 2 коре + мануль; нипуц без кабеля
+  assert.equal(pointInfo(ctx.points.get('b1'), ctx).cableList.map((c) => `${c.cable}×${c.count}`).join(','), '6005×1,cat7×1');
+  assert.deepEqual(devicesForWork([ctx.points.get('d2')], ctx, 'INS_KORE', 'Установка').map((x) => x.deviceId), ['DV_KORE']);
+
+  // протяжка 6005 только коре и магнита на d1
+  const e1 = entry('E1', 'D1', 'Протяжка', 'PR_PTS', ['d1'], { cableId: '6005', deviceIds: ['DV_KORE', 'DV_MAG'] });
+  ctx = mk([e1]);
+  let info = pointInfo(ctx.points.get('d1'), ctx);
+  assert.equal(info.status, 'Протянуто 2/3');
+  assert.deepEqual(pullFigures(e1, ctx), { count: 2, meters: 20 });
+  assert.deepEqual(missingStages(ctx.points.get('d1'), ctx), ['Дотянуть', 'Хивут', 'Установка', 'Проверка']);
+  assert.deepEqual(missingDetails(info, ctx)[0], { stage: 'Протяжка', items: ['Мануль хашмали (6005)'] });
+
+  // всё на d1 без галочек: протяжка, хивут, установки (по каждому авизару), проверка двери
+  const all = ['HIV_DEV', 'INS_KORE', 'INS_MAGNIT', 'INS_MANUL', 'CHK_DOOR'].map((w, i) => entry(`E${i + 3}`, 'D1', CAT[w].workType, w, ['d1']));
+  const e2 = entry('E2', 'D1', 'Протяжка', 'PR_PTS', ['d1'], { cableId: '6005' });
+  ctx = mk([e1, e2, all[0], all[1], all[2]]);
+  info = pointInfo(ctx.points.get('d1'), ctx);
+  assert.equal(info.status, 'Установлено 2/3'); assert.equal(info.install, 'Установлено 2/3');
+  ctx = mk([e1, e2, ...all]);
+  info = pointInfo(ctx.points.get('d1'), ctx);
+  assert.equal(info.status, 'Проверена'); assert.ok(isFinished(ctx.points.get('d1'), ctx));
+
+  // дох: установка коре на двери с двумя коре — 2 шт; протяжка биометри по видам
+  const e9 = entry('E9', 'D1', 'Установка', 'INS_KORE', ['d2']);
+  const e10 = entry('E10', 'D1', 'Протяжка', 'PR_PTS', ['b1'], { cableId: 'cat7' });
+  ctx = mk([e9, e10]);
+  assert.equal(itogShtuk(e9, ctx), 2);
+  assert.deepEqual(pullFigures(e10, ctx), { count: 1, meters: 5 });
+  assert.equal(pointInfo(ctx.points.get('b1'), ctx).status, 'Протянуто 1/2');
+  assert.equal(pointInfo(ctx.points.get('d2'), ctx).install, 'Установлено 1/3'); // коре (×2 одной задачей), мануль, нипуц
+
+  // таблица: этапы составной точки, «—» для этапа, которого нет
+  const rep = buildReport(project, ctx, { id: 't', lang: 'ru', columns: ['label', 'cable', 'pulled', 'shilut'] });
+  const rowB = rep.sheets[0].rows.find((r) => r[0] === '1A-BIO1');
+  assert.deepEqual(rowB, ['1A-BIO1', '6005×1 + cat7×1', 'частично 1/2', '']);
+  const rowD = rep.sheets[0].rows.find((r) => r[0] === '1A-1.1');
+  assert.equal(rowD[3], '—'); // у двери нет шилюта
+});

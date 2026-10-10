@@ -147,7 +147,7 @@ function cellOf(col, point, info, ctx, project, lang, nameOf) {
     }
     default: {
       // этапы: «—» если у типа нет такого этапа, пусто если ещё не сделан, иначе дата
-      const stages = stagesOf(type);
+      const stages = info.composed ? info.stages : stagesOf(type);
       if (stages && !stages.includes(col.stage)) return '—';
       if (col.id === 'installed') {
         if (!info.install) return '';

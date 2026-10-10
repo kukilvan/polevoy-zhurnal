@@ -32,7 +32,7 @@ const api = {
 };
 
 // для сборки таблиц журнал изменений (history), дела и заметки не нужны — не читаем их, чтобы экономить лимит чтений
-const NEED = ['points', 'days', 'entries', 'journal', 'catalog', 'types', 'cables', 'configs', 'units', 'culprits', 'delayReasons', 'cabinetSettings'];
+const NEED = ['points', 'days', 'entries', 'journal', 'catalog', 'types', 'cables', 'devices', 'configs', 'units', 'culprits', 'delayReasons', 'cabinetSettings'];
 const now = new Date();
 let failed = 0;
 // ошибки выводим как аннотации GitHub (видны в сводке запуска и через API)

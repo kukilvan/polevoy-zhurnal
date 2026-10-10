@@ -1,6 +1,7 @@
 // Статусы точек, установка, комплектность (разделы 3.1–3.3, Приложение А).
 import { cableOf, cablesCountOf, metrageOf, cableListOf } from './points.js';
 import { defaultInstallBinding } from './seed.js';
+import { compositionOf, composedInfo } from './compose.js';
 
 // Привязка установки типа точек: поля типа (installMode/installWorkIds), для старых данных — стандартная привязка по названию типа
 export function installBinding(type) {
@@ -13,6 +14,8 @@ export const usesConfig = (type) => installBinding(type).mode === 'config';
 const maxDate = (rows) => rows.reduce((m, r) => (r.date && (!m || r.date > m) ? r.date : m), '');
 
 export function pointInfo(point, ctx) {
+  const comp = compositionOf(point, ctx);
+  if (comp) return composedInfo(point, ctx, comp); // точка из устройств
   const rows = ctx.journalByPoint.get(point.id) || [];
   const dateOf = (action) => maxDate(rows.filter((r) => r.action === action));
   // Протяжка по видам кабеля: точка протянута, когда протянут каждый её вид кабеля.

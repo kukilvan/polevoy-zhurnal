@@ -2,7 +2,7 @@
 export const BACKUP_FOLDER = 'Полевой журнал — резервные копии';
 const LIVE = (arr) => (arr || []).filter((d) => !d.deleted);
 const IMPORTABLE = ['points', 'journal', 'days', 'entries', 'cabinetSettings', 'todos', 'notes'];
-const REFERENCE = ['catalog', 'types', 'cables', 'configs', 'units', 'culprits', 'delayReasons'];
+const REFERENCE = ['catalog', 'types', 'cables', 'devices', 'configs', 'units', 'culprits', 'delayReasons'];
 
 export function buildBackup(project, data, now = new Date()) {
   const out = {

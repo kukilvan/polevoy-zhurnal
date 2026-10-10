@@ -11,3 +11,4 @@ export * from './sync.js';
 export * from './deviceid.js';
 export * from './remaining.js';
 export * from './export.js';
+export * from './compose.js';

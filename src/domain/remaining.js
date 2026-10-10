@@ -11,6 +11,14 @@ export function missingStages(point, ctx) {
   const stages = type?.stages;
   const has = (s) => !stages || stages.includes(s);
   const info = pointInfo(point, ctx);
+  if (info.composed) { // точка из устройств: по задачам
+    const st = info.stageStats; const o = [];
+    if (st['Протяжка'].done && !info.pulled) o.push('Дотянуть');
+    if (st['Хивут'].total && !info.hived) o.push('Хивут');
+    if (st['Установка'].total && info.install !== 'Установлено') o.push('Установка');
+    if (st['Проверка'].total && !info.checked) o.push('Проверка');
+    return o;
+  }
   const out = [];
   // протянуты не все виды кабеля (например, 6005 есть, а cat7 ещё нет)
   if (has('Протяжка') && !info.pulled && info.pullDone) out.push('Дотянуть');
@@ -39,6 +47,7 @@ export function isFinished(point, ctx) {
   const type = ctx.types.get(point.typeId);
   const stages = type?.stages || ['Протяжка', 'Хивут', 'Установка', 'Проверка', 'Шилют'];
   const info = pointInfo(point, ctx);
+  if (info.composed) return info.tasks.every((t) => t.done) && info.checkResult !== 'Не работает';
   const ok = {
     'Протяжка': !!info.pulled, 'Хивут': !!info.hived, 'Проверка': !!info.checked && info.checkResult !== 'Не работает', 'Шилют': !!info.shilut,
     'Установка': installBinding(type).mode === 'none' || info.install === 'Установлено',
