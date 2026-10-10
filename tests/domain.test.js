@@ -446,3 +446,15 @@ test('exportSheets: листы выгрузки в Excel', async () => {
   assert.equal(sh[0].rows[0][0], 'Обозначение'); assert.equal(sh[0].rows[1][0], '1A-01'); assert.ok(sh[0].rows[1].includes('GE1'));
   assert.equal(sh[2].rows[1][0], '2026-10-01'); assert.equal(sh[2].rows[1][8], 30);
 });
+
+test('downtimeByCulprit: простои по виновникам за месяц', async () => {
+  const { downtimeByCulprit, buildContext } = await import('../src/domain/index.js');
+  const ctx = buildContext({ projects: [{ id: 'p' }], points: [], types: [], catalog: [], cables: [], configs: [], units: [], delayReasons: [], journal: [],
+    culprits: [{ id: 'Заказчик', he: 'לקוח' }],
+    days: [{ id: 'd1', projectId: 'p', date: '2026-10-01' }, { id: 'd2', projectId: 'p', date: '2026-09-30' }],
+    entries: [{ id: 'a', dayId: 'd1', workType: 'Время', minutes: 90, culprit: 'Заказчик' }, { id: 'b', dayId: 'd1', workType: 'Время', minutes: 30, culprit: 'Электрик' },
+      { id: 'c', dayId: 'd1', workType: 'Время', minutes: 40, culprit: 'Заказчик' }, { id: 'd', dayId: 'd2', workType: 'Время', minutes: 99, culprit: 'Заказчик' }, { id: 'e', dayId: 'd1', workType: 'Время', minutes: 5 }] });
+  const r = downtimeByCulprit(ctx, '2026-10');
+  assert.deepEqual(r.list.map((g) => [g.culprit, g.minutes, g.count]), [['Заказчик', 130, 2], ['Электрик', 30, 1]]);
+  assert.equal(r.totalMinutes, 160);
+});

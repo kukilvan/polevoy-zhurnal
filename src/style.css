@@ -135,3 +135,10 @@ html, body { overflow-x: hidden; }
 .ready-fill { position: absolute; left: 0; top: 0; bottom: 0; background: var(--fill); }
 :root[data-theme="light"] .ready-bar { --track: hsl(var(--h) 60% 92%); --edge: hsl(var(--h) 55% 55%); --fill: hsl(var(--h) 70% 66%); --ink: #0f172a; --shadow: none; }
 .ready-name, .ready-num { position: relative; z-index: 1; font-weight: 700; font-size: 14px; color: var(--ink); text-shadow: var(--shadow); }
+
+/* вкладка «Месяц» */
+.monthnav { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+.monthnav button { flex: 0 0 56px; }
+.monthnav-title { flex: 1; text-align: center; font-weight: 700; }
+.dt-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; margin: 4px 0; text-align: left; }
+.dt-num { white-space: nowrap; }

@@ -65,3 +65,19 @@ export function workdaysReport(days, projects, ym) {
   const [y, m] = ym.split('-').map(Number);
   return { count: blocks.length, text: [`Рабочие дни за ${MONTHS_RU[m - 1].toLowerCase()} ${y}`, ...blocks].join('\n\n') };
 }
+
+// Простои за месяц по виновникам: записи, где указан виновник (с минутами или без). Сначала самые долгие.
+export function downtimeByCulprit(ctx, ym) {
+  const groups = new Map();
+  monthDays(ctx, ym).forEach((d) => dayEntries(d, ctx).forEach((e) => {
+    if (blank(e.culprit) || e.workType === 'Текст') return;
+    const mins = blank(e.minutes) ? 0 : Number(e.minutes);
+    const g = groups.get(e.culprit) || { culprit: e.culprit, he: ctx.culprits.get(e.culprit)?.he ?? '', minutes: 0, count: 0, items: [] };
+    g.minutes += mins; g.count += 1;
+    g.items.push({ date: d.date, work: ctx.catalog.get(e.workId)?.name ?? e.workType, minutes: mins, note: e.note ?? '' });
+    groups.set(e.culprit, g);
+  }));
+  const list = [...groups.values()].map((g) => ({ ...g, hours: round2(g.minutes / 60) })).sort((a, b) => b.minutes - a.minutes || b.count - a.count);
+  return { list, totalMinutes: list.reduce((n, g) => n + g.minutes, 0) };
+}
+export const hm = (min) => { const h = Math.floor(min / 60); const m = min % 60; return h ? `${h} ч ${m ? `${m} мин` : ''}`.trim() : `${m} мин`; };
