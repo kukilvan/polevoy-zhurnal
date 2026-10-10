@@ -563,3 +563,27 @@ test('точка из устройств: задачи по устройства
   const rowD = rep.sheets[0].rows.find((r) => r[0] === '1A-1.1');
   assert.equal(rowD[3], '—'); // у двери нет шилюта
 });
+
+test('кабели самой точки: дверь 2×6005, авизарим без кабелей; работы кабеля наследуются без дублирования', async () => {
+  const { pullFigures, tasksOf, devicesForWork } = await import('../src/domain/index.js');
+  const cables = [{ id: '6005', accounting: 'Метры', workIds: ['HIV_DEV'] }, { id: 'cat7', accounting: 'Точки', workIds: ['HIV_KEY', 'HIV_DEV', 'CHK_FLUKE', 'SHL'] }];
+  const devices = ['INS_KORE', 'INS_MANUL', 'INS_MAGNIT', 'INS_LPTIHA', 'INS_LNIPUTZ'].map((w) => ({ id: `DV_${w}`, name: w, cables: [], workIds: [w] }));
+  devices.push({ id: 'DV_BIO', name: 'Коре биометри', cables: [{ cable: '6005', count: 1 }, { cable: 'cat7', count: 1 }], workIds: ['INS_BIO'] });
+  const types = [{ id: 'Дверь5', devices: devices.slice(0, 5).map((d) => ({ deviceId: d.id, count: 1 })), cables: [{ cable: '6005', count: 2 }] },
+    { id: 'Только кабели', cables: [{ cable: 'cat7', count: 1 }] }, { id: 'Био', devices: [{ deviceId: 'DV_BIO', count: 1 }] }];
+  const p = { id: 'x', projectId: 'P1', label: 'D5', typeId: 'Дверь5', length: 10 };
+  const q = { id: 'y', projectId: 'P1', label: 'K1', typeId: 'Только кабели' };
+  const bio = { id: 'z', projectId: 'P1', label: 'B1', typeId: 'Био' };
+  const e = entry('E1', 'D1', 'Протяжка', 'PR_PTS', ['x'], { cableId: '6005' });
+  const ctx = make({ cables, devices, types, points: [p, q, bio], days: [day('D1', '2026-10-05')], entries: [e], journal: [{ id: 'j', entryId: 'E1', pointId: 'x' }] });
+  const info = pointInfo(ctx.points.get('x'), ctx);
+  assert.equal(info.cables, 2); assert.equal(info.status, 'Протянута'); assert.equal(info.installTotal, 5);
+  assert.deepEqual(pullFigures(e, ctx), { count: 2, meters: 20 });
+  assert.equal(tasksOf(ctx.points.get('x'), ctx).filter((t) => t.workId === 'HIV_DEV').length, 1); // хивут кабелей точки
+  assert.ok(devicesForWork([ctx.points.get('x')], ctx, null, 'Протяжка').some((d) => d.name === 'Кабели точки'));
+  assert.equal(pointInfo(ctx.points.get('y'), ctx).stages.join(','), 'Протяжка,Хивут,Проверка,Шилют');
+  // устройство «Коре биометри»: хивуты, проверка и шилют кабелей берутся из «Кабелей», дублировать в устройстве не нужно
+  const works = tasksOf(ctx.points.get('z'), ctx).map((t) => t.workId || `pull:${t.cable}`).sort();
+  assert.deepEqual(works, ['CHK_FLUKE', 'HIV_DEV', 'HIV_KEY', 'INS_BIO', 'SHL', 'pull:6005', 'pull:cat7']);
+  assert.equal(tasksOf(ctx.points.get('z'), ctx).find((t) => t.workId === 'HIV_DEV').qty, 2); // в шкафу — оба кабеля
+});

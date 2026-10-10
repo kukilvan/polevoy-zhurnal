@@ -73,16 +73,19 @@ export const REFS = {
     idMode: 'name', nameLabel: 'Название типа (русский)',
     items: () => [...ctx().types.values()],
     line: (x) => [x.id, Array.isArray(x.devices) && x.devices.length
-      ? `состав: ${compText(x.devices)}${x.workIds?.length ? ` · на точку: ${x.workIds.map((w) => nameOf('catalog', w)).join(', ')}` : ''} · ${x.nameHe || '—'}`
+      || x.cables?.length ? `состав: ${[compText(x.devices), x.cables?.length ? `кабели точки ${x.cables.map((c) => `${c.cable}×${c.count}`).join(' + ')}` : ''].filter(Boolean).join(' + ')}${x.workIds?.length ? ` · на точку: ${x.workIds.map((w) => nameOf('catalog', w)).join(', ')}` : ''} · ${x.nameHe || '—'}`
       : `${x.nameHe || '—'} · ${x.defaultCable || 'без кабеля'} ×${x.defaultCables ?? '?'} · установка: ${describeBinding(installBinding(x), ctx())} · старая схема`],
     fields: () => {
-      const legacy = (v) => !(v.devices && v.devices.length);
+      const legacy = (v) => !(v.devices?.length || v.cables?.length);
       const old = (f) => ({ ...f, visible: (v) => legacy(v) && (!f.visible || f.visible(v)) });
       return [
         { key: 'nameHe', label: 'Название (иврит)', required: true },
         qtyField('devices', 'Состав точки (устройства)', opts(ctx().devices, (d) => d.name), 'deviceId',
           { addLabel: '➕ Добавить устройство', empty: 'Пусто — точка по старой схеме (кабель и установка ниже)',
             hint: 'Из каких устройств состоит точка этого типа по умолчанию. При добавлении точек состав можно поменять. Устройства — в «Настройки → Устройства».' }),
+        qtyField('cables', 'Кабели точки (не от устройств)', opts(ctx().cables, (c) => c.id), 'cable',
+          { addLabel: '➕ Добавить кабель', empty: 'Нет — кабели только от устройств',
+            hint: 'Когда несколько авизарим сидят на одном кабеле: например, дверь — 2×6005 на точку, а устройства без кабелей. Работы кабелей (хивут, проверка…) добавятся сами.' }),
         { ...custom('pointWorks', 'Работы на всю точку', taskWorks(), { hint: 'Не по устройствам, а один раз на точку: например, проверка двери.', empty: 'Нет работ' }), visible: (v) => !legacy(v) },
         old({ key: 'defaultCable', label: 'Кабель по умолчанию', type: 'select', required: true, options: opts(ctx().cables, (c) => c.id), emptyLabel: 'Выберите' }),
         old({ key: 'defaultCables', label: 'Кабелей на точку', type: 'number', required: true }),
@@ -93,9 +96,9 @@ export const REFS = {
       ];
     },
     defaults: { defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Проверка'], mode: 'none' },
-    toForm: (x) => ({ ...x, scanId: hasDeviceId(x), mode: installBinding(x).mode, workIds: installBinding(x).workIds, pointWorks: x.workIds || [], devices: Array.isArray(x.devices) ? x.devices : [] }),
-    prepare: (v) => (v.devices?.length ? { scanId: !!v.scanId, nameHe: v.nameHe, devices: v.devices, workIds: v.pointWorks || [] } : {
-      scanId: !!v.scanId, nameHe: v.nameHe, defaultCable: v.defaultCable, defaultCables: v.defaultCables, stages: v.stages || [], devices: null, workIds: [],
+    toForm: (x) => ({ ...x, scanId: hasDeviceId(x), mode: installBinding(x).mode, workIds: installBinding(x).workIds, pointWorks: x.workIds || [], devices: Array.isArray(x.devices) ? x.devices : [], cables: Array.isArray(x.cables) ? x.cables : [] }),
+    prepare: (v) => (v.devices?.length || v.cables?.length ? { scanId: !!v.scanId, nameHe: v.nameHe, devices: v.devices || [], cables: v.cables || [], workIds: v.pointWorks || [] } : {
+      scanId: !!v.scanId, nameHe: v.nameHe, defaultCable: v.defaultCable, defaultCables: v.defaultCables, stages: v.stages || [], devices: null, cables: [], workIds: [],
       installMode: v.mode, installWorkIds: v.mode === 'works' ? (v.workIds || []) : [], isDoor: v.mode === 'config' }),
     after: (v, id) => {
       if (v.asDefault) getRepo().saveUserPrefs({ installDefaults: { ...(getRepo().prefs.installDefaults || {}), [id]: { mode: v.mode, workIds: v.mode === 'works' ? (v.workIds || []) : [] } } });

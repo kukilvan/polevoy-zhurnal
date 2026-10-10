@@ -9,23 +9,36 @@ const blank = (v) => v === undefined || v === null || v === '';
 const maxDate = (rows) => rows.reduce((m, r) => (r.date && (!m || r.date > m) ? r.date : m), '');
 export const STAGES = ['Протяжка', 'Хивут', 'Установка', 'Проверка', 'Шилют'];
 
-export const isComposedType = (type) => Array.isArray(type?.devices);
+export const isComposedType = (type) => Array.isArray(type?.devices) || (Array.isArray(type?.cables) && type.cables.length > 0);
 // Состав точки: свой или из типа; null — старая схема
 export function compositionOf(point, ctx) {
   const type = ctx.types.get(point.typeId);
   if (Array.isArray(point.devices)) return point.devices;
-  return isComposedType(type) ? type.devices : null;
+  return isComposedType(type) ? (type.devices || []) : null;
 }
 const cleanList = (list) => (Array.isArray(list) ? list : [])
   .filter((c) => c && !blank(c.cable) && Number(c.count) > 0).map((c) => ({ cable: String(c.cable), count: Number(c.count) }));
+// Кабели самой точки (не устройств): например, дверь, где 4 авизара сидят на одном кабеле. Свои у точки или из типа.
+export const POINT_CABLES = '#';
+export function pointCablesOf(point, ctx) {
+  const type = ctx.types.get(point.typeId);
+  return cleanList(Array.isArray(point.cables) ? point.cables : type?.cables);
+}
+// Устройства точки как список [{ deviceId, count, dev }] + «кабели точки» как устройство '#'
+function partsOf(point, ctx, comp) {
+  const parts = (comp || []).map(({ deviceId, count }) => ({ deviceId, count: Number(count) || 0, dev: ctx.devices?.get(deviceId) }))
+    .filter((x) => x.dev && x.count > 0);
+  const pc = pointCablesOf(point, ctx);
+  if (pc.length) parts.push({ deviceId: POINT_CABLES, count: 1, dev: { name: 'Кабели точки', cables: pc, workIds: [] } });
+  return parts;
+}
+export const partName = (ctx, deviceId) => (deviceId === POINT_CABLES ? 'Кабели точки' : ctx.devices?.get(deviceId)?.name || deviceId);
 
 // Задачи точки: [{ key, stage, deviceId, cable?, workId?, qty }]
 export function tasksOf(point, ctx, comp = compositionOf(point, ctx)) {
   const type = ctx.types.get(point.typeId);
   const tasks = [];
-  (comp || []).forEach(({ deviceId, count }) => {
-    const n = Number(count) || 0; if (n <= 0) return;
-    const dev = ctx.devices?.get(deviceId); if (!dev) return;
+  partsOf(point, ctx, comp).forEach(({ deviceId, count: n, dev }) => {
     const workQty = new Map(); // workId → количество (кабельные работы — на каждый кабель)
     const addWork = (w, q) => workQty.set(w, (workQty.get(w) || 0) + q);
     cleanList(dev.cables).forEach((c) => {
@@ -48,10 +61,9 @@ export function tasksOf(point, ctx, comp = compositionOf(point, ctx)) {
 // Кабели точки по видам: [{ cable, count }]
 export function composedCables(point, ctx, comp = compositionOf(point, ctx)) {
   const out = [];
-  (comp || []).forEach(({ deviceId, count }) => {
-    const dev = ctx.devices?.get(deviceId); if (!dev) return;
+  partsOf(point, ctx, comp).forEach(({ count, dev }) => {
     cleanList(dev.cables).forEach((c) => {
-      const q = (Number(count) || 0) * c.count; if (q <= 0) return;
+      const q = count * c.count; if (q <= 0) return;
       const x = out.find((o) => o.cable === c.cable);
       if (x) x.count += q; else out.push({ cable: c.cable, count: q });
     });
@@ -140,7 +152,7 @@ export function devicesForWork(points, ctx, workId, workType) {
     tasksOf(p, ctx, comp).forEach((t) => {
       if (!t.deviceId) return;
       const ok = workType === 'Протяжка' ? t.stage === 'Протяжка' : t.workId === workId;
-      if (ok && !seen.has(t.deviceId)) seen.set(t.deviceId, ctx.devices.get(t.deviceId)?.name || t.deviceId);
+      if (ok && !seen.has(t.deviceId)) seen.set(t.deviceId, partName(ctx, t.deviceId));
     });
   });
   return [...seen.entries()].map(([deviceId, name]) => ({ deviceId, name }));
@@ -150,7 +162,7 @@ export function devicesForWork(points, ctx, workId, workType) {
 export function missingDetails(info, ctx) {
   const by = new Map();
   info.tasks.filter((t) => !t.done).forEach((t) => {
-    const dev = t.deviceId ? ctx.devices.get(t.deviceId)?.name || t.deviceId : '';
+    const dev = t.deviceId ? partName(ctx, t.deviceId) : '';
     const work = t.workId ? ctx.catalog.get(t.workId)?.name || t.workId : '';
     const label = t.stage === 'Протяжка' ? `${dev} (${t.cable})` : t.stage === 'Установка' ? dev || work : [work, dev].filter(Boolean).join(' — ');
     if (!by.has(t.stage)) by.set(t.stage, []);
