@@ -7,6 +7,7 @@ import { membersView } from './views/members.js';
 import { installView } from './views/install.js';
 import { PENDING } from './google.js';
 import { onPendingChange } from './repo.js';
+import { themeLabel, setTheme, nextTheme } from './theme.js';
 import { projectView, updateManagerTable, updateTable, backupNow } from './views/project.js';
 import { meterView } from './views/points.js';
 import { cabinetsView } from './views/cabinets.js';
@@ -41,6 +42,7 @@ export function createShell({ user, onLogout, diag }) {
       item('📅 Месяц (отчёт начальнику)', () => open('month')),
       item('🕘 История и откат', () => open('history')),
       item('📖 Как пользоваться', () => open('guide')),
+      item(`🎨 Тема: ${themeLabel()} → ${themeLabel(nextTheme())}`, () => { setTheme(nextTheme()); render(); }),
       item('⚙️ Настройки', () => go('settings')),
       item('🧾 Журнал событий', () => open('log')),
       h('div', { class: 'mut', style: { padding: '10px 4px' } }, user.displayName || user.email),

@@ -1,4 +1,5 @@
 import './style.css';
+import './app/theme.js';
 import { info, warn, error } from './log.js';
 import { h } from './app/ui.js';
 import { createRepo, createMemoryBackend, createFirestoreBackend } from './app/repo.js';

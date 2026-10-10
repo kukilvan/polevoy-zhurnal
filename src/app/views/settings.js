@@ -5,6 +5,7 @@ import { newId } from '../repo.js';
 import { installBinding, tablesOf, mainTable, hasDeviceId } from '../../domain/index.js';
 import { installFields, describeBinding } from './install.js';
 import { projectForm } from './projects.js';
+import { themeLabel, setTheme, nextTheme } from '../theme.js';
 import { updateManagerTable, backupNow } from './project.js';
 
 export const WORK_TYPES = ['Протяжка', 'Перетяжка', 'Перенос', 'Хивут', 'Установка', 'Проверка', 'Шилют', 'Доп. работа', 'Время'];
@@ -169,7 +170,8 @@ export function settingsView(ui) {
   const ref = (k) => row('📋', REFS[k].title, `${REFS[k].items().length} пунктов`, () => { state.settingsRef = k; ui.open('ref'); });
   return h('div', {},
     h('div', { class: 'card', style: { padding: 0 } },
-      row('📖', 'Как пользоваться', 'Шаги работы, что такое дох, словарик', () => ui.open('guide'))),
+      row('📖', 'Как пользоваться', 'Шаги работы, что такое дох, словарик', () => ui.open('guide')),
+      row('🎨', `Тема: ${themeLabel()}`, 'Нажмите, чтобы переключить: тёмная → светлая → как в телефоне (только на этом устройстве)', () => { setTheme(nextTheme()); ui.render(); })),
     h('div', { class: 'card', style: { padding: 0 } },
       h('div', { class: 'group', style: { padding: '10px 14px 4px' } }, 'Выпадающие списки (справочники)'),
       ['catalog', 'types', 'cables', 'configs', 'units', 'culprits', 'delayReasons'].map(ref)),

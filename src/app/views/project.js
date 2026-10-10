@@ -77,10 +77,12 @@ function readiness() {
   if (!rows.length) return null;
   return h('div', { class: 'ready' }, rows.map((r) => {
     const k = r.total ? r.done / r.total : 0; const hue = Math.round(k * 120);
-    return h('div', { class: 'ready-bar', style: { background: `hsl(${hue} 45% 17%)`, borderColor: `hsl(${hue} 60% 38%)` } },
-      h('div', { class: 'ready-fill', style: { width: `${Math.round(k * 100)}%`, background: `hsl(${hue} 72% 38%)` } }),
+    const bar = h('div', { class: 'ready-bar' },
+      h('div', { class: 'ready-fill', style: { width: `${Math.round(k * 100)}%` } }),
       h('span', { class: 'ready-name' }, r.cabinet ? `Шкаф ${r.cabinet}` : 'Без шкафа'),
       h('span', { class: 'ready-num' }, `${r.done} из ${r.total}`));
+    bar.style.setProperty('--h', hue);
+    return bar;
   }));
 }
 
