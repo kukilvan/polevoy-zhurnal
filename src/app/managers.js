@@ -14,7 +14,7 @@ export function sheetRequests(sheetId, sh) {
   out.push({ repeatCell: { range: range(1, 2, 0, 1), cell: { userEnteredFormat: { textFormat: { bold: true } } }, fields: 'userEnteredFormat.textFormat' } });
   if (sh.summaryRows.length) {
     out.push({ repeatCell: { range: range(2, 3, 0, 7), cell: { userEnteredFormat: { textFormat: { bold: true }, backgroundColor: rgb('#E8EEF5'), horizontalAlignment: 'CENTER' } }, fields: 'userEnteredFormat(textFormat,backgroundColor,horizontalAlignment)' } });
-    out.push({ repeatCell: { range: range(3, 4, 0, 7), cell: { userEnteredFormat: { textFormat: { bold: true, fontSize: 12 }, horizontalAlignment: 'CENTER' } }, fields: 'userEnteredFormat(textFormat,horizontalAlignment)' } });
+    out.push({ repeatCell: { range: range(3, 4, 0, 7), cell: { userEnteredFormat: { textFormat: { bold: true, fontSize: 12 }, backgroundColor: rgb('#D3E3F5'), horizontalAlignment: 'CENTER' } }, fields: 'userEnteredFormat(textFormat,backgroundColor,horizontalAlignment)' } });
   }
   out.push({ repeatCell: { range: range(sh.headerRow, sh.headerRow + 1, 0, nCols), cell: { userEnteredFormat: {
     backgroundColor: rgb('#1F3B5C'), textFormat: { bold: true, foregroundColor: rgb('#FFFFFF') }, horizontalAlignment: 'CENTER', verticalAlignment: 'MIDDLE', wrapStrategy: 'WRAP' } },

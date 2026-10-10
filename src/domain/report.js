@@ -103,6 +103,8 @@ function configText(point, project, ctx, lang) {
   return (cfg.components || []).map((id) => ctx.catalog.get(id)?.nameHe || ctx.catalog.get(id)?.name || id).join(' + ');
 }
 
+// версия оформления: при её смене таблицы перестраиваются, даже если данные те же
+const STYLE_V = 2;
 const COLORS = { green: '#C6E5C9', grey: '#EFEFEF', pink: '#FCE8E8', orange: '#FFE0B2', red: '#F4B6B6', yellow: '#FFF2B3' };
 
 // Значения одной ячейки
@@ -218,5 +220,5 @@ export function buildReport(project, ctx, table, { nameOf } = {}) {
     });
   } else sheets = [sheetOf(lang === 'he' ? 'סטטוס' : 'Статус', items, project, ctx, table, cols, nameOf)];
   const title = fileTitle(project, table);
-  return { title, sheets, pointCount: items.length, colCount: cols.length, hash: hashOf([title, lang, sheets.map((x) => [x.title, x.rtl, x.rows, x.cols.map((c) => c.id), x.rowColors])]) };
+  return { title, sheets, pointCount: items.length, colCount: cols.length, hash: hashOf([STYLE_V, title, lang, sheets.map((x) => [x.title, x.rtl, x.rows, x.cols.map((c) => c.id), x.rowColors])]) };
 }
