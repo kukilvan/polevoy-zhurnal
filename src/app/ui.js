@@ -150,3 +150,27 @@ export function toast(message) {
   setTimeout(() => t.classList.add('show'), 10);
   setTimeout(() => { t.classList.remove('show'); setTimeout(() => t.remove(), 300); }, 2400);
 }
+
+// ---- список «вариант × количество» (кабели устройства, устройства в типе точки) ----
+// options: [{value,label}]; get() → [{ value, count }]; пустой список допустим
+export function qtyList(options, { addLabel = '➕ Добавить', empty = 'Пусто', onChange } = {}) {
+  let rows = [];
+  const box = h('div', { class: 'qtylist' });
+  const draw = () => {
+    box.replaceChildren(
+      ...(rows.length ? rows.map((r, i) => {
+        const sel = h('select', { onchange: (e) => { r.value = e.target.value; onChange?.(); } },
+          options.map((o) => h('option', { value: o.value, selected: String(o.value) === String(r.value) }, o.label)));
+        const cnt = h('input', { type: 'text', inputMode: 'numeric', value: String(r.count), class: 'qty', oninput: (e) => { r.count = Number(String(e.target.value).replace(',', '.')) || 0; onChange?.(); } });
+        return h('div', { class: 'qtyrow' }, sel, h('span', { class: 'mut' }, '×'), cnt,
+          h('button', { type: 'button', class: 'sec x', onclick: () => { rows.splice(i, 1); draw(); onChange?.(); } }, '✕'));
+      }) : [h('div', { class: 'mut', style: { padding: '4px 2px' } }, empty)]),
+      options.length ? h('button', { type: 'button', class: 'sec', onclick: () => { rows.push({ value: options[0].value, count: 1 }); draw(); onChange?.(); } }, addLabel) : null);
+  };
+  draw();
+  return {
+    el: box,
+    get: () => rows.filter((r) => r.value !== '' && r.count > 0).map((r) => ({ value: r.value, count: r.count })),
+    set: (list) => { rows = (list || []).map((x) => ({ value: x.value, count: Number(x.count) || 1 })); draw(); },
+  };
+}

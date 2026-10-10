@@ -150,3 +150,9 @@ html, body { overflow-x: hidden; }
 :root.kb .sheet { max-height: 100%; padding-bottom: 0; }
 :root.kb nav { display: none; }
 :root.kb .wrap { padding-bottom: 40vh; }
+/* список «вариант × количество» */
+.qtylist { display: flex; flex-direction: column; gap: 6px; margin: 6px 0; }
+.qtyrow { display: flex; align-items: center; gap: 6px; }
+.qtyrow select { flex: 1; min-width: 0; }
+.qtyrow input.qty { width: 56px; flex: none; text-align: center; }
+.qtyrow button.x { flex: none; padding: 8px 12px; }

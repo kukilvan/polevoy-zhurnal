@@ -8,7 +8,7 @@ import {
 import { info, error } from '../log.js';
 import { DELTA_MARGIN, decideMode, maxMillis } from '../domain/sync.js';
 import {
-  CATALOG, POINT_TYPES, CABLES, CONFIGS, UNITS, CULPRITS, DELAY_REASONS,
+  CATALOG, POINT_TYPES, CABLES, CONFIGS, UNITS, CULPRITS, DELAY_REASONS, DEVICES, composedTypes,
 } from '../domain/index.js';
 
 // Подколлекции проекта, которые приложение читает целиком (журнал изменений читается отдельно)
@@ -277,8 +277,8 @@ export function createRepo(backend, user) {
       const seed = [];
       const add = (coll, items, idOf = (x) => x.id) => items.forEach((x) => seed.push({ coll, id: idOf(x), data: { ...x, projectId: pid, id: idOf(x), createdBy: by.uid, createdAt: now, updatedBy: by.uid, updatedAt: now } }));
       const inst = api.prefs?.installDefaults || {}; // личные привязки установки по умолчанию
-      const types = POINT_TYPES.map((t) => (inst[t.id] ? { ...t, installMode: inst[t.id].mode, installWorkIds: inst[t.id].workIds || [] } : t));
-      add('catalog', CATALOG); add('types', types); add('cables', CABLES); add('configs', CONFIGS);
+      const types = composedTypes(POINT_TYPES.map((t) => (inst[t.id] ? { ...t, installMode: inst[t.id].mode, installWorkIds: inst[t.id].workIds || [] } : t)));
+      add('catalog', CATALOG); add('types', types); add('cables', CABLES); add('devices', DEVICES); add('configs', CONFIGS);
       add('units', UNITS); add('culprits', CULPRITS); add('delayReasons', DELAY_REASONS);
       info(`Создаю проект «${data.name}», справочников: ${seed.length}`);
       backend.commit(pid, [{ coll: 'projects', id: pid, data: project }, ...seed.map((w) => ({ ...w, data: clean(w.data) }))])

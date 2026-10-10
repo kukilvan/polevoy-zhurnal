@@ -1,21 +1,13 @@
 // Вкладка «Настройки»: все справочники (выпадающие списки), привязка установки и служебные действия проекта в одном месте.
-import { h, formModal, confirmDialog, toast } from '../ui.js';
+import { h, formModal, confirmDialog, toast, qtyList } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { newId } from '../repo.js';
-import { installBinding, tablesOf, mainTable, hasDeviceId, parseCables, cablesText } from '../../domain/index.js';
+import { installBinding, tablesOf, mainTable, hasDeviceId, libraryOps } from '../../domain/index.js';
 import { installFields, describeBinding } from './install.js';
 import { projectForm } from './projects.js';
 import { themeLabel, setTheme, nextTheme } from '../theme.js';
 import { updateManagerTable, backupNow } from './project.js';
 import { exportExcel } from '../excel.js';
-
-// Проверка строки доп. кабелей: формат «cat7×1» и кабель из справочника
-export function cablesError(text) {
-  const { list, bad } = parseCables(text);
-  if (bad.length) return `Не понял «${bad[0]}». Пишите так: cat7×1`;
-  const unknown = list.find((c) => !state.ctx.cables.has(c.cable));
-  return unknown ? `Кабеля «${unknown.cable}» нет в справочнике «Кабели»` : '';
-}
 
 export const WORK_TYPES = ['Протяжка', 'Перетяжка', 'Перенос', 'Хивут', 'Установка', 'Проверка', 'Шилют', 'Доп. работа', 'Время'];
 const STAGES = ['Протяжка', 'Хивут', 'Установка', 'Проверка', 'Шилют'];
@@ -31,6 +23,22 @@ function checkList(options, { empty = 'Список пуст' } = {}) {
 const custom = (key, label, options, extra = {}) => ({
   key, label, type: 'custom', ...extra, build: (api) => { const c = checkList(options, extra); c.set(api.value); return c; },
 });
+
+// Поле «вариант × количество»: хранится как [{ <key>: значение, count }]
+const qtyField = (key, label, options, itemKey, extra = {}) => ({
+  key, label, type: 'custom', ...extra,
+  build: (api) => {
+    const q = qtyList(options, { ...extra, onChange: () => api.changed() });
+    q.set((api.value || []).map((x) => ({ value: x[itemKey], count: x.count })));
+    return { el: q.el, get: () => q.get().map((x) => ({ [itemKey]: x.value, count: x.count })) };
+  },
+});
+// Работы, которые можно требовать от кабеля/устройства/точки (протяжка учитывается сама; время — не работа по точкам)
+const taskWorks = () => [...ctx().catalog.values()].filter((w) => ['Хивут', 'Установка', 'Проверка', 'Шилют', 'Доп. работа'].includes(w.workType) && w.active !== false)
+  .sort((a, b) => WORK_TYPES.indexOf(a.workType) - WORK_TYPES.indexOf(b.workType) || a.name.localeCompare(b.name, 'ru'))
+  .map((w) => ({ value: w.id, label: `${w.name} · ${w.workType}` }));
+const nameOf = (coll, id) => ctx()[coll].get(id)?.name || id;
+const compText = (list) => (list || []).map((d) => `${nameOf('devices', d.deviceId)}${d.count > 1 ? ` ×${d.count}` : ''}`).join(' + ');
 
 const ctx = () => state.ctx;
 const opts = (map, label) => [...map.values()].map((x) => ({ value: x.id, label: label(x) }));
@@ -61,25 +69,33 @@ export const REFS = {
     usage: (x) => [...ctx().entries.values()].filter((e) => e.workId === x.id).length,
   },
   types: {
-    title: 'Типы точек', coll: 'types', hint: 'Камера, дверь, вайфай… Здесь же — что считается установкой точки этого типа.',
+    title: 'Типы точек', coll: 'types', hint: 'Камера, дверь, вайфай… Тип — это одна строка в таблице руководства. Состав типа — устройства (с их кабелями и работами) плюс работы на всю точку.',
     idMode: 'name', nameLabel: 'Название типа (русский)',
     items: () => [...ctx().types.values()],
-    line: (x) => [x.id, `${x.nameHe || '—'} · ${x.defaultCable || 'без кабеля'} ×${x.defaultCables ?? '?'}${x.extraCables?.length ? ` + ${cablesText(x.extraCables)}` : ''} · установка: ${describeBinding(installBinding(x), ctx())}`],
-    fields: () => [
-      { key: 'nameHe', label: 'Название (иврит)', required: true },
-      { key: 'defaultCable', label: 'Кабель по умолчанию', type: 'select', required: true, options: opts(ctx().cables, (c) => c.id), emptyLabel: 'Выберите' },
-      { key: 'defaultCables', label: 'Кабелей на точку', type: 'number', required: true },
-      { key: 'extraText', label: 'Дополнительные кабели другого вида', placeholder: 'например: cat7×1', hint: 'Если к точке идут кабели разных видов (интерком: 6005×1 + cat7×1). Протяжка каждого вида отмечается отдельно. Несколько — через запятую.' },
-      { key: 'scanId', label: 'Серийный номер и MAC (со сканером)', type: 'checkbox', hint: 'Поля появятся в карточке точки этого типа. У камер и вайфая включено по умолчанию.' },
-      custom('stages', 'Этапы точки (видны в таблице руководства)', STAGES.map((s) => ({ value: s, label: s }))),
-      ...installFields(ctx()),
-      { key: 'asDefault', label: 'Привязку установки сделать умолчанием для новых проектов', type: 'checkbox' },
-    ],
+    line: (x) => [x.id, Array.isArray(x.devices) && x.devices.length
+      ? `состав: ${compText(x.devices)}${x.workIds?.length ? ` · на точку: ${x.workIds.map((w) => nameOf('catalog', w)).join(', ')}` : ''} · ${x.nameHe || '—'}`
+      : `${x.nameHe || '—'} · ${x.defaultCable || 'без кабеля'} ×${x.defaultCables ?? '?'} · установка: ${describeBinding(installBinding(x), ctx())} · старая схема`],
+    fields: () => {
+      const legacy = (v) => !(v.devices && v.devices.length);
+      const old = (f) => ({ ...f, visible: (v) => legacy(v) && (!f.visible || f.visible(v)) });
+      return [
+        { key: 'nameHe', label: 'Название (иврит)', required: true },
+        qtyField('devices', 'Состав точки (устройства)', opts(ctx().devices, (d) => d.name), 'deviceId',
+          { addLabel: '➕ Добавить устройство', empty: 'Пусто — точка по старой схеме (кабель и установка ниже)',
+            hint: 'Из каких устройств состоит точка этого типа по умолчанию. При добавлении точек состав можно поменять. Устройства — в «Настройки → Устройства».' }),
+        { ...custom('pointWorks', 'Работы на всю точку', taskWorks(), { hint: 'Не по устройствам, а один раз на точку: например, проверка двери.', empty: 'Нет работ' }), visible: (v) => !legacy(v) },
+        old({ key: 'defaultCable', label: 'Кабель по умолчанию', type: 'select', required: true, options: opts(ctx().cables, (c) => c.id), emptyLabel: 'Выберите' }),
+        old({ key: 'defaultCables', label: 'Кабелей на точку', type: 'number', required: true }),
+        { key: 'scanId', label: 'Серийный номер и MAC (со сканером)', type: 'checkbox', hint: 'Поля появятся в карточке точки этого типа. У камер и вайфая включено по умолчанию.' },
+        old(custom('stages', 'Этапы точки (видны в таблице руководства)', STAGES.map((s) => ({ value: s, label: s })))),
+        ...installFields(ctx()).map(old),
+        old({ key: 'asDefault', label: 'Привязку установки сделать умолчанием для новых проектов', type: 'checkbox' }),
+      ];
+    },
     defaults: { defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Проверка'], mode: 'none' },
-    toForm: (x) => ({ ...x, scanId: hasDeviceId(x), mode: installBinding(x).mode, workIds: installBinding(x).workIds, extraText: cablesText(x.extraCables, ', ') }),
-    check: (v) => cablesError(v.extraText),
-    prepare: (v) => ({ scanId: !!v.scanId, nameHe: v.nameHe, defaultCable: v.defaultCable, defaultCables: v.defaultCables, stages: v.stages || [],
-      extraCables: parseCables(v.extraText).list,
+    toForm: (x) => ({ ...x, scanId: hasDeviceId(x), mode: installBinding(x).mode, workIds: installBinding(x).workIds, pointWorks: x.workIds || [], devices: Array.isArray(x.devices) ? x.devices : [] }),
+    prepare: (v) => (v.devices?.length ? { scanId: !!v.scanId, nameHe: v.nameHe, devices: v.devices, workIds: v.pointWorks || [] } : {
+      scanId: !!v.scanId, nameHe: v.nameHe, defaultCable: v.defaultCable, defaultCables: v.defaultCables, stages: v.stages || [], devices: null, workIds: [],
       installMode: v.mode, installWorkIds: v.mode === 'works' ? (v.workIds || []) : [], isDoor: v.mode === 'config' }),
     after: (v, id) => {
       if (v.asDefault) getRepo().saveUserPrefs({ installDefaults: { ...(getRepo().prefs.installDefaults || {}), [id]: { mode: v.mode, workIds: v.mode === 'works' ? (v.workIds || []) : [] } } });
@@ -90,14 +106,31 @@ export const REFS = {
     title: 'Кабели', coll: 'cables', hint: 'Как считается протяжка этим кабелем: по точкам (cat7) или по метрам (6005, оптика).',
     idMode: 'name', nameLabel: 'Название кабеля (русский/латиница)',
     items: () => [...ctx().cables.values()],
-    line: (x) => [x.id, `${x.nameHe || '—'} · считается: ${x.accounting || '—'}`],
+    line: (x) => [x.id, `${x.nameHe || '—'} · считается: ${x.accounting || '—'}${x.workIds?.length ? ` · работы: ${x.workIds.map((w) => nameOf('catalog', w)).join(', ')}` : ''}`],
     fields: () => [
       { key: 'nameHe', label: 'Название в доху (иврит)', required: true, hint: 'Например: כבל CAT7' },
       { key: 'accounting', label: 'Как считать протяжку', type: 'select', required: true, options: [{ value: 'Точки', label: 'По точкам' }, { value: 'Метры', label: 'По кабелям и метрам' }], emptyLabel: 'Выберите' },
+      custom('workIds', 'Какие работы нужны каждому такому кабелю', taskWorks(), { hint: 'Например, cat7: хивут кистона, хивут в шкафу, проверка, шилют; 6005: хивут в шкафу. Протяжка учитывается всегда.', empty: 'Нет работ' }),
     ],
     defaults: {},
-    prepare: (v) => ({ nameHe: v.nameHe, accounting: v.accounting }),
-    usage: (x) => [...ctx().types.values()].filter((t) => t.defaultCable === x.id).length,
+    prepare: (v) => ({ nameHe: v.nameHe, accounting: v.accounting, workIds: v.workIds || [] }),
+    usage: (x) => [...ctx().types.values()].filter((t) => t.defaultCable === x.id).length + [...ctx().devices.values()].filter((d) => (d.cables || []).some((c) => c.cable === x.id)).length,
+  },
+  devices: {
+    title: 'Устройства', coll: 'devices', hint: 'Составляющие точек: авизар и его кабели. Например: Магнит индикация = 6005×1 + установка магнита; Лахцан нипуц — без кабеля.',
+    idMode: 'generated', prefix: 'DV_', nameKey: 'name',
+    items: () => [...ctx().devices.values()],
+    line: (x) => [x.name, `${(x.cables || []).length ? (x.cables || []).map((c) => `${c.cable}×${c.count}`).join(' + ') : 'без кабеля'}${x.workIds?.length ? ` · ${x.workIds.map((w) => nameOf('catalog', w)).join(', ')}` : ''} · ${x.nameHe || '—'}`],
+    fields: () => [
+      { key: 'name', label: 'Название (русский)', required: true },
+      { key: 'nameHe', label: 'Название (иврит)', required: true },
+      qtyField('cables', 'Кабели', opts(ctx().cables, (c) => c.id), 'cable', { addLabel: '➕ Добавить кабель', empty: 'Без кабеля', hint: 'Работы самого кабеля (хивут, проверка, шилют) добавятся сами — они заданы в «Кабели».' }),
+      custom('workIds', 'Работы устройства', taskWorks(), { hint: 'Обычно установка авизара; можно и другие (кивун, доп. работа).', empty: 'Нет работ' }),
+    ],
+    defaults: {},
+    prepare: (v) => ({ name: v.name, nameHe: v.nameHe, cables: v.cables || [], workIds: v.workIds || [] }),
+    usage: (x) => [...ctx().types.values()].filter((t) => (t.devices || []).some((d) => d.deviceId === x.id)).length
+      + [...ctx().points.values()].filter((p) => (p.devices || []).some((d) => d.deviceId === x.id)).length,
   },
   configs: {
     title: 'Конфигурации дверей', coll: 'configs', hint: 'Наборы установки для двери: из каких работ она состоит. Дверь «установлена», когда сделаны все компоненты.',
@@ -158,6 +191,17 @@ function itemForm(key, existing) {
   });
 }
 
+// Стандартная библиотека: добавить в проект недостающие устройства, работы, новые типы и работы кабелей (имеющееся не меняется)
+async function addLibrary() {
+  const ops = libraryOps(state.ctx);
+  if (!ops.length) { toast('Всё стандартное уже есть в проекте'); return; }
+  const n = (c) => ops.filter((o) => o.coll === c).length;
+  const what = [['devices', 'устройств'], ['types', 'типов точек'], ['catalog', 'работ'], ['cables', 'кабелей (работы)']].filter(([c]) => n(c)).map(([c, t]) => `${t}: ${n(c)}`).join(', ');
+  if (!(await confirmDialog(`Добавить из стандартной библиотеки — ${what}? То, что уже есть в проекте, не изменится.`, { yes: 'Добавить' }))) return;
+  getRepo().save(currentProject().id, ops.map((o) => ({ ...o, data: { ...o.data, deleted: false } })));
+  toast('Добавлено');
+}
+
 export function refView() {
   const key = state.settingsRef; const def = REFS[key];
   const items = def.items();
@@ -173,7 +217,8 @@ export function refView() {
   });
   return h('div', {},
     h('div', { class: 'mut', style: { marginBottom: '10px' } }, def.hint),
-    h('div', { class: 'btns', style: { marginTop: 0 } }, h('button', { onclick: () => itemForm(key, null) }, '➕ Добавить пункт')),
+    h('div', { class: 'btns', style: { marginTop: 0 } }, h('button', { onclick: () => itemForm(key, null) }, '➕ Добавить пункт'),
+      ['devices', 'types', 'cables'].includes(key) ? h('button', { class: 'sec', onclick: addLibrary }, '📚 Добавить стандартные') : null),
     h('div', { class: 'card', style: { padding: 0, marginTop: '12px' } }, rows.length ? rows : h('div', { class: 'empty' }, 'Список пуст.')));
 }
 
@@ -187,7 +232,7 @@ export function settingsView(ui) {
       row('🎨', `Тема: ${themeLabel()}`, 'Нажмите, чтобы переключить: тёмная → светлая → как в телефоне (только на этом устройстве)', () => { setTheme(nextTheme()); ui.render(); })),
     h('div', { class: 'card', style: { padding: 0 } },
       h('div', { class: 'group', style: { padding: '10px 14px 4px' } }, 'Выпадающие списки (справочники)'),
-      ['catalog', 'types', 'cables', 'configs', 'units', 'culprits', 'delayReasons'].map(ref)),
+      ['types', 'devices', 'cables', 'catalog', 'configs', 'units', 'culprits', 'delayReasons'].map(ref)),
     h('div', { class: 'card', style: { padding: 0 } },
       h('div', { class: 'group', style: { padding: '10px 14px 4px' } }, `Проект «${p.name}»`),
       row('🔧', 'Привязка установки', 'Что считается установкой для каждого типа точек', () => ui.open('install')),
