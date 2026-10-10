@@ -104,7 +104,7 @@ function configText(point, project, ctx, lang) {
 }
 
 // версия оформления: при её смене таблицы перестраиваются, даже если данные те же
-const STYLE_V = 2;
+const STYLE_V = 3;
 const COLORS = { green: '#C6E5C9', grey: '#EFEFEF', pink: '#FCE8E8', orange: '#FFE0B2', red: '#F4B6B6', yellow: '#FFF2B3' };
 
 // Значения одной ячейки
