@@ -21,7 +21,7 @@ import { guideView, maybeWelcome } from './views/guide.js';
 import { soonView } from './views/soon.js';
 
 const TABS = [
-  ['project', 'Проект', '🏗'], ['meter', 'Метраж', '📏'], ['todos', 'Дела', '✅'], ['journal', 'Журнал', '📒'], ['doh', 'Дохот', '📝'], ['settings', 'Настройки', '⚙️'],
+  ['project', 'Проект', '🏗'], ['meter', 'Точки', '📏'], ['todos', 'Дела', '✅'], ['journal', 'Журнал', '📒'], ['doh', 'Дохот', '📝'], ['settings', 'Настройки', '⚙️'],
 ];
 const SCREEN_TITLES = { projects: 'Все проекты', cabinets: 'Настройки шкафа', month: 'Месяц', history: 'История', import: 'Импорт', install: 'Привязка установки', ref: 'Справочник', members: 'Участники', tables: 'Таблицы для руководства', guide: 'Как пользоваться', log: 'Журнал событий' };
 

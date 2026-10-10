@@ -1,9 +1,12 @@
-// Точки: форма точки, генератор пачкой, вкладка «Метраж» (ввод длины).
+// Точки: форма точки, генератор пачкой, карточка точки с историей, вкладка «Точки».
 import { h, formModal, openModal, confirmDialog, toast } from '../ui.js';
 import { state, getRepo, pointsSorted, infoOf, currentProject } from '../store.js';
 import { generateLabels, parseSuffixes, comparePoints, usesConfig } from '../../domain/index.js';
 import { statusClass } from './project.js';
 import { hint } from './guide.js';
+import { dateText } from '../../domain/index.js';
+import { addWorkForPoint } from './doh.js';
+import { whoIs } from './journal.js';
 
 const typeOptions = () => [...state.ctx.types.values()].map((t) => ({ value: t.id, label: t.id }));
 const isDoorType = (id) => usesConfig(state.ctx.types.get(id));
@@ -119,6 +122,47 @@ export function meterForm(startPoint) {
   show(point);
 }
 
+// Карточка точки: сведения, история работ (что, когда, кто) и действия
+export function pointCard(startPoint) {
+  const proj = currentProject();
+  let close = () => {};
+  const body = h('div', {});
+  const render = () => {
+    const ctx = state.ctx;
+    const p = ctx.points.get(startPoint.id);
+    if (!p) { close(); return; }
+    const info = infoOf(p);
+    const cfg = ctx.configs.get(p.configId || proj.defaultConfigId);
+    const hasLen = p.length !== undefined && p.length !== null && p.length !== '';
+    const facts = [
+      ['Шкаф / этаж', [p.cabinet && `шкаф ${p.cabinet}`, p.floor && `этаж ${p.floor}`].filter(Boolean).join(', ')],
+      ['Тип', p.typeId], ['Имя в плане', p.planName], ['Кабель', info.cable],
+      ['Длина', hasLen ? `${p.length} м на 1 кабель${info.metrage ? ` (всего ${Math.round(info.metrage * 100) / 100} м)` : ''}` : ''],
+      ['Конфигурация', usesConfig(ctx.types.get(p.typeId)) ? cfg?.name : ''], ['Порт', p.port], ['Причина задержки', p.delayReasonId], ['Примечание', p.note],
+    ].filter(([, v]) => v);
+    const rows = (ctx.journalByPoint.get(p.id) || []).map((r) => ({ ...r, work: ctx.catalog.get(r.workId)?.name || r.action || '?' }))
+      .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.order - a.order));
+    body.replaceChildren(
+      h('div', { style: { margin: '2px 0 10px' } }, h('span', { class: statusClass(info.status) }, info.status)),
+      h('div', { style: { display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px', fontSize: '14px' } },
+        facts.flatMap(([k, v]) => [h('span', { class: 'mut' }, k), h('span', { style: { fontWeight: 600 } }, String(v))])),
+      h('div', { class: 'btns' },
+        h('button', { onclick: () => { close(); setTimeout(() => addWorkForPoint(p.id), 60); } }, '➕ Добавить работу на эту точку')),
+      h('div', { class: 'btns' },
+        h('button', { class: 'sec', onclick: () => { close(); setTimeout(() => meterForm(p), 60); } }, '📏 Длина'),
+        h('button', { class: 'sec', onclick: () => { close(); setTimeout(() => pointForm(p), 60); } }, '✏️ Изменить')),
+      h('div', { class: 'group', style: { padding: '12px 0 6px' } }, `История работ (${rows.length})`),
+      rows.length ? h('div', {}, rows.map((r) => {
+        const who = whoIs(proj, r.by);
+        return h('div', { class: 'item', style: { cursor: 'default' } },
+          h('div', { class: 'name' }, r.work,
+            h('div', { class: 'sub' }, `${dateText(r.date)}${r.result === 'Не работает' ? ' · не работает' : ''}${r.fromEdit ? ' · правка' : ''}${who ? ` · ${who}` : ''}`)));
+      })) : h('div', { class: 'empty' }, 'По этой точке работ пока не отмечено'));
+  };
+  render();
+  close = openModal(startPoint.label, body);
+}
+
 let searchText = ''; let fCab = ''; let fType = '';
 export function meterView(ui) {
   const list = h('div', { class: 'card', style: { padding: 0 } });
@@ -129,13 +173,13 @@ export function meterView(ui) {
     const pts = pointsSorted().filter((p) => (!q || `${p.label} ${p.planName ?? ''}`.toLowerCase().includes(q))
       && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && (!fType || p.typeId === fType));
     list.replaceChildren();
-    if (!pts.length) { list.append(total.length ? h('div', { class: 'empty' }, 'Ничего не найдено') : hint(ui, 'Точек пока нет. Добавьте их пачкой («Точки пачкой») или по одной. Потом здесь вносится длина кабеля к каждой точке: нажмите точку, введите метры.', 'meter', '📖 Как вносить метраж')); return; }
+    if (!pts.length) { list.append(total.length ? h('div', { class: 'empty' }, 'Ничего не найдено') : hint(ui, 'Точек пока нет. Добавьте их пачкой («Точки пачкой») или по одной. Нажмите точку: откроется её карточка с историей работ, там же кнопка «📏 Длина».', 'meter', '📖 Как вносить метраж')); return; }
     let lastKey = null;
     pts.forEach((p) => {
       const key = `${p.cabinet || ''}\u0000${p.typeId}`;
       if (key !== lastKey) { list.append(h('div', { class: 'group', style: { padding: '10px 12px 6px' } }, `${p.cabinet ? `Шкаф ${p.cabinet}` : 'Без шкафа'} · ${p.typeId}`)); lastKey = key; }
       const info = infoOf(p);
-      list.append(h('div', { class: 'item', onclick: () => meterForm(p) },
+      list.append(h('div', { class: 'item', onclick: () => pointCard(p) },
         h('div', { class: 'name' }, p.label, p.planName ? h('div', { class: 'sub' }, p.planName) : null),
         h('div', { class: 'len' }, p.length !== undefined && p.length !== null && p.length !== '' ? `${p.length} м` : '—'),
         h('span', { class: statusClass(info.status) }, info.status)));

@@ -118,7 +118,7 @@ export function pointsPicker({ typesOf, onPick }) {
 }
 
 // ---------- форма записи (одна работа) ----------
-function entryForm(day, entry) {
+function entryForm(day, entry, preset) {
   const repo = getRepo(); const pid = currentProject().id; const ctx = state.ctx;
   const catalog = [...ctx.catalog.values()].filter((w) => w.active !== false);
   const workOf = (v) => ctx.catalog.get(v.workId);
@@ -134,7 +134,7 @@ function entryForm(day, entry) {
       if (first && modal) modal.set?.('cableId', infoOf(first).cable);
     },
   });
-  picker.set(entry?.pointIds);
+  picker.set(entry?.pointIds ?? preset?.pointIds);
 
   modal = formModal({
     title: entry ? 'Запись' : 'Добавить работу', submitLabel: 'Сохранить',
@@ -159,7 +159,7 @@ function entryForm(day, entry) {
       { key: 'note', label: 'Приписка', type: 'textarea', hint: 'Для «своей строки» — весь текст строки доха.', visible: (v) => !!v.workType },
     ],
     values: {
-      workType: entry?.workType, workId: entry?.workId, pointIds: entry?.pointIds,
+      workType: entry?.workType, workId: entry?.workId, pointIds: entry?.pointIds ?? preset?.pointIds,
       quantity: entry?.quantity, cableId: entry?.cableId, pullCount: entry?.workType === 'Протяжка' ? entry?.quantity : undefined,
       meters: entry?.meters, minutes: entry?.minutes, culprit: entry?.culprit,
       result: entry?.result ?? 'Работает', note: entry?.note,
@@ -182,7 +182,12 @@ function entryForm(day, entry) {
         minutes: isText(v) ? undefined : v.minutes, culprit: isText(v) ? undefined : v.culprit,
         result: v.workType === 'Проверка' ? (v.result || 'Работает') : undefined, note: v.note,
       };
-      repo.save(pid, [{ coll: 'entries', id, data }]);
+      const ops = [{ coll: 'entries', id, data }];
+      if (day._new) { // день за сегодня создаём только при сохранении записи
+        ops.unshift({ coll: 'days', id: day.id, data: { date: day.date, helper: day.helper || 'сам', helperHe: day.helperHe || 'сам' } });
+        day._new = false;
+      }
+      repo.save(pid, ops);
       syncJournal(id, pointIds);
       bumpLastWork(day.date);
       toast('Сохранено');
@@ -192,6 +197,14 @@ function entryForm(day, entry) {
       repo.remove(pid, 'entries', entry.id); close();
     } }] : [],
   });
+}
+
+// «Добавить работу на эту точку»: запись в сегодняшний день (день создаётся при сохранении)
+export function addWorkForPoint(pointId) {
+  const p = currentProject(); const today = todayIso();
+  const day = daysSorted().find((d) => d.date === today)
+    || { id: newId(), date: today, helper: p.helper, helperHe: p.helperHe, _new: true };
+  entryForm(day, null, { pointIds: [pointId] });
 }
 
 // строки журнала записи: добавить недостающие, убрать лишние

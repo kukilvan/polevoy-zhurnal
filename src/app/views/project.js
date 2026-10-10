@@ -131,7 +131,7 @@ export function projectView(ui) {
       h('div', { class: 'btns' },
         h('button', { onclick: () => generatorForm() }, '➕ Добавить точки'),
         h('button', { class: 'sec', onclick: () => pointForm(null) }, 'Новая точка'),
-        h('button', { class: 'sec', onclick: () => ui.go('meter') }, '📏 Метраж'))),
+        h('button', { class: 'sec', onclick: () => ui.go('meter') }, '📏 Точки'))),
     h('div', { class: 'btns' },
       h('button', { class: 'wide', onclick: () => openToday(ui) }, '📝 Сегодня'),
       h('button', { class: 'sec', onclick: () => ui.open('projects') }, 'Все проекты'),

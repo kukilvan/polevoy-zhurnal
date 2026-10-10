@@ -8,7 +8,7 @@ import { pointsPicker, todayIso } from './doh.js';
 
 let search = '';
 
-function whoIs(p, uid) {
+export function whoIs(p, uid) {
   if (!uid) return '';
   const i = (p.memberUids || []).indexOf(uid);
   const email = i >= 0 ? (p.memberEmails || [])[i] : (p.removedMembers || {})[uid];
