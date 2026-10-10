@@ -69,6 +69,8 @@ export function realApi(token) {
     },
     // Новая пустая таблица (без шаблона); листы создаёт приложение
     create: async (title) => { const r = await call(token, 'POST', S, { properties: { title } }); return { id: r.spreadsheetId, name: title }; },
+    // Доступ на редактирование для сервисного аккаунта (без письма-уведомления)
+    share: (id, email) => call(token, 'POST', `${D}/${id}/permissions?sendNotificationEmail=false&fields=id`, { role: 'writer', type: 'user', emailAddress: email }),
     rename: (id, name) => call(token, 'PATCH', `${D}/${id}?fields=id`, { name }),
     sheetsOf: async (id) => (await call(token, 'GET', `${S}/${id}?fields=sheets.properties(sheetId,title,gridProperties)`)).sheets.map((x) => x.properties),
     batch: (id, requests) => call(token, 'POST', `${S}/${id}:batchUpdate`, { requests }),

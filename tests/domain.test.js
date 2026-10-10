@@ -250,7 +250,7 @@ const reportData = async () => {
       { id: 'j3', pointId: 'b', editDate: '2026-10-05', editWorkId: 'INS_KORE' },
     ],
   };
-  return { ctx: buildContext(data), project: data.projects[0] };
+  return { ctx: buildContext(data), project: data.projects[0], data };
 };
 
 test('таблица: профиль выбирает шкафы, типы, столбцы и их порядок', async () => {
@@ -334,4 +334,26 @@ test('таблица: создание файла и пересборка лис
   assert.equal(r2.changed, false); assert.ok(!calls.some((c) => c[0] === 'batch'));
   delete files.F1;
   await assert.rejects(() => syncTable(api, project, ctx, { ...t2, by: 'u1' }, { uid: 'u2' }), /другой участник/);
+});
+
+test('сервер: ночное автообновление таблиц', async () => {
+  const { updateProjectTables, applyPatches, autoTables } = await import('../scripts/server-tables-lib.mjs');
+  const { defaultTables } = await import('../src/domain/index.js');
+  const { project, data } = await reportData();
+  const [main, ext] = defaultTables();
+  const proj = { ...project, tables: [{ ...main, fileId: 'F1', by: 'u1' }, { ...ext, fileId: 'F2' }] };
+  assert.deepEqual(autoTables(proj).map((t) => t.id), ['t_main']); // расширенная без галочки не обновляется
+  const calls = []; const files = { F1: { id: 'F1', name: 'x' } };
+  const api = {
+    fileInfo: async (id) => files[id] || null, rename: async () => {}, sheetsOf: async () => [{ sheetId: 0, title: 'S' }],
+    batch: async (id, reqs) => calls.push(['batch', id, reqs.length]), write: async (id) => calls.push(['write', id]),
+  };
+  const r = await updateProjectTables(api, proj, data, new Date('2026-10-11T00:00:00Z'));
+  assert.equal(r.patches.t_main.serverError, ''); assert.ok(r.patches.t_main.hash); assert.equal(r.patches.t_main.by, undefined);
+  assert.ok(calls.some((c) => c[0] === 'write' && c[1] === 'F1'));
+  // файл недоступен серверу: новый не создаётся, ошибка записывается в профиль
+  delete files.F1;
+  const r2 = await updateProjectTables(api, proj, data, new Date());
+  assert.match(r2.patches.t_main.serverError, /не видит файл/);
+  assert.equal(applyPatches(proj, r2.patches)[0].fileId, 'F1');
 });

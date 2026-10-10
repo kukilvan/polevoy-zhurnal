@@ -1,0 +1,32 @@
+name: Server tables
+
+# Каждую ночь в 00:00 UTC (03:00 по Израилю летом, 02:00 зимой) обновляются таблицы для руководства, у которых включено автообновление.
+on:
+  schedule:
+    - cron: '0 0 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  actions: write   # чтобы задача сама продлевала расписание (GitHub отключает расписание после 60 дней без активности)
+
+concurrency:
+  group: server-tables
+
+jobs:
+  tables:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm i --no-save firebase-admin@13 google-auth-library@9
+      - name: Обновить таблицы
+        run: node scripts/server-tables.mjs
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - name: Продлить расписание
+        run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/server-tables.yml/enable"
+        env:
+          GH_TOKEN: ${{ github.token }}

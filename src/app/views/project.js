@@ -17,6 +17,7 @@ function testApi() {
   return {
     fileInfo: async (id) => { calls.push(['fileInfo', id]); return files[id] || null; },
     create: async (title) => { const id = `FILE${Object.keys(files).length + 1}`; files[id] = { id, name: title }; calls.push(['create', title]); return files[id]; },
+    share: async (id, email) => { calls.push(['share', id, email]); },
     rename: async (id, name) => { calls.push(['rename', id, name]); files[id].name = name; },
     sheetsOf: async (id) => { calls.push(['sheetsOf', id]); return [{ sheetId: 0, title: 'Sheet1', gridProperties: { rowCount: 1000, columnCount: 26 } }]; },
     batch: async (id, requests) => { calls.push(['batch', id, requests]); return {}; },
@@ -48,7 +49,7 @@ export async function updateTable(tableId, retried = false) {
   try {
     toast(`Обновляю таблицу «${table.name}»…`);
     const api = new URLSearchParams(location.search).get('mem') ? testApi() : realApi(await getToken(`table:${table.id}`));
-    const res = await syncTable(api, p, state.ctx, table, { uid: getRepo().user.uid, nameOf: (u) => memberNameByUid(p, u) });
+    const res = await syncTable(api, p, state.ctx, table, { uid: getRepo().user.uid, nameOf: (u) => memberNameByUid(p, u), shareWith: p.serverEmail || '' });
     getRepo().saveProject(p.id, { tables: withTable(p, table.id, res.patch) });
     toast(res.message);
   } catch (e) {

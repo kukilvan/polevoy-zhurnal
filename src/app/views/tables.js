@@ -50,7 +50,7 @@ export function tableForm(table) {
     columns: ['label', 'planName', 'cabinet', 'floor', 'type', 'cable', 'status', 'pulled', 'hived', 'installed', 'checked'] };
   formModal({
     title: table ? `Таблица «${table.name}»` : 'Новая таблица', submitLabel: 'Сохранить',
-    values: { name: base.name, fileName: base.fileName || fileTitle(p, base), lang: base.lang, layout: base.layout || 'one', summary: base.summary !== false, main: !!base.main },
+    values: { name: base.name, fileName: base.fileName || fileTitle(p, base), lang: base.lang, layout: base.layout || 'one', summary: base.summary !== false, main: !!base.main, auto: base.auto === undefined ? !!base.main : !!base.auto },
     fields: [
       { key: 'name', label: 'Название таблицы', required: true, hint: 'Для себя: например «Для руководства» или «Для заказчика»' },
       { key: 'fileName', label: 'Название файла в Google Диске', hint: 'Применится при следующем «Обновить». Пусто — название по умолчанию' },
@@ -61,6 +61,7 @@ export function tableForm(table) {
       { key: 'columns', label: 'Столбцы (порядок стрелками)', type: 'custom', required: true, build: (api) => columnList(base.columns, base.lang, api.changed) },
       { key: 'layout', label: 'Раскладка', type: 'select', options: [{ value: 'one', label: 'Все точки одним листом' }, { value: 'perCabinet', label: 'Каждый шкаф на отдельном листе' }] },
       { key: 'summary', label: 'Итоги сверху (всего, протянуто, захивучено…)', type: 'checkbox' },
+      { key: 'auto', label: 'Обновлять автоматически каждую ночь (в 2–3 часа)', type: 'checkbox', hint: 'Работает после первого «Обновить» в приложении и если проект открыт серверу (см. ниже на карточке)' },
       { key: 'main', label: 'Основная таблица для руководства', type: 'checkbox', hint: 'Её обновляет кнопка на вкладке «Проект»', visible: () => !table?.main },
     ],
     preview: (v) => {
@@ -76,7 +77,7 @@ export function tableForm(table) {
       const t = {
         ...(table || {}), id: table?.id || `t_${Date.now().toString(36)}`, name: v.name, lang: v.lang || 'he', cabinets: v.cabinets || [], types: v.types || [],
         fileName: (v.fileName || '').trim() && (v.fileName || '').trim() !== fileTitle(p, { ...(table || {}), name: v.name, lang: v.lang || 'he', fileName: '' }) ? v.fileName.trim() : '',
-        statuses: v.statuses || [], columns: v.columns, layout: v.layout || 'one', summary: !!v.summary, main: table?.main || !!v.main,
+        statuses: v.statuses || [], columns: v.columns, layout: v.layout || 'one', summary: !!v.summary, auto: !!v.auto, main: table?.main || !!v.main,
       };
       let next = table ? list.map((x) => (x.id === t.id ? t : x)) : [...list, t];
       if (t.main) next = next.map((x) => ({ ...x, main: x.id === t.id }));
@@ -93,6 +94,8 @@ export function tablesView(ui) {
     h('div', { class: 'mut', style: { marginTop: '4px' } },
       `${t.lang === 'ru' ? 'Русский' : 'Иврит'} · столбцов: ${(t.columns || []).length} · ${t.layout === 'perCabinet' ? 'шкаф на листе' : 'один лист'}`),
     h('div', { class: 'mut' }, `Шкафы: ${(t.cabinets || []).length ? (t.cabinets || []).map((c) => (c === NO_CABINET ? 'без шкафа' : c)).join(', ') : 'все'} · Типы: ${(t.types || []).length ? t.types.join(', ') : 'все'}${(t.statuses || []).length ? ` · Статусы: ${t.statuses.join(', ')}` : ''}`),
+    t.auto ?? t.main ? h('div', { class: t.serverError ? 'pill st-bad' : 'mut', style: t.serverError ? { marginTop: '4px' } : {} },
+      t.serverError ? `🌙 Ночью не обновилась: ${t.serverError}` : t.serverAt ? `🌙 Автообновление ночью: ${when(t.serverAt)}` : '🌙 Автообновление включено, ночью ещё не запускалось') : null,
     h('div', { class: 'mut' }, t.syncedAt ? `Обновлена: ${when(t.syncedAt)}` : 'Ещё не создавалась'),
     h('div', { class: 'btns' },
       h('button', { onclick: () => updateTable(t.id) }, '🔄 Обновить'),

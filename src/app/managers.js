@@ -63,12 +63,13 @@ export async function rebuildSheets(api, fileId, sheets) {
 }
 
 // Обновляет одну таблицу проекта. Возвращает { patch, link, changed, message }: patch — поля профиля для сохранения
-export async function syncTable(api, project, ctx, table, { force = false, uid = '', nameOf } = {}) {
+export async function syncTable(api, project, ctx, table, { force = false, uid = '', nameOf, noCreate = false, shareWith = '' } = {}) {
   const rep = buildReport(project, ctx, table, { nameOf });
   const patch = {};
   let fileId = table.fileId || '';
   let oldHash = table.hash || '';
   let file = fileId ? await api.fileInfo(fileId) : null;
+  if (!file && noCreate) throw new Error('Сервер не видит файл таблицы: откройте её для сервера кнопкой «Обновить» в приложении');
   if (!file && fileId && table.by && uid && table.by !== uid) {
     // файл создал другой участник: у вас к нему нет доступа — новый не создаём, чтобы не подменить ссылку
     throw new Error('Эту таблицу создал другой участник проекта, у вас нет к ней доступа. Обновить её может он.');
@@ -78,6 +79,8 @@ export async function syncTable(api, project, ctx, table, { force = false, uid =
   const link = `https://docs.google.com/spreadsheets/d/${fileId}/edit`;
   if (fileId !== table.fileId) patch.fileId = fileId;
   if (link !== table.link) patch.link = link;
+  // открываем файл для сервисного аккаунта (ночное автообновление): один раз на адрес
+  if (shareWith && api.share && table.sharedWith !== shareWith) { try { await api.share(fileId, shareWith); patch.sharedWith = shareWith; } catch (e) { console.warn('share', e); } }
   let changed = false;
   try {
     if (force || rep.hash !== oldHash) {
