@@ -18,6 +18,7 @@ const reasonOptions = () => [...state.ctx.delayReasons.values()].map((r) => ({ v
 // Поле со сканером: текстовое поле + кнопка «📷»
 function scanField(key, label, kind, value) {
   const input = h('input', { type: 'text', value: value ?? '', autocomplete: 'off', autocapitalize: 'characters', style: { flex: 1, minWidth: 0 } });
+  if (kind === 'mac') input.addEventListener('blur', () => { const m = normalizeMac(input.value); if (m) input.value = m; }); // 12 символов → AA:BB:…
   const btn = h('button', { type: 'button', class: 'sec', onclick: () => scanDevice({ kind, onPick: (v) => { input.value = v; input.dispatchEvent(new Event('input', { bubbles: true })); } }) }, '📷');
   return { key, label, type: 'custom', build: () => ({ el: h('div', { style: { display: 'flex', gap: '8px' } }, input, btn), get: () => (input.value.trim() === '' ? undefined : input.value.trim()) }) };
 }

@@ -1,14 +1,14 @@
 // Сканер штрихкодов и QR для серийного номера / MAC: живая камера или фото из галереи.
 // Библиотека (zxing) подгружается только при первом открытии сканера.
 import { h, openModal } from './ui.js';
-import { candidatesFor } from '../domain/index.js';
+import { candidatesFor, normalizeMac } from '../domain/index.js';
 
 async function lib() {
   const [z, b] = await Promise.all([import('@zxing/library'), import('@zxing/browser')]);
   const hints = new Map();
   hints.set(z.DecodeHintType.TRY_HARDER, true);
-  hints.set(z.DecodeHintType.POSSIBLE_FORMATS, [z.BarcodeFormat.QR_CODE, z.BarcodeFormat.CODE_128, z.BarcodeFormat.CODE_39, z.BarcodeFormat.DATA_MATRIX,
-    z.BarcodeFormat.EAN_13, z.BarcodeFormat.ITF, z.BarcodeFormat.PDF_417, z.BarcodeFormat.CODABAR]);
+  // только форматы, которыми печатают серийники и MAC; лишние форматы дают случайные «числа» из шума
+  hints.set(z.DecodeHintType.POSSIBLE_FORMATS, [z.BarcodeFormat.QR_CODE, z.BarcodeFormat.CODE_128, z.BarcodeFormat.DATA_MATRIX]);
   return { z, b, hints };
 }
 
@@ -73,11 +73,13 @@ export function scanDevice({ kind, onPick, title }) {
       x.value, h('small', { style: { display: 'block', opacity: 0.7 } }, x.note))));
     return c;
   };
-  const add = (t) => {
+  const add = (t, live = false) => {
     if (!t || texts.includes(t)) return;
     texts.push(t);
     const c = refresh();
     status.textContent = `Считано кодов: ${texts.length}. Нажмите нужное значение${kind === 'mac' ? '' : ' (или наведите на другой код)'}.`;
+    // серийный номер с камеры: код вида «GE4198747» подставляем сразу, остальное выбирается нажатием
+    if (live && kind === 'serial' && /^[A-Za-z0-9\-_.]{6,32}$/.test(t) && !normalizeMac(t)) { pick(t); return; }
     if (kind === 'mac' && c[0]?.sure && c.filter((x) => x.sure).length === 1) pick(c[0].value); // MAC найден однозначно
   };
   function stop() { try { controls?.stop(); } catch { /* уже остановлена */ } controls = null; }
@@ -103,7 +105,8 @@ export function scanDevice({ kind, onPick, title }) {
       const stream = await navigator.mediaDevices.getUserMedia({ audio: false, video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 }, height: { ideal: 1080 } } });
       if (closed) { stream.getTracks().forEach((t) => t.stop()); return; }
       video.srcObject = stream; await video.play().catch(() => {});
-      const reader = newReader(L); const cv = document.createElement('canvas'); let busy = false;
+      try { await stream.getVideoTracks()[0].applyConstraints({ advanced: [{ focusMode: 'continuous' }] }); } catch { /* не поддерживается */ }
+      const reader = newReader(L); const cv = document.createElement('canvas'); let busy = false; let frame = 0; const votes = new Map();
       const timer = setInterval(() => {
         if (busy || closed || !video.videoWidth) return;
         busy = true;
@@ -111,7 +114,17 @@ export function scanDevice({ kind, onPick, title }) {
           const k = Math.min(1, 1600 / Math.max(video.videoWidth, video.videoHeight));
           cv.width = Math.round(video.videoWidth * k); cv.height = Math.round(video.videoHeight * k);
           cv.getContext('2d').drawImage(video, 0, 0, cv.width, cv.height);
-          const found = []; decodeAll(cv, reader, L, found); found.forEach(add);
+          const found = []; decodeAll(cv, reader, L, found);
+          // каждый второй кадр — центральная часть кадра в полном разрешении (мелкий штрихкод читается лучше)
+          frame += 1;
+          if (frame % 2 === 0 || !found.length) {
+            const cw = Math.round(video.videoWidth * 0.6); const ch = Math.round(video.videoHeight * 0.6);
+            const k2 = Math.min(1, 1600 / Math.max(cw, ch)); cv.width = Math.round(cw * k2); cv.height = Math.round(ch * k2);
+            cv.getContext('2d').drawImage(video, (video.videoWidth - cw) / 2, (video.videoHeight - ch) / 2, cw, ch, 0, 0, cv.width, cv.height);
+            decodeAll(cv, reader, L, found);
+          }
+          // код принимаем, только если он прочитан в двух кадрах (защита от случайных чтений)
+          found.filter((t) => t.length >= 5).forEach((t) => { votes.set(t, (votes.get(t) || 0) + 1); if (votes.get(t) >= 2) add(t, true); });
         } finally { busy = false; }
       }, 350);
       controls = { stop: () => { clearInterval(timer); stream.getTracks().forEach((t) => t.stop()); video.srcObject = null; } };
