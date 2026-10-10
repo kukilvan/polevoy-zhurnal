@@ -1,5 +1,7 @@
 // Руководство «Как пользоваться»: путь работы по шагам, объяснение дохa и словарик. Тексты только на русском.
-import { h, openModal } from '../ui.js';
+import { h, openModal, formModal, confirmDialog, toast } from '../ui.js';
+import { getRepo } from '../store.js';
+import { newId } from '../repo.js';
 import { state, currentProject } from '../store.js';
 import { memberName } from './members.js';
 
@@ -229,21 +231,49 @@ function sectionCard(s, ui) {
   return card;
 }
 
+// Свои слова хранятся в личных настройках (видны на всех устройствах Ивана, во всех проектах)
+const myWords = () => getRepo()?.prefs?.dictWords || [];
+function wordForm(w) {
+  const repo = getRepo();
+  const save = (list) => repo.saveUserPrefs({ dictWords: list });
+  formModal({
+    title: w ? 'Изменить слово' : 'Новое слово',
+    fields: [
+      { key: 'term', label: 'Слово (как говорите)', required: true, placeholder: 'Например: Мегашер' },
+      { key: 'he', label: 'На иврите', hint: 'Необязательно.' },
+      { key: 'meaning', label: 'Значение', type: 'textarea', required: true },
+    ],
+    values: { term: w?.term, he: w?.he, meaning: w?.meaning },
+    extra: w ? [{ label: 'Удалить слово', kind: 'danger', onClick: async () => {
+      if (!(await confirmDialog(`Удалить слово «${w.term}» из словарика?`, { yes: 'Удалить', danger: true }))) return false;
+      save(myWords().filter((x) => x.id !== w.id)); toast('Удалено'); return true;
+    } }] : [],
+    onSubmit: (v) => {
+      const item = { id: w?.id || newId(), term: v.term, he: v.he || '', meaning: v.meaning };
+      save(w ? myWords().map((x) => (x.id === w.id ? item : x)) : [...myWords(), item]);
+      toast('Сохранено');
+    },
+  });
+}
+
 function dictCard() {
   let q = '';
   const list = h('div', {});
   const fill = () => {
     const f = q.trim().toLowerCase();
-    const items = DICT.filter(([a, he, d]) => !f || `${a} ${he} ${d}`.toLowerCase().includes(f));
-    list.replaceChildren(...(items.length ? items.map(([a, he, d]) => h('div', { class: 'item guide-dict' },
-      h('div', { class: 'name' }, a, he ? h('span', { class: 'guide-he', dir: 'rtl' }, he) : null, h('div', { class: 'sub' }, d)))) : [h('div', { class: 'empty' }, 'Ничего не найдено')]));
+    const all = [...DICT.map(([a, he, d]) => ({ a, he, d })), ...myWords().map((w) => ({ a: w.term, he: w.he, d: w.meaning, mine: w }))]
+      .sort((x, y) => x.a.localeCompare(y.a, 'ru'));
+    const items = all.filter((x) => !f || `${x.a} ${x.he} ${x.d}`.toLowerCase().includes(f));
+    list.replaceChildren(...(items.length ? items.map((x) => h('div', { class: 'item guide-dict', onclick: x.mine ? () => wordForm(x.mine) : null },
+      h('div', { class: 'name' }, x.mine ? '✏️ ' : '', x.a, x.he ? h('span', { class: 'guide-he', dir: 'rtl' }, x.he) : null, h('div', { class: 'sub' }, x.d)))) : [h('div', { class: 'empty' }, 'Ничего не найдено')]));
   };
   fill();
   return h('div', { class: 'card guide-card', id: 'guide-dict' },
     h('div', { class: 'guide-title' }, '📖 Словарик'),
-    h('div', { class: 'guide-short' }, 'Слова из работы и их значение. Иврит написан так, как слова стоят в документах.'),
+    h('div', { class: 'guide-short' }, 'Слова из работы и их значение. Иврит написан так, как слова стоят в документах. Свои слова отмечены значком ✏️: нажмите на слово, чтобы изменить или удалить.'),
     h('input', { type: 'search', placeholder: 'Найти слово', oninput: (e) => { q = e.target.value; fill(); }, style: { marginTop: '8px' } }),
-    h('div', { style: { marginTop: '6px' } }, list));
+    h('div', { style: { marginTop: '6px' } }, list),
+    h('div', { class: 'btns' }, h('button', { onclick: () => wordForm(null) }, '➕ Добавить слово')));
 }
 
 export function openGuide(ui, id) {
