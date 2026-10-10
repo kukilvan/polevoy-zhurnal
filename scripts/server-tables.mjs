@@ -30,6 +30,9 @@ const api = {
 
 const now = new Date();
 let failed = 0;
+// ошибки выводим как аннотации GitHub (видны в сводке запуска и через API)
+const fail = (m, e) => { console.log(`::error::${m}: ${String(e?.stack || e).replace(/\n/g, ' | ')}`); failed += 1; };
+try {
 for (const ref of await db.collection('projects').listDocuments()) {
   const { project, data } = await readProject(ref);
   if (isDeleted(project)) continue;
@@ -44,4 +47,7 @@ for (const ref of await db.collection('projects').listDocuments()) {
   console.log(`${project.name}:`); report.forEach((l) => console.log(`  - ${l}`));
   if (report.some((l) => l.includes('ОШИБКА'))) failed += 1;
 }
+} catch (e) { fail('Общий сбой', e); }
 if (failed) console.log(`Проектов с ошибками: ${failed} (смотрите сообщения выше; в приложении тоже видно)`);
+
+if (failed) process.exit(1);
