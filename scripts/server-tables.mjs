@@ -4,6 +4,9 @@ import { GoogleAuth } from 'google-auth-library';
 import { readProject, isDeleted } from './server-backup-lib.mjs';
 import { updateProjectTables, applyPatches, autoTables } from './server-tables-lib.mjs';
 
+const note = (m, e) => console.log(`::error::${m}: ${String(e?.stack || e).replace(/\n/g, ' | ').slice(0, 900)}`);
+process.on('uncaughtException', (e) => { note('Необработанная ошибка', e); process.exit(1); });
+process.on('unhandledRejection', (e) => { note('Необработанный отказ', e); process.exit(1); });
 const key = process.env.FIREBASE_SERVICE_ACCOUNT;
 if (!key) { console.error('Нет секрета FIREBASE_SERVICE_ACCOUNT'); process.exit(1); }
 const cred = JSON.parse(key);
