@@ -5,16 +5,23 @@ import { pointForm, generatorForm } from './points.js';
 import { openToday } from './doh.js';
 import { h, formModal, confirmDialog, toast } from '../ui.js';
 import { getToken, realApi, clearToken } from '../google.js';
-import { syncManagers } from '../managers.js';
+import { syncTable } from '../managers.js';
+import { tablesOf, mainTable, withTable } from '../../domain/index.js';
 import { runBackup } from '../backup.js';
-import { memberLabel } from './members.js';
+import { memberLabel, memberNameByUid } from './members.js';
 import { hint } from './guide.js';
 
 // Тестовый режим (?mem=1): вместо Google — заглушка, вызовы пишутся в window.__gcalls
 function testApi() {
-  const calls = (window.__gcalls = []); const rec = (n) => (...a) => { calls.push([n, ...a]); return Promise.resolve(n === 'sheetsOf' ? [] : { id: 'FILE1', name: 'x' }); };
-  return { fileInfo: rec('fileInfo').bind(null), copy: rec('copy'), rename: rec('rename'), batch: rec('batch'), clear: rec('clear'), write: rec('write'),
-    sheetsOf: async (...a) => { calls.push(['sheetsOf', ...a]); return ['Проекты', 'Точки', 'Журнал', 'Типы точек', 'Конфигурации', 'Статус'].map((title, i) => ({ sheetId: i, title, gridProperties: { rowCount: 1000, columnCount: 26 } })); } };
+  const calls = (window.__gcalls = window.__gcalls || []); const files = (window.__gfiles = window.__gfiles || {});
+  return {
+    fileInfo: async (id) => { calls.push(['fileInfo', id]); return files[id] || null; },
+    create: async (title) => { const id = `FILE${Object.keys(files).length + 1}`; files[id] = { id, name: title }; calls.push(['create', title]); return files[id]; },
+    rename: async (id, name) => { calls.push(['rename', id, name]); files[id].name = name; },
+    sheetsOf: async (id) => { calls.push(['sheetsOf', id]); return [{ sheetId: 0, title: 'Sheet1', gridProperties: { rowCount: 1000, columnCount: 26 } }]; },
+    batch: async (id, requests) => { calls.push(['batch', id, requests]); return {}; },
+    write: async (id, data) => { calls.push(['write', id, data]); },
+  };
 }
 let syncing = false;
 export async function backupNow(retried = false) {
@@ -33,22 +40,26 @@ export async function backupNow(retried = false) {
     toast(`Не получилось: ${e.message || e}`); console.error('backup', e);
   } finally { syncing = false; }
 }
-export async function updateManagerTable(retried = false) {
+// Обновляет одну таблицу для руководства (по id профиля)
+export async function updateTable(tableId, retried = false) {
   const p = currentProject(); if (!p || syncing) return;
+  const table = tablesOf(p).find((t) => t.id === tableId) || mainTable(p);
   syncing = true;
   try {
-    toast('Обновляю таблицу для руководства…');
-    const api = new URLSearchParams(location.search).get('mem') ? testApi() : realApi(await getToken());
-    const res = await syncManagers(api, p, state.ctx, { uid: getRepo().user.uid });
-    getRepo().saveProject(p.id, res.patch);
+    toast(`Обновляю таблицу «${table.name}»…`);
+    const api = new URLSearchParams(location.search).get('mem') ? testApi() : realApi(await getToken(`table:${table.id}`));
+    const res = await syncTable(api, p, state.ctx, table, { uid: getRepo().user.uid, nameOf: (u) => memberNameByUid(p, u) });
+    getRepo().saveProject(p.id, { tables: withTable(p, table.id, res.patch) });
     toast(res.message);
   } catch (e) {
-    if (e.status === 401 && retried !== true) { clearToken(); syncing = false; toast('Доступ Google истёк — запрашиваю заново…'); return updateManagerTable(true); }
+    if (e.status === 401 && retried !== true) { clearToken(); syncing = false; toast('Доступ Google истёк — запрашиваю заново…'); return updateTable(tableId, true); }
     const msg = e.code === 'auth/popup-blocked' ? 'Браузер заблокировал окно разрешения Google' : e.code === 'auth/popup-closed-by-user' ? 'Окно разрешения закрыто'
-      : e.status === 403 ? `Нет доступа (${e.message}). Включены ли Google Drive API и Google Sheets API? Открыт ли шаблон по ссылке?` : e.message || String(e);
-    toast(`Не получилось: ${msg}`); console.error('managers sync', e);
+      : e.status === 403 ? `Нет доступа (${e.message}). Включены ли Google Drive API и Google Sheets API?` : e.message || String(e);
+    toast(`Не получилось: ${msg}`); console.error('table sync', e);
   } finally { syncing = false; }
 }
+// Основная таблица (кнопка на вкладке «Проект»)
+export const updateManagerTable = (retried) => updateTable(mainTable(currentProject()).id, retried);
 
 export function statusClass(status) {
   if (status === 'Неисправна') return 'pill st-bad';
@@ -124,5 +135,5 @@ export function projectView(ui) {
       autoBackupLine(p),
       h('button', { class: 'sec', onclick: backupNow }, p.backupAt ? `💾 Резервная копия (последняя: ${new Date(p.backupAt).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })})` : '💾 Резервная копия на Диск'),
       h('button', { class: 'sec', onclick: updateManagerTable }, '🔄 Обновить таблицу для руководства'),
-      p.managerLink ? h('button', { class: 'sec', onclick: () => window.open(p.managerLink, '_blank') }, '📊 Открыть таблицу руководства') : null));
+      mainTable(p).link ? h('button', { class: 'sec', onclick: () => window.open(mainTable(p).link, '_blank') }, '📊 Открыть таблицу руководства') : null));
 }

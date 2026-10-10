@@ -67,11 +67,11 @@ export function realApi(token) {
     async fileInfo(id) {
       try { const f = await call(token, 'GET', `${D}/${id}?fields=id,name,trashed`); return f.trashed ? null : f; } catch (e) { if (e.status === 404) return null; throw e; }
     },
-    copy: (templateId, name) => call(token, 'POST', `${D}/${templateId}/copy?fields=id,name`, { name }),
+    // Новая пустая таблица (без шаблона); листы создаёт приложение
+    create: async (title) => { const r = await call(token, 'POST', S, { properties: { title } }); return { id: r.spreadsheetId, name: title }; },
     rename: (id, name) => call(token, 'PATCH', `${D}/${id}?fields=id`, { name }),
     sheetsOf: async (id) => (await call(token, 'GET', `${S}/${id}?fields=sheets.properties(sheetId,title,gridProperties)`)).sheets.map((x) => x.properties),
     batch: (id, requests) => call(token, 'POST', `${S}/${id}:batchUpdate`, { requests }),
-    clear: (id, ranges) => call(token, 'POST', `${S}/${id}/values:batchClear`, { ranges }),
     async folder(name) {
       const q = encodeURIComponent(`name='${name}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
       const f = (await call(token, 'GET', `${D}?q=${q}&fields=files(id)`)).files?.[0];

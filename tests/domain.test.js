@@ -209,23 +209,6 @@ test('рабочие дни месяца по всем проектам: тол�
   assert.equal(r.text, 'Рабочие дни за сентябрь 2026\n\n22.09.2026\nЭлектра Тель-Авив с Лешей и Ильёй\n\n23.09.2026\nМегасон Модиин с Мариной');
 });
 
-test('таблица руководства: без длин, даты числом, названия', async () => {
-  const { buildContext, managerTables, managerNames, sheetSerial, TYPES_FOR_TEST } = await import('../src/domain/index.js');
-  const { POINT_TYPES, CONFIGS } = await import('../src/domain/index.js');
-  const data = {
-    projects: [{ id: 'p1', name: 'Mega Or', contractor: 'Megason', object: 'Mega Or', nameHe: 'מגה אור', objectHe: 'מגה אור', defaultConfigId: 'CFG1' }],
-    points: [{ id: 'a', projectId: 'p1', label: '1A-C34', typeId: 'Камера', cabinet: '1A', length: 70 }],
-    types: POINT_TYPES, configs: CONFIGS, catalog: [{ id: 'PR_PTS', workType: 'Протяжка' }],
-    journal: [{ id: 'j1', pointId: 'a', editDate: '2026-10-03', editWorkId: 'PR_PTS' }],
-  };
-  const ctx = buildContext(data); const t = managerTables(data.projects[0], ctx);
-  assert.equal(managerNames(data.projects[0]).title, 'סטטוס נקודות – מגה אור – Megason');
-  assert.equal(t['Точки'][0][9], ''); assert.equal(t['Точки'][0][10], '');
-  assert.equal(t['Журнал'][0][2], sheetSerial('2026-10-03')); assert.equal(sheetSerial('2026-10-03'), 46298);
-  assert.equal(t['Журнал'][0][8], 'Протяжка'); assert.equal(t['Журнал'][0][4], 'a');
-  assert.equal(t['Типы точек'][1][4], 'Протяжка , Хивут , Установка , Проверка'); assert.equal(t['Конфигурации'][0][2], 'INS_KORE , INS_MANUL , INS_MAGNIT');
-});
-
 test('привязка установки: бакар без установки, вайфай по работе, переопределение проектом', async () => {
   const { buildContext, pointInfo, POINT_TYPES, CATALOG, CONFIGS, installBinding } = await import('../src/domain/index.js');
   const mk = (types) => buildContext({
@@ -248,19 +231,107 @@ test('привязка установки: бакар без установки,
   assert.equal(pointInfo(two.points.get('c'), two).install, 'Установлено 1/2');
 });
 
-test('таблица руководства учитывает привязку: у «Бакар» нет этапа «Установка»', async () => {
-  const { buildContext, managerTables, POINT_TYPES } = await import('../src/domain/index.js');
-  const ctx = buildContext({ projects: [{ id: 'p' }], types: POINT_TYPES, configs: [], points: [], journal: [] });
-  const rows = managerTables({ id: 'p' }, ctx)['Типы точек'];
-  assert.ok(!rows.find((r) => r[0] === 'Бакар')[4].includes('Установка'));
-  assert.ok(rows.find((r) => r[0] === 'Вайфай')[4].includes('Установка'));
-  assert.equal(rows.find((r) => r[0] === 'Дверь')[5], true);
+
+// ---- таблицы для руководства (профили и сборка) ----
+const reportData = async () => {
+  const { buildContext, POINT_TYPES, CONFIGS, CATALOG } = await import('../src/domain/index.js');
+  const data = {
+    projects: [{ id: 'p1', name: 'Mega Or', contractor: 'Megason', object: 'Mega Or', nameHe: 'מגה אור', objectHe: 'מגה אור', defaultConfigId: 'CFG1' }],
+    points: [
+      { id: 'a', projectId: 'p1', label: '1A-C01', typeId: 'Камера', cabinet: '1A', length: 70, planName: 'C-71' },
+      { id: 'b', projectId: 'p1', label: '1A-D01', typeId: 'Дверь', cabinet: '1A' },
+      { id: 'c', projectId: 'p1', label: '2B-C01', typeId: 'Камера', cabinet: '2B' },
+      { id: 'd', projectId: 'p1', label: 'G-01', typeId: 'Галай' },
+    ],
+    types: POINT_TYPES, configs: CONFIGS, catalog: CATALOG, cables: [{ id: 'cat7', nameHe: 'כבל CAT7' }],
+    journal: [
+      { id: 'j1', pointId: 'a', editDate: '2026-10-03', editWorkId: 'PR_PTS', createdBy: 'u1' },
+      { id: 'j2', pointId: 'a', editDate: '2026-10-04', editWorkId: 'CHK_FLUKE', createdBy: 'u1' },
+      { id: 'j3', pointId: 'b', editDate: '2026-10-05', editWorkId: 'INS_KORE' },
+    ],
+  };
+  return { ctx: buildContext(data), project: data.projects[0] };
+};
+
+test('таблица: профиль выбирает шкафы, типы, столбцы и их порядок', async () => {
+  const { buildReport, defaultTables, sheetSerial } = await import('../src/domain/index.js');
+  const { ctx, project } = await reportData();
+  const ext = { ...defaultTables()[1], columns: ['planName', 'label', 'pulled'], cabinets: ['1A'], types: ['Камера'] };
+  const r = buildReport(project, ctx, ext);
+  const sh = r.sheets[0];
+  assert.equal(r.pointCount, 1);
+  assert.deepEqual(sh.rows[sh.headerRow], ['Имя в плане', 'Обозначение', 'Протянуто']);
+  assert.deepEqual(sh.rows[sh.headerRow + 1], ['C-71', '1A-C01', sheetSerial('2026-10-03')]);
+  // без шкафа выбирается отдельным значением
+  const none = buildReport(project, ctx, { ...ext, cabinets: ['__none'], types: [] });
+  assert.equal(none.pointCount, 1); assert.equal(none.sheets[0].rows[none.sheets[0].headerRow + 1][1], 'G-01');
+  assert.throws(() => buildReport(project, ctx, { ...ext, columns: [] }), /ни один столбец/);
 });
 
-test('галаи не проверяются: в таблице руководства у типа нет этапа «Проверка»', async () => {
-  const { buildContext, managerTables, POINT_TYPES, CATALOG } = await import('../src/domain/index.js');
-  const ctx = buildContext({ projects: [{ id: 'p' }], types: POINT_TYPES, configs: [], points: [], journal: [] });
-  const row = managerTables({ id: 'p' }, ctx)['Типы точек'].find((r) => r[0] === 'Галай');
-  assert.ok(!row[4].includes('Проверка') && row[4].includes('Установка'));
-  assert.ok(!CATALOG.some((w) => w.id === 'CHK_GALAI'));
+test('таблица: язык, «—» для этапов, которых у типа нет, частичная установка и итоги', async () => {
+  const { buildReport, defaultTables } = await import('../src/domain/index.js');
+  const { ctx, project } = await reportData();
+  const he = buildReport(project, ctx, { ...defaultTables()[0], columns: ['label', 'type', 'installed', 'checked', 'shilut', 'status'] });
+  const sh = he.sheets[0]; const rows = sh.rows.slice(sh.headerRow);
+  assert.deepEqual(rows[0], ['נקודה', 'סוג', 'הותקן', 'נבדק', 'שילוט', 'סטטוס']);
+  assert.equal(he.sheets[0].rtl, true);
+  const byLabel = Object.fromEntries(rows.slice(1).map((r) => [r[0], r]));
+  assert.equal(byLabel['G-01'][3], '—'); assert.equal(byLabel['G-01'][4], '—'); // у галая нет проверки и шилюта
+  assert.equal(byLabel['1A-D01'][2], 'הותקן חלקית 1/3'); // дверь: 1 из 3 устройств
+  assert.equal(byLabel['1A-C01'][5], 'נבדק');
+  const ru = buildReport(project, ctx, { ...defaultTables()[1], columns: ['label', 'installed', 'status', 'checkResult'] });
+  const rr = Object.fromEntries(ru.sheets[0].rows.slice(ru.sheets[0].headerRow + 1).map((r) => [r[0], r]));
+  assert.equal(rr['1A-D01'][1], 'частично 1/3'); assert.equal(rr['1A-D01'][2], 'Установлено 1/3'); assert.equal(rr['1A-C01'][3], 'Работает');
+  // итоги сверху: всего 4, протянуто 1, проверено 1
+  assert.deepEqual(ru.sheets[0].rows[3].slice(0, 6), [4, 1, 0, 0, 1, 1]);
+  assert.ok(!JSON.stringify(ru.sheets[0].rows).includes('=')); // формул нет
+});
+
+test('таблица: раскладка «шкаф на листе», названия листов и фильтр по статусу', async () => {
+  const { buildReport, defaultTables } = await import('../src/domain/index.js');
+  const { ctx, project } = await reportData();
+  const t = { ...defaultTables()[1], columns: ['label'], layout: 'perCabinet' };
+  const r = buildReport(project, ctx, t);
+  assert.deepEqual(r.sheets.map((x) => x.title), ['1A', '2B', 'Без шкафа']);
+  assert.equal(r.sheets[0].count, 2);
+  const faulty = buildReport(project, ctx, { ...t, layout: 'one', statuses: ['Неисправна'] });
+  assert.equal(faulty.pointCount, 0);
+  assert.notEqual(r.hash, buildReport(project, ctx, { ...t, layout: 'one' }).hash);
+});
+
+test('таблица: основная всегда одна, профили по умолчанию', async () => {
+  const { tablesOf, mainTable, withTable } = await import('../src/domain/index.js');
+  assert.equal(tablesOf({}).length, 2); assert.equal(mainTable({}).name, 'Для руководства');
+  const next = withTable({}, 't_ext', { main: true });
+  assert.deepEqual(next.map((t) => t.main), [false, true]);
+});
+
+test('таблица: создание файла и пересборка листов через Google API (заглушка)', async () => {
+  const { syncTable } = await import('../src/app/managers.js');
+  const { defaultTables } = await import('../src/domain/index.js');
+  const { ctx, project } = await reportData();
+  const calls = []; const files = {};
+  const api = {
+    fileInfo: async (id) => files[id] || null,
+    create: async (title) => { files.F1 = { id: 'F1', name: 'x' }; calls.push(['create', title]); return files.F1; },
+    rename: async (id, name) => calls.push(['rename', name]),
+    sheetsOf: async () => [{ sheetId: 0, title: 'Sheet1' }],
+    batch: async (id, reqs) => calls.push(['batch', reqs]),
+    write: async (id, data) => calls.push(['write', data]),
+  };
+  const table = defaultTables()[0];
+  const r1 = await syncTable(api, project, ctx, table, { uid: 'u1' });
+  assert.equal(r1.changed, true); assert.equal(r1.patch.fileId, 'F1'); assert.equal(r1.patch.by, 'u1');
+  const reqs = calls.find((c) => c[0] === 'batch')[1];
+  assert.ok(reqs[0].addSheet && reqs.some((q) => q.deleteSheet) && reqs.some((q) => q.setBasicFilter) && reqs.some((q) => q.addConditionalFormatRule));
+  assert.equal(reqs[0].addSheet.properties.rightToLeft, true);
+  const wr = calls.find((c) => c[0] === 'write')[1][0];
+  assert.equal(wr.range, "'סטטוס'!A1");
+  // повторно без изменений данных файл не трогаем; чужой файл — понятная ошибка
+  const t2 = { ...table, ...r1.patch };
+  calls.length = 0;
+  const r2 = await syncTable(api, project, ctx, t2, { uid: 'u1' });
+  assert.equal(r2.changed, false); assert.ok(!calls.some((c) => c[0] === 'batch'));
+  delete files.F1;
+  await assert.rejects(() => syncTable(api, project, ctx, { ...t2, by: 'u1' }, { uid: 'u2' }), /другой участник/);
 });

@@ -1,55 +1,79 @@
-// Синхронизация таблицы для руководства (замена Apps Script syncAll): копия шаблона + данные проекта значениями.
-import { HEADERS, managerNames, managerTables, fileIdOf, hashOf } from '../domain/index.js';
+// Таблицы для руководства: приложение само создаёт Google Таблицу (без шаблона) и записывает готовые значения.
+import { buildReport } from '../domain/index.js';
 
-export const TEMPLATE_ID = '1jnokOHgr6NXLW_FyvKsztTIFnNOmDwk19FzWSOssVWY';
-const colName = (n) => { let s = ''; while (n > 0) { const m = (n - 1) % 26; s = String.fromCharCode(65 + m) + s; n = Math.floor((n - 1) / 26); } return s; };
+const rgb = (hex) => ({ red: parseInt(hex.slice(1, 3), 16) / 255, green: parseInt(hex.slice(3, 5), 16) / 255, blue: parseInt(hex.slice(5, 7), 16) / 255 });
+const colLetter = (n) => { let s = ''; let x = n + 1; while (x > 0) { const m = (x - 1) % 26; s = String.fromCharCode(65 + m) + s; x = Math.floor((x - 1) / 26); } return s; };
+const esc = (t) => String(t).replace(/'/g, "''");
 
-async function ensureGrid(api, fileId, need) {
-  const props = await api.sheetsOf(fileId);
-  const requests = [];
-  for (const [title, rows, cols] of need) {
-    const p = props.find((x) => x.title === title);
-    if (!p) throw new Error(`В шаблоне нет листа «${title}»`);
-    const g = p.gridProperties || {};
-    if ((g.rowCount || 0) < rows) requests.push({ appendDimension: { sheetId: p.sheetId, dimension: 'ROWS', length: rows - g.rowCount } });
-    if ((g.columnCount || 0) < cols) requests.push({ appendDimension: { sheetId: p.sheetId, dimension: 'COLUMNS', length: cols - g.columnCount } });
+// Запросы оформления одного листа: ширины, шапка, даты, подсветка, фильтр
+export function sheetRequests(sheetId, sh) {
+  const out = []; const nCols = sh.cols.length; const first = sh.headerRow + 1; const lastRow = Math.max(sh.rows.length, first + 1);
+  const range = (r0, r1, c0, c1) => ({ sheetId, startRowIndex: r0, endRowIndex: r1, startColumnIndex: c0, endColumnIndex: c1 });
+  sh.cols.forEach((c, i) => out.push({ updateDimensionProperties: { range: { sheetId, dimension: 'COLUMNS', startIndex: i, endIndex: i + 1 }, properties: { pixelSize: c.width || 110 }, fields: 'pixelSize' } }));
+  out.push({ repeatCell: { range: range(0, 1, 0, 1), cell: { userEnteredFormat: { textFormat: { bold: true, fontSize: 14 } } }, fields: 'userEnteredFormat.textFormat' } });
+  out.push({ repeatCell: { range: range(1, 2, 0, 1), cell: { userEnteredFormat: { textFormat: { bold: true } } }, fields: 'userEnteredFormat.textFormat' } });
+  if (sh.summaryRows.length) {
+    out.push({ repeatCell: { range: range(2, 3, 0, 7), cell: { userEnteredFormat: { textFormat: { bold: true }, backgroundColor: rgb('#E8EEF5'), horizontalAlignment: 'CENTER' } }, fields: 'userEnteredFormat(textFormat,backgroundColor,horizontalAlignment)' } });
+    out.push({ repeatCell: { range: range(3, 4, 0, 7), cell: { userEnteredFormat: { textFormat: { bold: true, fontSize: 12 }, horizontalAlignment: 'CENTER' } }, fields: 'userEnteredFormat(textFormat,horizontalAlignment)' } });
   }
-  if (requests.length) await api.batch(fileId, requests);
+  out.push({ repeatCell: { range: range(sh.headerRow, sh.headerRow + 1, 0, nCols), cell: { userEnteredFormat: {
+    backgroundColor: rgb('#1F3B5C'), textFormat: { bold: true, foregroundColor: rgb('#FFFFFF') }, horizontalAlignment: 'CENTER', verticalAlignment: 'MIDDLE', wrapStrategy: 'WRAP' } },
+  fields: 'userEnteredFormat(backgroundColor,textFormat,horizontalAlignment,verticalAlignment,wrapStrategy)' } });
+  sh.cols.forEach((c, i) => {
+    if (c.kind === 'stage') out.push({ repeatCell: { range: range(first, lastRow, i, i + 1), cell: { userEnteredFormat: { numberFormat: { type: 'DATE', pattern: 'dd/mm/yyyy' }, horizontalAlignment: 'CENTER' } }, fields: 'userEnteredFormat(numberFormat,horizontalAlignment)' } });
+    else if (c.kind === 'num' || c.kind === 'status') out.push({ repeatCell: { range: range(first, lastRow, i, i + 1), cell: { userEnteredFormat: { horizontalAlignment: 'CENTER' } }, fields: 'userEnteredFormat.horizontalAlignment' } });
+  });
+  // подсветка: условное форматирование (в ячейках только значения)
+  const rowNo = first + 1; // номер первой строки данных в A1
+  sh.rules.forEach((r) => {
+    const cell = `${colLetter(r.col)}${rowNo}`;
+    const cond = r.kind === 'number' ? { type: 'CUSTOM_FORMULA', values: [{ userEnteredValue: `=ISNUMBER(${cell})` }] }
+      : r.kind === 'blank' ? { type: 'CUSTOM_FORMULA', values: [{ userEnteredValue: `=AND(COUNTA($A${rowNo}:$Z${rowNo})>0,LEN(${cell})=0)` }] }
+        : { type: r.kind === 'eq' ? 'TEXT_EQ' : 'TEXT_STARTS_WITH', values: [{ userEnteredValue: r.text }] };
+    const format = { backgroundColor: rgb(r.color), ...(r.textColor ? { textFormat: { foregroundColor: rgb(r.textColor) } } : {}) };
+    out.push({ addConditionalFormatRule: { rule: { ranges: [range(first, lastRow, r.col, r.col + 1)], booleanRule: { condition: cond, format } }, index: 0 } });
+  });
+  out.push({ setBasicFilter: { filter: { range: range(sh.headerRow, Math.max(sh.rows.length, sh.headerRow + 1), 0, nCols) } } });
+  return out;
 }
 
-// Возвращает { patch, message }: patch — поля проекта для сохранения (если что-то изменилось)
-export async function syncManagers(api, project, ctx, { force = false, uid = '' } = {}) {
-  const names = managerNames(project);
-  if (!names.display) throw new Error('У проекта пустое название — заполните название, подрядчика или объект');
-  const tables = managerTables(project, ctx);
-  const hash = hashOf([names.title, names.display, tables]);
+// Пересобирает все листы файла: добавляет новые, удаляет старые (в одном запросе), затем пишет значения
+export async function rebuildSheets(api, fileId, sheets) {
+  const old = await api.sheetsOf(fileId);
+  const base = 100000 + Math.floor(Math.random() * 800000);
+  const ids = sheets.map((_, i) => base + i);
+  const requests = [];
+  sheets.forEach((sh, i) => requests.push({ addSheet: { properties: { sheetId: ids[i], title: `__pz${i}`, index: i, rightToLeft: sh.rtl,
+    gridProperties: { rowCount: Math.max(50, sh.rows.length + 20), columnCount: Math.max(sh.cols.length, ...sh.rows.map((r) => r.length), 7), frozenRowCount: sh.headerRow + 1 } } } }));
+  old.forEach((o) => requests.push({ deleteSheet: { sheetId: o.sheetId } }));
+  sheets.forEach((sh, i) => requests.push({ updateSheetProperties: { properties: { sheetId: ids[i], title: sh.title }, fields: 'title' } }));
+  sheets.forEach((sh, i) => requests.push(...sheetRequests(ids[i], sh)));
+  await api.batch(fileId, requests);
+  await api.write(fileId, sheets.map((sh) => ({ range: `'${esc(sh.title)}'!A1`, values: sh.rows })));
+}
+
+// Обновляет одну таблицу проекта. Возвращает { patch, link, changed, message }: patch — поля профиля для сохранения
+export async function syncTable(api, project, ctx, table, { force = false, uid = '', nameOf } = {}) {
+  const rep = buildReport(project, ctx, table, { nameOf });
   const patch = {};
-  let fileId = fileIdOf(project);
-  let oldHash = project.managerHash || '';
+  let fileId = table.fileId || '';
+  let oldHash = table.hash || '';
   let file = fileId ? await api.fileInfo(fileId) : null;
-  if (!file && fileId && project.managerBy && uid && project.managerBy !== uid) {
-    // файл создал другой участник: у вас к нему нет доступа — новую копию не создаём, чтобы не подменить ссылку
-    throw new Error('Таблицу руководства создал другой участник проекта, у вас нет к ней доступа. Обновить её может он.');
+  if (!file && fileId && table.by && uid && table.by !== uid) {
+    // файл создал другой участник: у вас к нему нет доступа — новый не создаём, чтобы не подменить ссылку
+    throw new Error('Эту таблицу создал другой участник проекта, у вас нет к ней доступа. Обновить её может он.');
   }
-  if (!file) {
-    file = await api.copy(TEMPLATE_ID, names.title);
-    fileId = file.id; oldHash = ''; if (uid) patch.managerBy = uid;
-  }
-  if (uid && !project.managerBy && !patch.managerBy) patch.managerBy = uid; // файл виден — значит, он ваш
+  if (!file) { file = await api.create(rep.title); fileId = file.id; oldHash = ''; if (uid) patch.by = uid; }
+  if (uid && !table.by && !patch.by) patch.by = uid;
   const link = `https://docs.google.com/spreadsheets/d/${fileId}/edit`;
-  if (fileId !== project.managerFileId) patch.managerFileId = fileId;
-  if (link !== project.managerLink) patch.managerLink = link;
+  if (fileId !== table.fileId) patch.fileId = fileId;
+  if (link !== table.link) patch.link = link;
   let changed = false;
-  if (force || hash !== oldHash) {
-    const sheets = Object.keys(HEADERS);
-    await ensureGrid(api, fileId, sheets.map((n) => [n, tables[n].length + 5, HEADERS[n].length]));
-    await api.clear(fileId, sheets);
-    const data = sheets.map((n) => ({ range: `${n}!A1:${colName(HEADERS[n].length)}${tables[n].length + 1}`, values: [HEADERS[n], ...tables[n]] }));
-    data.push({ range: 'Статус!B3:B4', values: [[names.display], [project.id]] });
-    await api.write(fileId, data);
-    if (file.name !== names.title) await api.rename(fileId, names.title);
-    patch.managerHash = hash; changed = true;
+  if (force || rep.hash !== oldHash) {
+    await rebuildSheets(api, fileId, rep.sheets);
+    if (file.name !== rep.title) await api.rename(fileId, rep.title);
+    patch.hash = rep.hash; changed = true;
   }
-  patch.managerSyncedAt = new Date().toISOString();
-  return { patch, link, changed, message: changed ? `Таблица обновлена: ${names.title}` : 'Данные не менялись, таблица актуальна' };
+  patch.syncedAt = new Date().toISOString();
+  return { patch, link, changed, rep, message: changed ? `Таблица «${table.name}» обновлена: точек ${rep.pointCount}, столбцов ${rep.colCount}` : `Таблица «${table.name}»: данные не менялись, она актуальна` };
 }

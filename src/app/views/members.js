@@ -4,6 +4,13 @@ import { state, getRepo, currentProject } from '../store.js';
 
 export const memberKey = (email) => String(email).toLowerCase().replace(/\./g, '_');
 export const memberName = (p, email) => p.memberNames?.[memberKey(email)] || '';
+// Имя (или почта) автора по uid: участники, а также убранные
+export function memberNameByUid(p, uid) {
+  if (!uid) return '';
+  const i = (p.memberUids || []).indexOf(uid);
+  const email = i >= 0 ? (p.memberEmails || [])[i] : (p.removedMembers || {})[uid];
+  return email ? (memberName(p, email) || email) : '';
+}
 export const memberLabel = (p, email) => { const n = memberName(p, email); return n ? `${n} · ${email}` : String(email); };
 
 export function inviteForm(p) {

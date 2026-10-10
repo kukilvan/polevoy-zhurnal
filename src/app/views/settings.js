@@ -2,7 +2,7 @@
 import { h, formModal, confirmDialog, toast } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { newId } from '../repo.js';
-import { installBinding } from '../../domain/index.js';
+import { installBinding, tablesOf, mainTable } from '../../domain/index.js';
 import { installFields, describeBinding } from './install.js';
 import { projectForm } from './projects.js';
 import { updateManagerTable, backupNow } from './project.js';
@@ -175,14 +175,15 @@ export function settingsView(ui) {
     h('div', { class: 'card', style: { padding: 0 } },
       h('div', { class: 'group', style: { padding: '10px 14px 4px' } }, `Проект «${p.name}»`),
       row('🔧', 'Привязка установки', 'Что считается установкой для каждого типа точек', () => ui.open('install')),
+      row('📊', 'Таблицы для руководства', `${tablesOf(p).length} шт. · основная: ${mainTable(p).name}`, () => ui.open('tables')),
       row('🗄', 'Настройки шкафа', 'Свои кабели и их число для шкафа', () => ui.open('cabinets')),
       row('👥', 'Участники', `${(p.memberEmails || []).length} в проекте`, () => ui.open('members')),
       row('✏️', 'Данные проекта', 'Название, помощник, иврит, примечание', () => projectForm(p, ui)),
       row('📁', 'Все проекты', null, () => ui.open('projects'))),
     h('div', { class: 'card', style: { padding: 0 } },
       h('div', { class: 'group', style: { padding: '10px 14px 4px' } }, 'Данные'),
-      row('🔄', 'Обновить таблицу для руководства', p.managerSyncedAt ? `Обновлена: ${new Date(p.managerSyncedAt).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}` : null, updateManagerTable),
-      p.managerLink ? row('📊', 'Открыть таблицу руководства', null, () => window.open(p.managerLink, '_blank')) : null,
+      row('🔄', 'Обновить таблицу для руководства', mainTable(p).syncedAt ? `Основная обновлена: ${new Date(mainTable(p).syncedAt).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}` : null, updateManagerTable),
+      mainTable(p).link ? row('📊', 'Открыть таблицу руководства', null, () => window.open(mainTable(p).link, '_blank')) : null,
       row('💾', 'Резервная копия на Диск', p.backupAt ? `Последняя: ${new Date(p.backupAt).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}` : null, backupNow),
       row('📥', 'Импорт данных', null, () => ui.open('import')),
       row('🕘', 'История и откат', null, () => ui.open('history')),

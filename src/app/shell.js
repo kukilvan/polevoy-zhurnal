@@ -6,7 +6,7 @@ import { settingsView, refView, REFS } from './views/settings.js';
 import { membersView } from './views/members.js';
 import { installView } from './views/install.js';
 import { PENDING } from './google.js';
-import { projectView, updateManagerTable, backupNow } from './views/project.js';
+import { projectView, updateManagerTable, updateTable, backupNow } from './views/project.js';
 import { meterView } from './views/points.js';
 import { cabinetsView } from './views/cabinets.js';
 import { logView } from './views/log.js';
@@ -16,13 +16,14 @@ import { journalView } from './views/journal.js';
 import { importView } from './views/import.js';
 import { historyView } from './views/history.js';
 import { monthView } from './views/month.js';
+import { tablesView } from './views/tables.js';
 import { guideView, maybeWelcome } from './views/guide.js';
 import { soonView } from './views/soon.js';
 
 const TABS = [
   ['project', 'Проект', '🏗'], ['meter', 'Метраж', '📏'], ['todos', 'Дела', '✅'], ['journal', 'Журнал', '📒'], ['doh', 'Дохот', '📝'], ['settings', 'Настройки', '⚙️'],
 ];
-const SCREEN_TITLES = { projects: 'Все проекты', cabinets: 'Настройки шкафа', month: 'Месяц', history: 'История', import: 'Импорт', install: 'Привязка установки', ref: 'Справочник', members: 'Участники', guide: 'Как пользоваться', log: 'Журнал событий' };
+const SCREEN_TITLES = { projects: 'Все проекты', cabinets: 'Настройки шкафа', month: 'Месяц', history: 'История', import: 'Импорт', install: 'Привязка установки', ref: 'Справочник', members: 'Участники', tables: 'Таблицы для руководства', guide: 'Как пользоваться', log: 'Журнал событий' };
 
 export function createShell({ user, onLogout, diag }) {
   const root = document.getElementById('app');
@@ -65,6 +66,7 @@ export function createShell({ user, onLogout, diag }) {
     if (ui.screen === 'install') return installView();
     if (ui.screen === 'ref') return refView();
     if (ui.screen === 'members') return membersView(ui);
+    if (ui.screen === 'tables') return tablesView(ui);
     if (ui.screen === 'guide') return guideView(ui);
     if (ui.screen === 'month') return monthView(ui);
     if (ui.screen === 'history') return historyView(ui);
@@ -105,7 +107,7 @@ export function createShell({ user, onLogout, diag }) {
       const timer = setInterval(() => {
         tries += 1;
         let ok = false; try { ok = !!JSON.parse(localStorage.getItem('pz_gtoken') || 'null'); } catch { /* ok */ }
-        if (ok && state.projectsLoaded && currentProject() && ready()) { clearInterval(timer); const what = localStorage.getItem(PENDING); localStorage.removeItem(PENDING); (what === 'backup' ? backupNow : updateManagerTable)(); }
+        if (ok && state.projectsLoaded && currentProject() && ready()) { clearInterval(timer); const what = localStorage.getItem(PENDING); localStorage.removeItem(PENDING); (what === 'backup' ? backupNow : what.startsWith('table:') ? () => updateTable(what.slice(6)) : updateManagerTable)(); }
         else if (tries > 60) { clearInterval(timer); localStorage.removeItem(PENDING); }
       }, 500);
     }
