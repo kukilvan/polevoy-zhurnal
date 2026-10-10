@@ -11,6 +11,7 @@ import { tablesOf, mainTable, withTable, readinessByCabinet } from '../../domain
 import { runBackup } from '../backup.js';
 import { memberLabel, memberNameByUid } from './members.js';
 import { hint } from './guide.js';
+import { exportExcel } from '../excel.js';
 
 // Тестовый режим (?mem=1): вместо Google — заглушка, вызовы пишутся в window.__gcalls
 function testApi() {
@@ -153,6 +154,7 @@ export function projectView(ui) {
       autoBackupLine(p),
       h('div', { class: 'mut', style: { width: '100%' } }, `📈 Чтений базы с сервера за этот запуск: ${readsCount()} (лимит в день — 50 000)`),
       h('button', { class: 'sec', onclick: backupNow }, p.backupAt ? `💾 Резервная копия (последняя: ${new Date(p.backupAt).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })})` : '💾 Резервная копия на Диск'),
+      h('button', { class: 'sec', onclick: exportExcel }, '📊 Выгрузить всё в Excel'),
       h('button', { class: 'sec', onclick: updateManagerTable }, '🔄 Обновить таблицу для руководства'),
       mainTable(p).link ? h('button', { class: 'sec', onclick: () => window.open(mainTable(p).link, '_blank') }, '📊 Открыть таблицу руководства') : null));
 }

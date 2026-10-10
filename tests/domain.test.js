@@ -434,3 +434,15 @@ test('готовность по шкафам: точка завершена, к�
   assert.equal(isFinished(ctx.points.get('c2'), ctx), false);
   assert.deepEqual(readinessByCabinet(ctx).map((r) => [r.cabinet, r.done, r.total]), [['1A', 1, 2], ['2B', 0, 1]]);
 });
+
+test('exportSheets: листы выгрузки в Excel', async () => {
+  const { exportSheets, buildContext } = await import('../src/domain/index.js');
+  const project = { id: 'p', name: 'Мега' };
+  const ctx = buildContext({ projects: [project], points: [{ id: 'a', projectId: 'p', label: '1A-01', typeId: 'Камера', cabinet: '1A', serial: 'GE1' }],
+    types: [{ id: 'Камера', stages: ['Протяжка', 'Проверка'] }], days: [{ id: 'd', projectId: 'p', date: '2026-10-01', helper: 'сам' }],
+    entries: [{ id: 'e', dayId: 'd', workType: 'Время', minutes: 30, note: 'ждали' }], catalog: [], cables: [], configs: [], units: [], culprits: [], delayReasons: [], journal: [] });
+  const sh = exportSheets(project, ctx);
+  assert.deepEqual(sh.map((x) => x.name), ['Точки', 'Журнал по точкам', 'Дни и работы', 'Справочники']);
+  assert.equal(sh[0].rows[0][0], 'Обозначение'); assert.equal(sh[0].rows[1][0], '1A-01'); assert.ok(sh[0].rows[1].includes('GE1'));
+  assert.equal(sh[2].rows[1][0], '2026-10-01'); assert.equal(sh[2].rows[1][8], 30);
+});
