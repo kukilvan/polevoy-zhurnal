@@ -31,3 +31,26 @@ export function remaining(ctx) {
   return [...by.entries()].sort((a, b) => a[0].localeCompare(b[0], 'ru', { numeric: true }))
     .map(([cabinet, items]) => ({ cabinet, items }));
 }
+
+// Точка полностью завершена: сделаны все этапы её типа (протяжка, хивут, установка если нужна, проверка без неисправности, шилют)
+export function isFinished(point, ctx) {
+  const type = ctx.types.get(point.typeId);
+  const stages = type?.stages || ['Протяжка', 'Хивут', 'Установка', 'Проверка', 'Шилют'];
+  const info = pointInfo(point, ctx);
+  const ok = {
+    'Протяжка': !!info.pulled, 'Хивут': !!info.hived, 'Проверка': !!info.checked && info.checkResult !== 'Не работает', 'Шилют': !!info.shilut,
+    'Установка': installBinding(type).mode === 'none' || info.install === 'Установлено',
+  };
+  return stages.every((s) => ok[s] !== false);
+}
+
+// Готовность по шкафам: [{ cabinet, done, total }]
+export function readinessByCabinet(ctx) {
+  const by = new Map();
+  [...ctx.points.values()].forEach((p) => {
+    const k = p.cabinet || '';
+    const r = by.get(k) || { cabinet: k, done: 0, total: 0 };
+    r.total += 1; if (isFinished(p, ctx)) r.done += 1; by.set(k, r);
+  });
+  return [...by.values()].sort((a, b) => a.cabinet.localeCompare(b.cabinet, 'ru', { numeric: true }));
+}

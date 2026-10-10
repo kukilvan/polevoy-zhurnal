@@ -7,7 +7,7 @@ import { openToday } from './doh.js';
 import { h, formModal, confirmDialog, toast } from '../ui.js';
 import { getToken, realApi, clearToken } from '../google.js';
 import { syncTable } from '../managers.js';
-import { tablesOf, mainTable, withTable } from '../../domain/index.js';
+import { tablesOf, mainTable, withTable, readinessByCabinet } from '../../domain/index.js';
 import { runBackup } from '../backup.js';
 import { memberLabel, memberNameByUid } from './members.js';
 import { hint } from './guide.js';
@@ -71,6 +71,19 @@ export function statusClass(status) {
   return 'pill st-mid';
 }
 
+// Полоски готовности по шкафам: цвет плавно от красного через жёлтый к зелёному
+function readiness() {
+  const rows = readinessByCabinet(state.ctx);
+  if (!rows.length) return null;
+  return h('div', { class: 'ready' }, rows.map((r) => {
+    const k = r.total ? r.done / r.total : 0; const hue = Math.round(k * 120);
+    return h('div', { class: 'ready-bar', style: { background: `hsl(${hue} 45% 17%)`, borderColor: `hsl(${hue} 60% 38%)` } },
+      h('div', { class: 'ready-fill', style: { width: `${Math.round(k * 100)}%`, background: `hsl(${hue} 72% 38%)` } }),
+      h('span', { class: 'ready-name' }, r.cabinet ? `Шкаф ${r.cabinet}` : 'Без шкафа'),
+      h('span', { class: 'ready-num' }, `${r.done} из ${r.total}`));
+  }));
+}
+
 function summary(ui) {
   const ctx = state.ctx; const rows = new Map();
   pointsSorted().forEach((pt) => {
@@ -127,7 +140,7 @@ export function projectView(ui) {
       h('div', { class: 'mut' }, `Помощник по умолчанию: ${p.helper || 'сам'}${p.oneOff ? ' · разовый выезд' : ''}`),
       p.note ? h('div', { class: 'mut' }, p.note) : null),
     members(p, ui),
-    h('div', { class: 'card' }, h('b', {}, 'Точки'), h('div', { style: { marginTop: '8px' } }, summary(ui)),
+    h('div', { class: 'card' }, h('b', {}, 'Точки'), readiness(), h('div', { style: { marginTop: '8px' } }, summary(ui)),
       h('div', { class: 'btns' },
         h('button', { onclick: () => generatorForm() }, '➕ Добавить точки'),
         h('button', { class: 'sec', onclick: () => pointForm(null) }, 'Новая точка'),

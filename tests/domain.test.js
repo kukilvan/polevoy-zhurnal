@@ -422,3 +422,15 @@ test('«Что осталось»: чего не хватает точке, с �
   const r = remaining(ctx);
   assert.deepEqual(r.map((g) => [g.cabinet, g.items.length]), [['1A', 1], ['2B', 1]]);
 });
+
+test('готовность по шкафам: точка завершена, когда сделаны все этапы её типа', async () => {
+  const { isFinished, readinessByCabinet } = await import('../src/domain/remaining.js');
+  const bakar = { id: 'b1', projectId: 'P1', label: '1A-B1', cabinet: '1A', typeId: 'Бакар' };
+  const cam2 = { id: 'c2', projectId: 'P1', label: '2B-01', cabinet: '2B', typeId: 'Камера' };
+  const all = (id) => [entry('e1' + id, 'D1', 'Протяжка', 'PR_PTS', [id]), entry('e2' + id, 'D1', 'Хивут', 'HIV_KEY', [id]), entry('e3' + id, 'D1', 'Установка', 'INS_CAM', [id]),
+    entry('e4' + id, 'D1', 'Проверка', 'CHK_FLUKE', [id]), entry('e5' + id, 'D1', 'Шилют', 'SHL', [id])];
+  const ctx = scenario([cam, bakar, cam2], [day('D1', '2026-10-05')], all('c1'));
+  assert.equal(isFinished(ctx.points.get('c1'), ctx), true);
+  assert.equal(isFinished(ctx.points.get('c2'), ctx), false);
+  assert.deepEqual(readinessByCabinet(ctx).map((r) => [r.cabinet, r.done, r.total]), [['1A', 1, 2], ['2B', 0, 1]]);
+});
