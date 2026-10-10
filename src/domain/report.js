@@ -1,7 +1,7 @@
 // Таблицы для руководства: профили (что показывать) и сборка листов значениями, без формул.
 // Профиль: { id, name, main, lang: 'he'|'ru', cabinets: [], types: [], statuses: [], columns: [id…], layout: 'one'|'perCabinet', summary }
 // Пустой список шкафов/типов/статусов = «все».
-import { comparePoints, cableOf, cablesCountOf, metrageOf } from './points.js';
+import { comparePoints, cableListOf, cablesCountOf, metrageOf } from './points.js';
 import { pointInfo, installBinding } from './status.js';
 import { sheetSerial, hashOf, TITLE_PREFIX } from './managers.js';
 
@@ -35,15 +35,17 @@ export const COLUMNS = [
 const colById = new Map(COLUMNS.map((c) => [c.id, c]));
 
 // Статусы точки (для фильтра) и их подписи в таблице. Иврит прежний (его видели руководители), новые подписи — на проверку.
-export const STATUS_KEYS = ['Новая', 'Посчитана', 'Протянута', 'Захивучена', 'Частично установлена', 'Установлена', 'Проверена', 'Неисправна'];
+export const STATUS_KEYS = ['Новая', 'Посчитана', 'Частично протянута', 'Протянута', 'Захивучена', 'Частично установлена', 'Установлена', 'Проверена', 'Неисправна'];
 const STATUS_HE = { 'Новая': 'טרם נמשך', 'Посчитана': 'טרם נמשך', 'Протянута': 'נמשך', 'Захивучена': 'חווט', 'Установлена': 'הותקן', 'Проверена': 'נבדק', 'Неисправна': 'תקלה' };
-export const statusKeyOf = (info) => (info.status.startsWith('Установлено ') ? 'Частично установлена' : info.status);
+export const statusKeyOf = (info) => (info.status.startsWith('Установлено ') ? 'Частично установлена'
+  : info.status.startsWith('Протянуто ') ? 'Частично протянута' : info.status);
 
 const T = {
   title: { ru: 'Статус выполнения точек', he: 'סטטוס התקדמות נקודות' },
   project: { ru: 'Проект', he: 'פרויקט' },
   noCabinet: { ru: 'Без шкафа', he: 'ללא ארון' },
   partial: { ru: 'частично', he: 'הותקן חלקית' },
+  partialPull: { ru: 'частично', he: 'חלקית' },
   ok: { ru: 'Работает', he: 'תקין' },
   bad: { ru: 'Не работает', he: 'לא תקין' },
   sum: {
@@ -118,7 +120,11 @@ function cellOf(col, point, info, ctx, project, lang, nameOf) {
     case 'cabinet': return s(point.cabinet);
     case 'floor': return s(point.floor);
     case 'type': return lang === 'he' ? (type?.nameHe || point.typeId) : point.typeId;
-    case 'cable': { const id = cableOf(point, ctx); return lang === 'he' ? (ctx.cables.get(id)?.nameHe || s(id)) : s(id); }
+    case 'cable': {
+      const list = info.cableList || cableListOf(point, ctx);
+      const name = (id) => (lang === 'he' ? (ctx.cables.get(id)?.nameHe || s(id)) : s(id));
+      return list.length > 1 ? list.map((c) => `${name(c.cable)}×${c.count}`).join(' + ') : name(list[0]?.cable);
+    }
     case 'cables': return cablesCountOf(point, ctx);
     case 'length': return info.metrage || '';
     case 'port': return s(point.port);
@@ -129,6 +135,7 @@ function cellOf(col, point, info, ctx, project, lang, nameOf) {
     case 'note': return s(point.note);
     case 'status': {
       if (lang === 'ru') return info.status;
+      if (info.status.startsWith('Протянуто ')) return info.statusHe;
       return info.status.startsWith('Установлено ') ? info.installHe : (STATUS_HE[info.status] || info.status);
     }
     case 'checkResult': return info.checked ? (info.checkResult === 'Не работает' ? T.bad[lang] : T.ok[lang]) : '';
@@ -150,6 +157,7 @@ function cellOf(col, point, info, ctx, project, lang, nameOf) {
         }
         return lang === 'he' ? info.installHe : `${T.partial.ru} ${info.install.replace('Установлено ', '')}`;
       }
+      if (col.id === 'pulled' && !info.pulled && info.pullDone) return `${T.partialPull[lang]} ${info.pullDone}/${info.pullTotal}`;
       return sheetSerial(info[col.id]);
     }
   }
@@ -162,13 +170,15 @@ function rulesFor(cols, lang) {
     if (c.kind === 'stage') {
       rules.push({ col: i, kind: 'number', color: COLORS.green }, { col: i, kind: 'eq', text: '—', color: COLORS.grey, textColor: '#8C8C8C' });
       if (c.id === 'installed') rules.push({ col: i, kind: 'starts', text: T.partial[lang], color: COLORS.orange });
+      if (c.id === 'pulled') rules.push({ col: i, kind: 'starts', text: T.partialPull[lang], color: COLORS.orange });
       rules.push({ col: i, kind: 'blank', color: COLORS.pink });
     } else if (c.id === 'status') {
       const t = (k) => (lang === 'he' ? STATUS_HE[k] : k);
       rules.push({ col: i, kind: 'eq', text: t('Проверена'), color: COLORS.green }, { col: i, kind: 'eq', text: t('Установлена'), color: COLORS.green },
         { col: i, kind: 'starts', text: lang === 'he' ? T.partial.he : 'Установлено ', color: COLORS.orange },
         { col: i, kind: 'eq', text: t('Неисправна'), color: COLORS.red }, { col: i, kind: 'eq', text: t('Захивучена'), color: COLORS.yellow },
-        { col: i, kind: 'eq', text: t('Протянута'), color: COLORS.yellow });
+        { col: i, kind: 'eq', text: t('Протянута'), color: COLORS.yellow },
+        { col: i, kind: 'starts', text: lang === 'he' ? 'נמשך חלקית' : 'Протянуто ', color: COLORS.orange });
     } else if (c.id === 'checkResult') {
       rules.push({ col: i, kind: 'eq', text: T.ok[lang], color: COLORS.green }, { col: i, kind: 'eq', text: T.bad[lang], color: COLORS.red });
     }
@@ -178,7 +188,7 @@ function rulesFor(cols, lang) {
 
 // Цвет «информационных» столбцов строки по общему статусу точки (статус-столбец красится своими правилами)
 const ROW_COLOR = { 'Неисправна': COLORS.red, 'Проверена': COLORS.green, 'Установлена': COLORS.green, 'Частично установлена': COLORS.orange,
-  'Захивучена': COLORS.yellow, 'Протянута': COLORS.yellow };
+  'Захивучена': COLORS.yellow, 'Протянута': COLORS.yellow, 'Частично протянута': COLORS.orange };
 function pointsFor(project, ctx, table, nameOf) {
   const cabs = new Set(table.cabinets || []); const types = new Set(table.types || []); const sts = new Set(table.statuses || []);
   return [...ctx.points.values()].filter((p) => p.projectId === project.id).sort(comparePoints)

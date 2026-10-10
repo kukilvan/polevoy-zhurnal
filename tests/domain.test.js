@@ -458,3 +458,40 @@ test('downtimeByCulprit: простои по виновникам за меся�
   assert.deepEqual(r.list.map((g) => [g.culprit, g.minutes, g.count]), [['Заказчик', 130, 2], ['Электрик', 30, 1]]);
   assert.equal(r.totalMinutes, 160);
 });
+
+test('несколько видов кабеля: протяжка каждого вида отдельно, дох и метраж по видам', async () => {
+  const { parseCables, cablesText, pullFigures, missingStages, buildReport, statusKeyOf } = await import('../src/domain/index.js');
+  assert.deepEqual(parseCables('cat7×1, 6005 x 2').list, [{ cable: 'cat7', count: 1 }, { cable: '6005', count: 2 }]);
+  assert.deepEqual(parseCables('cat7').bad, ['cat7']);
+  const types = [...POINT_TYPES, { id: 'Интерком', nameHe: 'אינטרקום', defaultCable: '6005', defaultCables: 1, extraCables: [{ cable: 'cat7', count: 1 }], stages: ['Протяжка', 'Хивут'], installMode: 'none' }];
+  const int = { id: 'i1', projectId: 'P1', label: '1A-INT1', cabinet: '1A', typeId: 'Интерком', length: 10 };
+  const d = day('D1', '2026-10-05');
+  const e1 = entry('E1', 'D1', 'Протяжка', 'PULL', ['i1'], { cableId: '6005' });
+  let ctx = make({ types, points: [int], days: [d], entries: [e1], journal: [{ id: 'j1', entryId: 'E1', pointId: 'i1' }] });
+  let info = pointInfo(ctx.points.get('i1'), ctx);
+  assert.equal(cablesText(info.cableList), '6005×1 + cat7×1');
+  assert.equal(info.cables, 2); assert.equal(info.metrage, 20);
+  assert.equal(info.pulled, ''); assert.equal(info.status, 'Протянуто 1/2'); assert.equal(statusKeyOf(info), 'Частично протянута');
+  assert.deepEqual(missingStages(ctx.points.get('i1'), ctx), ['Дотянуть', 'Хивут']);
+  assert.deepEqual(pullFigures(e1, ctx), { count: 1, meters: 10 });
+  const e2 = entry('E2', 'D1', 'Протяжка', 'PULL', ['i1'], { cableId: 'cat7' });
+  ctx = make({ types, points: [int], days: [d], entries: [e1, e2], journal: [{ id: 'j1', entryId: 'E1', pointId: 'i1' }, { id: 'j2', entryId: 'E2', pointId: 'i1' }] });
+  info = pointInfo(ctx.points.get('i1'), ctx);
+  assert.equal(info.pulled, '2026-10-05'); assert.equal(info.status, 'Протянута');
+  // запись протяжки без кабеля (старые данные) засчитывается всем видам
+  const e0 = entry('E3', 'D1', 'Протяжка', 'PULL', ['i1']);
+  ctx = make({ types, points: [int], days: [d], entries: [e0], journal: [{ id: 'j3', entryId: 'E3', pointId: 'i1' }] });
+  assert.equal(pointInfo(ctx.points.get('i1'), ctx).status, 'Протянута');
+  // однокабельная точка: протяжка «чужим» кабелем засчитывается (как раньше)
+  const e4 = entry('E4', 'D1', 'Протяжка', 'PULL', ['c1'], { cableId: '6005' });
+  ctx = make({ points: [cam], days: [d], entries: [e4], journal: [{ id: 'j4', entryId: 'E4', pointId: 'c1' }] });
+  assert.equal(pointInfo(ctx.points.get('c1'), ctx).status, 'Протянута');
+  // таблица руководства: кабели списком, частичная протяжка
+  ctx = make({ types, points: [int], days: [d], entries: [e1], journal: [{ id: 'j1', entryId: 'E1', pointId: 'i1' }] });
+  const rep = buildReport(project, ctx, { id: 't', lang: 'ru', columns: ['label', 'cable', 'cables', 'pulled', 'status'] });
+  const row = rep.sheets[0].rows.at(-1);
+  assert.deepEqual(row, ['1A-INT1', '6005×1 + cat7×1', 2, 'частично 1/2', 'Протянуто 1/2']);
+  // настройка шкафа может убрать доп. кабели ([]) или оставить как в типе (null)
+  ctx = make({ types, points: [int], cabinetSettings: [{ id: 's', projectId: 'P1', cabinet: '1A', typeId: 'Интерком', extraCables: [] }] });
+  assert.equal(pointInfo(ctx.points.get('i1'), ctx).cables, 1);
+});

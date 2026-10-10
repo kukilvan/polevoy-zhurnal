@@ -5,7 +5,7 @@ import { generateLabels, parseSuffixes, comparePoints, usesConfig, remaining, RE
 import { scanDevice } from '../scan.js';
 import { statusClass } from './project.js';
 import { hint } from './guide.js';
-import { dateText } from '../../domain/index.js';
+import { dateText, cablesText } from '../../domain/index.js';
 import { addWorkForPoint } from './doh.js';
 import { whoIs } from './journal.js';
 
@@ -153,11 +153,11 @@ export function pointCard(startPoint) {
     const hasLen = p.length !== undefined && p.length !== null && p.length !== '';
     const facts = [
       ['Шкаф / этаж', [p.cabinet && `шкаф ${p.cabinet}`, p.floor && `этаж ${p.floor}`].filter(Boolean).join(', ')],
-      ['Тип', p.typeId], ['Имя в плане', p.planName], ['Кабель', info.cable],
+      ['Тип', p.typeId], ['Имя в плане', p.planName], ['Кабель', info.cableList.length > 1 ? cablesText(info.cableList) : info.cable],
       ['Длина', hasLen ? `${p.length} м на 1 кабель${info.metrage ? ` (всего ${Math.round(info.metrage * 100) / 100} м)` : ''}` : ''],
       ['Конфигурация', usesConfig(ctx.types.get(p.typeId)) ? cfg?.name : ''], ['Порт', p.port], ['Серийный номер', p.serial], ['MAC', p.mac], ['Причина задержки', p.delayReasonId], ['Примечание', p.note],
     ].filter(([, v]) => v);
-    const rows = (ctx.journalByPoint.get(p.id) || []).map((r) => ({ ...r, work: ctx.catalog.get(r.workId)?.name || r.action || '?' }))
+    const rows = (ctx.journalByPoint.get(p.id) || []).map((r) => ({ ...r, work: `${ctx.catalog.get(r.workId)?.name || r.action || '?'}${r.action === 'Протяжка' && r.cableId ? ` (${r.cableId})` : ''}` }))
       .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.order - a.order));
     body.replaceChildren(
       h('div', { style: { margin: '2px 0 10px' } }, h('span', { class: statusClass(info.status) }, info.status)),
@@ -190,12 +190,16 @@ function remainingModal() {
     const n = groups.reduce((s, g) => s + g.items.length, 0);
     const sel = h('select', { onchange: (e) => { stage = e.target.value; fill(); } },
       h('option', { value: '' }, 'Все этапы'), ...REMAIN_STAGES.map((s) => h('option', { value: s, selected: s === stage }, `Без этапа «${s}»`)));
-    const CHIP = { 'Хивут': ['hiv', 'хивут'], 'Установка': ['ins', 'установка'], 'Проверка': ['chk', 'проверка'] };
+    const CHIP = { 'Дотянуть': ['pul', 'дотянуть'], 'Хивут': ['hiv', 'хивут'], 'Установка': ['ins', 'установка'], 'Проверка': ['chk', 'проверка'] };
+    const chipText = (m, point) => {
+      if (m !== 'Дотянуть') return CHIP[m]?.[1] || m;
+      const i = infoOf(point); return `дотянуть ${i.cableList.filter((c) => !i.pulledKinds.includes(c.cable)).map((c) => c.cable).join(', ')}`;
+    };
     const list = h('div', { class: 'rem-list' }, ...groups.flatMap((g) => [
       h('div', { class: 'rem-group' }, h('span', {}, g.cabinet ? `Шкаф ${g.cabinet}` : 'Без шкафа'), h('span', { class: 'rem-count' }, g.items.length)),
       ...g.items.map(({ point, missing }) => h('div', { class: 'rem-row', onclick: () => { close(); setTimeout(() => pointCard(point), 60); } },
         h('div', { class: 'rem-name' }, h('b', {}, point.label), h('span', {}, `${point.typeId}${point.planName ? ` · ${point.planName}` : ''}`)),
-        h('div', { class: 'rem-chips' }, missing.map((m) => h('span', { class: `chip ${CHIP[m]?.[0] || ''}` }, CHIP[m]?.[1] || m))))),
+        h('div', { class: 'rem-chips' }, missing.map((m) => h('span', { class: `chip ${CHIP[m]?.[0] || ''}` }, chipText(m, point)))))),
     ]));
     body.replaceChildren(sel, h('div', { class: 'rem-total' }, n ? h('span', {}, 'Осталось точек: ', h('b', {}, n)) : 'Всё сделано 🎉'), n ? list : '');
   };

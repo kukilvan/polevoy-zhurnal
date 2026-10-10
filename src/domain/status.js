@@ -1,5 +1,5 @@
 // Статусы точек, установка, комплектность (разделы 3.1–3.3, Приложение А).
-import { cableOf, cablesCountOf, metrageOf } from './points.js';
+import { cableOf, cablesCountOf, metrageOf, cableListOf } from './points.js';
 import { defaultInstallBinding } from './seed.js';
 
 // Привязка установки типа точек: поля типа (installMode/installWorkIds), для старых данных — стандартная привязка по названию типа
@@ -15,7 +15,17 @@ const maxDate = (rows) => rows.reduce((m, r) => (r.date && (!m || r.date > m) ? 
 export function pointInfo(point, ctx) {
   const rows = ctx.journalByPoint.get(point.id) || [];
   const dateOf = (action) => maxDate(rows.filter((r) => r.action === action));
-  const pulled = dateOf('Протяжка');
+  // Протяжка по видам кабеля: точка протянута, когда протянут каждый её вид кабеля.
+  // Запись без кабеля (старые данные) засчитывается всем видам; кабель не из списка точки — основному.
+  const cableList = cableListOf(point, ctx); const kinds = cableList.map((c) => c.cable);
+  const pullRows = rows.filter((r) => r.action === 'Протяжка');
+  let pulled = ''; let pullDone = 0; const pullTotal = kinds.length; const pulledKinds = [];
+  if (!kinds.length) pulled = maxDate(pullRows);
+  else {
+    const dates = kinds.map((k, i) => maxDate(pullRows.filter((r) => !r.cableId || r.cableId === k || (i === 0 && !kinds.includes(r.cableId)))));
+    dates.forEach((d, i) => { if (d) { pullDone += 1; pulledKinds.push(kinds[i]); } });
+    if (pullDone === pullTotal) pulled = dates.reduce((m, d) => (d > m ? d : m), '');
+  }
   const hived = dateOf('Хивут');
   const checked = dateOf('Проверка');
   const shilut = dateOf('Шилют');
@@ -49,16 +59,17 @@ export function pointInfo(point, ctx) {
   else if (install) status = install;
   else if (hived) status = 'Захивучена';
   else if (pulled) status = 'Протянута';
+  else if (pullDone) status = `Протянуто ${pullDone}/${pullTotal}`;
   else if (point.length !== undefined && point.length !== null && point.length !== '') status = 'Посчитана';
   else status = 'Новая';
 
   // Ивритский статус и «установлено» для таблицы руководителей (раздел 5.1)
   const statusHe = checkResult === 'Не работает' ? 'תקלה' : checked ? 'נבדק' : install === 'Установлено' ? 'הותקן'
-    : hived ? 'חווט' : pulled ? 'נמשך' : 'טרם נמשך';
+    : hived ? 'חווט' : pulled ? 'נמשך' : pullDone ? `נמשך חלקית ${pullDone}/${pullTotal}` : 'טרם נמשך';
   const installHe = install === 'Установлено' ? 'הותקן' : install ? `הותקן חלקית ${installDone}/${installTotal}` : '';
 
   return {
-    pulled, hived, checked, shilut, checkResult, installedIds, install, installHe, status, statusHe,
+    pulled, pullDone, pullTotal, pulledKinds, cableList, hived, checked, shilut, checkResult, installedIds, install, installHe, status, statusHe,
     cable: cableOf(point, ctx), cables: cablesCountOf(point, ctx), metrage: metrageOf(point, ctx),
   };
 }

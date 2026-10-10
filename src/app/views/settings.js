@@ -2,12 +2,20 @@
 import { h, formModal, confirmDialog, toast } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { newId } from '../repo.js';
-import { installBinding, tablesOf, mainTable, hasDeviceId } from '../../domain/index.js';
+import { installBinding, tablesOf, mainTable, hasDeviceId, parseCables, cablesText } from '../../domain/index.js';
 import { installFields, describeBinding } from './install.js';
 import { projectForm } from './projects.js';
 import { themeLabel, setTheme, nextTheme } from '../theme.js';
 import { updateManagerTable, backupNow } from './project.js';
 import { exportExcel } from '../excel.js';
+
+// Проверка строки доп. кабелей: формат «cat7×1» и кабель из справочника
+export function cablesError(text) {
+  const { list, bad } = parseCables(text);
+  if (bad.length) return `Не понял «${bad[0]}». Пишите так: cat7×1`;
+  const unknown = list.find((c) => !state.ctx.cables.has(c.cable));
+  return unknown ? `Кабеля «${unknown.cable}» нет в справочнике «Кабели»` : '';
+}
 
 export const WORK_TYPES = ['Протяжка', 'Перетяжка', 'Перенос', 'Хивут', 'Установка', 'Проверка', 'Шилют', 'Доп. работа', 'Время'];
 const STAGES = ['Протяжка', 'Хивут', 'Установка', 'Проверка', 'Шилют'];
@@ -56,19 +64,22 @@ export const REFS = {
     title: 'Типы точек', coll: 'types', hint: 'Камера, дверь, вайфай… Здесь же — что считается установкой точки этого типа.',
     idMode: 'name', nameLabel: 'Название типа (русский)',
     items: () => [...ctx().types.values()],
-    line: (x) => [x.id, `${x.nameHe || '—'} · ${x.defaultCable || 'без кабеля'} ×${x.defaultCables ?? '?'} · установка: ${describeBinding(installBinding(x), ctx())}`],
+    line: (x) => [x.id, `${x.nameHe || '—'} · ${x.defaultCable || 'без кабеля'} ×${x.defaultCables ?? '?'}${x.extraCables?.length ? ` + ${cablesText(x.extraCables)}` : ''} · установка: ${describeBinding(installBinding(x), ctx())}`],
     fields: () => [
       { key: 'nameHe', label: 'Название (иврит)', required: true },
       { key: 'defaultCable', label: 'Кабель по умолчанию', type: 'select', required: true, options: opts(ctx().cables, (c) => c.id), emptyLabel: 'Выберите' },
       { key: 'defaultCables', label: 'Кабелей на точку', type: 'number', required: true },
+      { key: 'extraText', label: 'Дополнительные кабели другого вида', placeholder: 'например: cat7×1', hint: 'Если к точке идут кабели разных видов (интерком: 6005×1 + cat7×1). Протяжка каждого вида отмечается отдельно. Несколько — через запятую.' },
       { key: 'scanId', label: 'Серийный номер и MAC (со сканером)', type: 'checkbox', hint: 'Поля появятся в карточке точки этого типа. У камер и вайфая включено по умолчанию.' },
       custom('stages', 'Этапы точки (видны в таблице руководства)', STAGES.map((s) => ({ value: s, label: s }))),
       ...installFields(ctx()),
       { key: 'asDefault', label: 'Привязку установки сделать умолчанием для новых проектов', type: 'checkbox' },
     ],
     defaults: { defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Проверка'], mode: 'none' },
-    toForm: (x) => ({ ...x, scanId: hasDeviceId(x), mode: installBinding(x).mode, workIds: installBinding(x).workIds }),
+    toForm: (x) => ({ ...x, scanId: hasDeviceId(x), mode: installBinding(x).mode, workIds: installBinding(x).workIds, extraText: cablesText(x.extraCables, ', ') }),
+    check: (v) => cablesError(v.extraText),
     prepare: (v) => ({ scanId: !!v.scanId, nameHe: v.nameHe, defaultCable: v.defaultCable, defaultCables: v.defaultCables, stages: v.stages || [],
+      extraCables: parseCables(v.extraText).list,
       installMode: v.mode, installWorkIds: v.mode === 'works' ? (v.workIds || []) : [], isDoor: v.mode === 'config' }),
     after: (v, id) => {
       if (v.asDefault) getRepo().saveUserPrefs({ installDefaults: { ...(getRepo().prefs.installDefaults || {}), [id]: { mode: v.mode, workIds: v.mode === 'works' ? (v.workIds || []) : [] } } });
@@ -138,6 +149,7 @@ function itemForm(key, existing) {
           if (live.some((x) => x.id === id)) { toast('Такой пункт уже есть'); return false; }
         } else id = `${def.prefix}${newId(6)}`;
       }
+      const err = def.check?.(v); if (err) { toast(err); return false; }
       const data = def.prepare ? def.prepare(v) : {};
       repo.save(pid, [{ coll: def.coll, id, data: { ...data, deleted: false } }]);
       def.after?.(v, id);

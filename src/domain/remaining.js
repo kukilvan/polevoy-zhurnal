@@ -3,15 +3,17 @@ import { installBinding } from './status.js';
 import { pointInfo } from './status.js';
 import { comparePoints } from './points.js';
 
-export const REMAIN_STAGES = ['Хивут', 'Установка', 'Проверка'];
+export const REMAIN_STAGES = ['Дотянуть', 'Хивут', 'Установка', 'Проверка'];
 
-// Каких из трёх этапов не хватает точке
+// Каких этапов не хватает точке («Дотянуть» — протянута только часть кабелей)
 export function missingStages(point, ctx) {
   const type = ctx.types.get(point.typeId);
   const stages = type?.stages;
   const has = (s) => !stages || stages.includes(s);
   const info = pointInfo(point, ctx);
   const out = [];
+  // протянуты не все виды кабеля (например, 6005 есть, а cat7 ещё нет)
+  if (has('Протяжка') && !info.pulled && info.pullDone) out.push('Дотянуть');
   if (has('Хивут') && !info.hived) out.push('Хивут');
   if (has('Установка') && installBinding(type).mode !== 'none' && info.install !== 'Установлено') out.push('Установка');
   if (has('Проверка') && !info.checked) out.push('Проверка');

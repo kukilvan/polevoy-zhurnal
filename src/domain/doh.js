@@ -1,6 +1,5 @@
 // Текст «доха» (отчёт за день) на русском и иврите (раздел 3.5, Приложение А).
-import { round2 } from './points.js';
-import { pointInfo } from './status.js';
+import { round2, cableCountFor } from './points.js';
 
 // Формат доха как в настоящих дохах Ивана (WhatsApp): дата, на следующей строке объект и помощник,
 // затем каждая работа отдельным абзацем. Однострочная шапка (дата объект помощник) — для месячного списка.
@@ -30,8 +29,9 @@ export function pullFigures(entry, ctx) {
   const pts = entryPoints(entry, ctx);
   if (pts.length) {
     return {
-      count: round2(pts.reduce((s, p) => s + pointInfo(p, ctx).cables, 0)),
-      meters: round2(pts.reduce((s, p) => s + pointInfo(p, ctx).metrage, 0)),
+      // только кабели вида этой записи (у точки их может быть несколько видов)
+      count: round2(pts.reduce((s, p) => s + cableCountFor(p, ctx, entry.cableId), 0)),
+      meters: round2(pts.reduce((s, p) => s + (Number(p.length) || 0) * cableCountFor(p, ctx, entry.cableId), 0)),
     };
   }
   return { count: num(entry.quantity), meters: num(entry.meters) };

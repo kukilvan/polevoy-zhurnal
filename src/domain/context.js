@@ -29,10 +29,10 @@ export function buildContext(data) {
       const entry = ctx.entries.get(row.entryId);
       const day = entry && ctx.days.get(entry.dayId);
       if (!entry || !day) return; // запись/день удалены — строка не считается
-      resolved = { date: day.date, action: entry.workType, workId: entry.workId, result: entry.result, projectId: day.projectId, by: entry.updatedBy || entry.createdBy };
+      resolved = { date: day.date, action: entry.workType, workId: entry.workId, cableId: entry.cableId, result: entry.result, projectId: day.projectId, by: entry.updatedBy || entry.createdBy };
     } else {
       resolved = {
-        date: row.editDate, workId: row.editWorkId, action: ctx.catalog.get(row.editWorkId)?.workType,
+        date: row.editDate, workId: row.editWorkId, cableId: row.editCableId, action: ctx.catalog.get(row.editWorkId)?.workType,
         result: undefined, projectId: point.projectId, by: row.updatedBy || row.createdBy,
       };
     }
