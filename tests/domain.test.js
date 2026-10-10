@@ -357,3 +357,16 @@ test('сервер: ночное автообновление таблиц', asy
   assert.match(r2.patches.t_main.serverError, /не видит файл/);
   assert.equal(applyPatches(proj, r2.patches)[0].fileId, 'F1');
 });
+
+test('экономия чтений: когда читать всё, а когда только изменения', async () => {
+  const { decideMode, maxMillis, FULL_EVERY } = await import('../src/domain/sync.js');
+  const now = 1_800_000_000_000; const ok = { last: now - 1000, full: now - 1000, n: 100 };
+  assert.equal(decideMode(null, 100, now), 'full');                         // первый запуск
+  assert.equal(decideMode(ok, 100, now), 'delta');                          // кэш полный
+  assert.equal(decideMode(ok, 120, now), 'delta');                          // в кэше больше, чем помнили
+  assert.equal(decideMode(ok, 80, now), 'full');                            // кэш неполон (например, очищен частично)
+  assert.equal(decideMode(ok, 0, now), 'full');                             // кэш пуст
+  assert.equal(decideMode({ ...ok, full: now - FULL_EVERY - 1 }, 100, now), 'full'); // еженедельная полная сверка
+  assert.equal(decideMode({ ...ok, last: 0 }, 100, now), 'full');           // нет отметки времени сервера
+  assert.equal(maxMillis([0, 5, undefined, 9, 3]), 9);
+});

@@ -7,3 +7,4 @@ export * from './generator.js';
 export * from './month.js';
 export * from './managers.js';
 export * from './report.js';
+export * from './sync.js';

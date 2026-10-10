@@ -1,4 +1,5 @@
 // Вкладка «Проект»: карточка текущего проекта и сводка по точкам.
+import { readsCount } from '../repo.js';
 import { state, currentProject, pointsSorted, infoOf, getRepo } from '../store.js';
 import { projectForm } from './projects.js';
 import { pointForm, generatorForm } from './points.js';
@@ -135,6 +136,7 @@ export function projectView(ui) {
       h('button', { class: 'wide', onclick: () => openToday(ui) }, '📝 Сегодня'),
       h('button', { class: 'sec', onclick: () => ui.open('projects') }, 'Все проекты'),
       autoBackupLine(p),
+      h('div', { class: 'mut', style: { width: '100%' } }, `📈 Чтений базы с сервера за этот запуск: ${readsCount()} (лимит в день — 50 000)`),
       h('button', { class: 'sec', onclick: backupNow }, p.backupAt ? `💾 Резервная копия (последняя: ${new Date(p.backupAt).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })})` : '💾 Резервная копия на Диск'),
       h('button', { class: 'sec', onclick: updateManagerTable }, '🔄 Обновить таблицу для руководства'),
       mainTable(p).link ? h('button', { class: 'sec', onclick: () => window.open(mainTable(p).link, '_blank') }, '📊 Открыть таблицу руководства') : null));

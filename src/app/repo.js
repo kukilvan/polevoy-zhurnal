@@ -3,9 +3,10 @@
 //  - память (для автотестов интерфейса, включается адресом ?mem=1).
 // Общая логика здесь: кто и когда изменил, история изменений, мягкое удаление.
 import {
-  collection, doc, onSnapshot, setDoc, query, where, writeBatch, serverTimestamp, getDocs, orderBy, limit as fbLimit,
+  collection, doc, onSnapshot, setDoc, query, where, writeBatch, serverTimestamp, getDocs, getDocsFromCache, orderBy, limit as fbLimit, Timestamp,
 } from 'firebase/firestore';
 import { info, error } from '../log.js';
+import { DELTA_MARGIN, decideMode, maxMillis } from '../domain/sync.js';
 import {
   CATALOG, POINT_TYPES, CABLES, CONFIGS, UNITS, CULPRITS, DELAY_REASONS,
 } from '../domain/index.js';
@@ -71,6 +72,16 @@ export function createMemoryBackend() {
   };
 }
 
+// ---------- экономия чтений Firestore ----------
+// Firestore заново читает ВСЮ коллекцию, если слушатель был отключён дольше 30 минут (каждый такой запуск = тысячи чтений).
+// Поэтому после первой полной загрузки читаем только изменившееся: документы, у которых updatedAtServer новее последней отметки.
+// Остальное берём из кэша телефона. Раз в неделю и при подозрении, что кэш неполный, делаем полную загрузку.
+const metaGet = (k) => { try { return JSON.parse(localStorage.getItem(k) || 'null'); } catch { return null; } };
+const metaSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } catch { /* нет доступа к хранилищу */ } };
+const srvMillis = (d) => { const v = d.get('updatedAtServer'); return v && typeof v.toMillis === 'function' ? v.toMillis() : 0; };
+let serverReads = 0; // сколько документов прочитано с сервера за этот запуск (для проверки экономии)
+export const readsCount = () => serverReads;
+
 // ---------- хранилище: Firestore ----------
 export function createFirestoreBackend(db, uid) {
   return {
@@ -82,7 +93,7 @@ export function createFirestoreBackend(db, uid) {
     },
     async loadHistory(pid, since, max) {
       const q = query(collection(db, 'projects', pid, 'history'), where('at', '>=', since), orderBy('at', 'desc'), fbLimit(max));
-      const snap = await getDocs(q);
+      const snap = await getDocs(q); serverReads += snap.size;
       return snap.docs.map((d) => d.data());
     },
     listenInvitations(email, uid, cb) {
@@ -92,15 +103,57 @@ export function createFirestoreBackend(db, uid) {
     },
     listenColl(pid, name, cb) {
       // Если проект ещё не дошёл до сервера, чтение отклоняется — повторяем попытку
+      const col = collection(db, 'projects', pid, name);
+      const key = `pz.sync.${uid}.${pid}.${name}`;
       let unsub = () => {}; let stopped = false; let tries = 0; let timer = null;
-      const start = () => {
-        unsub = onSnapshot(collection(db, 'projects', pid, name),
-          (snap) => { tries = 0; cb(snap.docs.map((d) => ({ ...d.data(), _pending: d.metadata.hasPendingWrites }))); },
-          (e) => {
-            if (stopped) return;
-            if (e.code === 'permission-denied' && tries < 15) { tries++; timer = setTimeout(() => { if (!stopped) start(); }, 1500); return; }
-            error(`Чтение ${name}`, `${e.code || ''} ${e.message || e}`);
-          });
+      const shape = (d) => ({ ...d.data(), _pending: d.metadata.hasPendingWrites });
+      const onErr = (restart) => (e) => {
+        if (stopped) return;
+        if (e.code === 'permission-denied' && tries < 15) { tries++; timer = setTimeout(() => { if (!stopped) restart(); }, 1500); return; }
+        error(`Чтение ${name}`, `${e.code || ''} ${e.message || e}`);
+      };
+      // как раньше: слушаем всю коллекцию (первый запуск, раз в неделю, при неполном кэше)
+      const startFull = () => {
+        let stamped = false; // отметка времени полной загрузки ставится один раз за запуск
+        unsub = onSnapshot(col, (snap) => {
+          tries = 0;
+          if (!snap.metadata.fromCache) {
+            serverReads += snap.docChanges().length;
+            const prev = metaGet(key) || {};
+            const last = maxMillis([prev.last, ...snap.docs.map(srvMillis)]);
+            if (last > 0 && !snap.metadata.hasPendingWrites) { metaSet(key, { last, full: stamped ? prev.full : Date.now(), n: snap.size }); stamped = true; }
+          }
+          cb(snap.docs.map(shape));
+        }, onErr(startFull));
+      };
+      // экономный режим: кэш телефона + только изменения с прошлой отметки
+      const startDelta = (meta) => {
+        const map = new Map();
+        const q = query(col, where('updatedAtServer', '>', Timestamp.fromMillis(meta.last - DELTA_MARGIN)));
+        unsub = onSnapshot(q, (snap) => {
+          tries = 0;
+          if (!snap.metadata.fromCache) serverReads += snap.docChanges().length;
+          snap.docChanges().forEach((ch) => { if (ch.type === 'removed') map.delete(ch.doc.id); else map.set(ch.doc.id, shape(ch.doc)); });
+          const prev = metaGet(key) || meta;
+          if (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites) {
+            metaSet(key, { ...prev, last: maxMillis([prev.last, ...snap.docs.map(srvMillis)]), n: Math.max(prev.n || 0, map.size) });
+          }
+          cb([...map.values()]);
+        }, onErr(() => startDelta(meta)));
+        return map;
+      };
+      const start = async () => {
+        const meta = metaGet(key);
+        if (!meta) { startFull(); return; }
+        try {
+          const cached = await getDocsFromCache(col);
+          if (stopped) return;
+          if (decideMode(meta, cached.size) !== 'delta') { startFull(); return; }
+          // сначала сразу показываем всё, что есть в кэше, затем подключаем слушатель изменений
+          const map = startDelta(meta);
+          cached.docs.forEach((d) => map.set(d.id, shape(d)));
+          cb([...map.values()]);
+        } catch { if (!stopped) startFull(); }
       };
       start();
       return () => { stopped = true; clearTimeout(timer); unsub(); };
