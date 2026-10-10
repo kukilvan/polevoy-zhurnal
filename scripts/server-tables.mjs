@@ -47,8 +47,8 @@ for (const ref of await db.collection('projects').listDocuments()) {
     const fresh = { id: ref.id, ...(await tx.get(ref)).data() };
     tx.set(ref, { tables: applyPatches(fresh, patches) }, { merge: true });
   });
-  console.log(`${project.name}:`); report.forEach((l) => console.log(`  - ${l}`));
-  if (report.some((l) => l.includes('ОШИБКА'))) failed += 1;
+  console.log(`${project.name}:`);
+  report.forEach((l) => console.log(l.includes('ОШИБКА') ? `::warning::${project.name}: ${l}` : `  - ${l}`));
 }
 } catch (e) { fail('Общий сбой', e); }
 if (failed) console.log(`Проектов с ошибками: ${failed} (смотрите сообщения выше; в приложении тоже видно)`);
