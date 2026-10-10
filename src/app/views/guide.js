@@ -231,11 +231,33 @@ function sectionCard(s, ui) {
   return card;
 }
 
-// Свои слова хранятся в личных настройках (видны на всех устройствах Ивана, во всех проектах)
-const myWords = () => getRepo()?.prefs?.dictWords || [];
+// Свои слова и правки готовых слов хранятся в личных настройках (на всех устройствах Ивана, во всех проектах):
+// dictWords — добавленные слова, dictEdits — изменённые готовые слова (ключ — исходное слово), dictHidden — убранные готовые слова
+const prefs = () => getRepo()?.prefs || {};
+const myWords = () => prefs().dictWords || [];
+const saveP = (patch) => getRepo().saveUserPrefs(patch);
+
+// Все слова словарика: { key, a, he, d, kind: 'mine'|'builtin'|'edited' }
+function allWords() {
+  const edits = prefs().dictEdits || {}; const hidden = new Set(prefs().dictHidden || []);
+  const built = DICT.filter(([a]) => !hidden.has(a)).map(([a, he, d]) => {
+    const e = edits[a];
+    return e ? { key: a, a: e.term, he: e.he, d: e.meaning, kind: 'edited' } : { key: a, a, he, d, kind: 'builtin' };
+  });
+  const mine = myWords().map((w) => ({ key: w.id, a: w.term, he: w.he, d: w.meaning, kind: 'mine' }));
+  return [...built, ...mine].sort((x, y) => x.a.localeCompare(y.a, 'ru'));
+}
+
 function wordForm(w) {
-  const repo = getRepo();
-  const save = (list) => repo.saveUserPrefs({ dictWords: list });
+  const extra = [];
+  if (w?.kind === 'edited') extra.push({ label: 'Вернуть как было', onClick: async () => {
+    const e = { ...(prefs().dictEdits || {}) }; delete e[w.key]; saveP({ dictEdits: e }); toast('Возвращено'); return true; } });
+  if (w) extra.push({ label: 'Удалить слово', kind: 'danger', onClick: async () => {
+    if (!(await confirmDialog(`Удалить слово «${w.a}» из словарика?`, { yes: 'Удалить', danger: true }))) return false;
+    if (w.kind === 'mine') saveP({ dictWords: myWords().filter((x) => x.id !== w.key) });
+    else saveP({ dictHidden: [...new Set([...(prefs().dictHidden || []), w.key])] });
+    toast('Удалено'); return true;
+  } });
   formModal({
     title: w ? 'Изменить слово' : 'Новое слово',
     fields: [
@@ -243,14 +265,12 @@ function wordForm(w) {
       { key: 'he', label: 'На иврите', hint: 'Необязательно.' },
       { key: 'meaning', label: 'Значение', type: 'textarea', required: true },
     ],
-    values: { term: w?.term, he: w?.he, meaning: w?.meaning },
-    extra: w ? [{ label: 'Удалить слово', kind: 'danger', onClick: async () => {
-      if (!(await confirmDialog(`Удалить слово «${w.term}» из словарика?`, { yes: 'Удалить', danger: true }))) return false;
-      save(myWords().filter((x) => x.id !== w.id)); toast('Удалено'); return true;
-    } }] : [],
+    values: { term: w?.a, he: w?.he, meaning: w?.d }, extra,
     onSubmit: (v) => {
-      const item = { id: w?.id || newId(), term: v.term, he: v.he || '', meaning: v.meaning };
-      save(w ? myWords().map((x) => (x.id === w.id ? item : x)) : [...myWords(), item]);
+      const item = { term: v.term, he: v.he || '', meaning: v.meaning };
+      if (!w) saveP({ dictWords: [...myWords(), { id: newId(), ...item }] });
+      else if (w.kind === 'mine') saveP({ dictWords: myWords().map((x) => (x.id === w.key ? { id: x.id, ...item } : x)) });
+      else saveP({ dictEdits: { ...(prefs().dictEdits || {}), [w.key]: item } });
       toast('Сохранено');
     },
   });
@@ -261,16 +281,14 @@ function dictCard() {
   const list = h('div', {});
   const fill = () => {
     const f = q.trim().toLowerCase();
-    const all = [...DICT.map(([a, he, d]) => ({ a, he, d })), ...myWords().map((w) => ({ a: w.term, he: w.he, d: w.meaning, mine: w }))]
-      .sort((x, y) => x.a.localeCompare(y.a, 'ru'));
-    const items = all.filter((x) => !f || `${x.a} ${x.he} ${x.d}`.toLowerCase().includes(f));
-    list.replaceChildren(...(items.length ? items.map((x) => h('div', { class: 'item guide-dict', onclick: x.mine ? () => wordForm(x.mine) : null },
-      h('div', { class: 'name' }, h('div', { class: 'guide-term' }, h('span', {}, x.mine ? '✏️ ' : '', x.a), x.he ? h('span', { class: 'guide-he', dir: 'rtl' }, x.he) : null), h('div', { class: 'sub' }, x.d)))) : [h('div', { class: 'empty' }, 'Ничего не найдено')]));
+    const items = allWords().filter((x) => !f || `${x.a} ${x.he} ${x.d}`.toLowerCase().includes(f));
+    list.replaceChildren(...(items.length ? items.map((x) => h('div', { class: 'item guide-dict', onclick: () => wordForm(x) },
+      h('div', { class: 'name' }, h('div', { class: 'guide-term' }, h('span', {}, x.kind !== 'builtin' ? '✏️ ' : '', x.a), x.he ? h('span', { class: 'guide-he', dir: 'rtl' }, x.he) : null), h('div', { class: 'sub' }, x.d)))) : [h('div', { class: 'empty' }, 'Ничего не найдено')]));
   };
   fill();
   return h('div', { class: 'card guide-card', id: 'guide-dict' },
     h('div', { class: 'guide-title' }, '📖 Словарик'),
-    h('div', { class: 'guide-short' }, 'Слова из работы и их значение. Иврит написан так, как слова стоят в документах. Свои слова отмечены значком ✏️: нажмите на слово, чтобы изменить или удалить.'),
+    h('div', { class: 'guide-short' }, 'Слова из работы и их значение. Иврит написан так, как слова стоят в документах. Нажмите на любое слово, чтобы изменить или удалить его. Значок ✏️ — слово добавлено или изменено вами.'),
     h('div', { class: 'btns' }, h('button', { onclick: () => wordForm(null) }, '➕ Добавить слово')),
     h('input', { type: 'search', placeholder: 'Найти слово', oninput: (e) => { q = e.target.value; fill(); }, style: { marginTop: '8px' } }),
     h('div', { style: { marginTop: '6px' } }, list));
