@@ -142,3 +142,9 @@ html, body { overflow-x: hidden; }
 .monthnav-title { flex: 1; text-align: center; font-weight: 700; }
 .dt-row { display: flex; justify-content: space-between; align-items: center; gap: 12px; width: 100%; margin: 4px 0; text-align: left; }
 .dt-num { white-space: nowrap; }
+
+/* клавиатура открыта: окно ввода занимает только видимую часть экрана, нижняя панель прячется */
+:root.kb .backdrop { inset: auto; left: 0; right: 0; top: var(--vvt, 0px); height: var(--vvh, 100%); }
+:root.kb .sheet { max-height: 100%; padding-bottom: 0; }
+:root.kb nav { display: none; }
+:root.kb .wrap { padding-bottom: 40vh; }
