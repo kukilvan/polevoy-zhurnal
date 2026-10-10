@@ -8,3 +8,4 @@ export * from './month.js';
 export * from './managers.js';
 export * from './report.js';
 export * from './sync.js';
+export * from './deviceid.js';

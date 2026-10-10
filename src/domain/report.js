@@ -18,6 +18,8 @@ export const COLUMNS = [
   { id: 'cables', ru: 'Кабелей', he: "מס' כבלים", w: 85, kind: 'num' },
   { id: 'length', ru: 'Длина (орэх), м', he: "אורך (מ')", w: 100, kind: 'num' },
   { id: 'port', ru: 'Порт', he: 'פורט', w: 80 },
+  { id: 'serial', ru: 'Серийный номер', he: "מס' סידורי", w: 170 },
+  { id: 'mac', ru: 'MAC', he: 'MAC', w: 150 },
   { id: 'config', ru: 'Конфигурация двери', he: 'תצורת דלת', w: 220 },
   { id: 'delay', ru: 'Причина задержки', he: 'סיבת עיכוב', w: 150 },
   { id: 'note', ru: 'Примечание', he: 'הערה', w: 220 },
@@ -120,6 +122,8 @@ function cellOf(col, point, info, ctx, project, lang, nameOf) {
     case 'cables': return cablesCountOf(point, ctx);
     case 'length': return info.metrage || '';
     case 'port': return s(point.port);
+    case 'serial': return s(point.serial);
+    case 'mac': return s(point.mac);
     case 'config': return configText(point, project, ctx, lang);
     case 'delay': { const r = ctx.delayReasons.get(point.delayReasonId); return r ? (lang === 'he' ? (r.he || r.id) : r.id) : s(point.delayReasonId); }
     case 'note': return s(point.note);

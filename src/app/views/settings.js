@@ -2,7 +2,7 @@
 import { h, formModal, confirmDialog, toast } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { newId } from '../repo.js';
-import { installBinding, tablesOf, mainTable } from '../../domain/index.js';
+import { installBinding, tablesOf, mainTable, hasDeviceId } from '../../domain/index.js';
 import { installFields, describeBinding } from './install.js';
 import { projectForm } from './projects.js';
 import { updateManagerTable, backupNow } from './project.js';
@@ -59,13 +59,14 @@ export const REFS = {
       { key: 'nameHe', label: 'Название (иврит)', required: true },
       { key: 'defaultCable', label: 'Кабель по умолчанию', type: 'select', required: true, options: opts(ctx().cables, (c) => c.id), emptyLabel: 'Выберите' },
       { key: 'defaultCables', label: 'Кабелей на точку', type: 'number', required: true },
+      { key: 'scanId', label: 'Серийный номер и MAC (со сканером)', type: 'checkbox', hint: 'Поля появятся в карточке точки этого типа. У камер и вайфая включено по умолчанию.' },
       custom('stages', 'Этапы точки (видны в таблице руководства)', STAGES.map((s) => ({ value: s, label: s }))),
       ...installFields(ctx()),
       { key: 'asDefault', label: 'Привязку установки сделать умолчанием для новых проектов', type: 'checkbox' },
     ],
     defaults: { defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Проверка'], mode: 'none' },
-    toForm: (x) => ({ ...x, mode: installBinding(x).mode, workIds: installBinding(x).workIds }),
-    prepare: (v) => ({ nameHe: v.nameHe, defaultCable: v.defaultCable, defaultCables: v.defaultCables, stages: v.stages || [],
+    toForm: (x) => ({ ...x, scanId: hasDeviceId(x), mode: installBinding(x).mode, workIds: installBinding(x).workIds }),
+    prepare: (v) => ({ scanId: !!v.scanId, nameHe: v.nameHe, defaultCable: v.defaultCable, defaultCables: v.defaultCables, stages: v.stages || [],
       installMode: v.mode, installWorkIds: v.mode === 'works' ? (v.workIds || []) : [], isDoor: v.mode === 'config' }),
     after: (v, id) => {
       if (v.asDefault) getRepo().saveUserPrefs({ installDefaults: { ...(getRepo().prefs.installDefaults || {}), [id]: { mode: v.mode, workIds: v.mode === 'works' ? (v.workIds || []) : [] } } });

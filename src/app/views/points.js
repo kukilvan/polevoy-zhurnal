@@ -1,7 +1,8 @@
 // Точки: форма точки, генератор пачкой, карточка точки с историей, вкладка «Точки».
 import { h, formModal, openModal, confirmDialog, toast } from '../ui.js';
 import { state, getRepo, pointsSorted, infoOf, currentProject } from '../store.js';
-import { generateLabels, parseSuffixes, comparePoints, usesConfig } from '../../domain/index.js';
+import { generateLabels, parseSuffixes, comparePoints, usesConfig, hasDeviceId, normalizeMac, findDuplicate } from '../../domain/index.js';
+import { scanDevice } from '../scan.js';
 import { statusClass } from './project.js';
 import { hint } from './guide.js';
 import { dateText } from '../../domain/index.js';
@@ -9,9 +10,17 @@ import { addWorkForPoint } from './doh.js';
 import { whoIs } from './journal.js';
 
 const typeOptions = () => [...state.ctx.types.values()].map((t) => ({ value: t.id, label: t.id }));
+const hasIdType = (id) => hasDeviceId(state.ctx.types.get(id));
 const isDoorType = (id) => usesConfig(state.ctx.types.get(id));
 const configOptions = () => [...state.ctx.configs.values()].map((c) => ({ value: c.id, label: c.name }));
 const reasonOptions = () => [...state.ctx.delayReasons.values()].map((r) => ({ value: r.id, label: r.id }));
+
+// Поле со сканером: текстовое поле + кнопка «📷»
+function scanField(key, label, kind, value) {
+  const input = h('input', { type: 'text', value: value ?? '', autocomplete: 'off', autocapitalize: 'characters', style: { flex: 1, minWidth: 0 } });
+  const btn = h('button', { type: 'button', class: 'sec', onclick: () => scanDevice({ kind, onPick: (v) => { input.value = v; input.dispatchEvent(new Event('input', { bubbles: true })); } }) }, '📷');
+  return { key, label, type: 'custom', build: () => ({ el: h('div', { style: { display: 'flex', gap: '8px' } }, input, btn), get: () => (input.value.trim() === '' ? undefined : input.value.trim()) }) };
+}
 
 export function pointForm(point, { onDone } = {}) {
   const repo = getRepo(); const pid = currentProject().id;
@@ -23,6 +32,8 @@ export function pointForm(point, { onDone } = {}) {
     { key: 'length', label: 'Длина (м на 1 кабель)', type: 'number' },
     { key: 'configId', label: 'Конфигурация двери (если отличается от проекта)', type: 'select', options: configOptions(), visible: (v) => isDoorType(v.typeId) },
     { key: 'port', label: 'Порт' },
+    { ...scanField('serial', 'Серийный номер', 'serial', point?.serial), visible: (v) => hasIdType(v.typeId) },
+    { ...scanField('mac', 'MAC', 'mac', point?.mac), visible: (v) => hasIdType(v.typeId) },
     { key: 'delayReasonId', label: 'Причина задержки', type: 'select', options: reasonOptions() },
     { key: 'note', label: 'Примечание', type: 'textarea' },
   ];
@@ -36,10 +47,15 @@ export function pointForm(point, { onDone } = {}) {
       const label = v.label;
       const dup = [...state.ctx.points.values()].find((p) => p.label === label && p.id !== point?.id);
       if (dup) { toast('Точка с таким обозначением уже есть'); return false; }
+      const idOn = hasIdType(v.typeId);
+      const mac = idOn && v.mac ? (normalizeMac(v.mac) || v.mac) : undefined; const serial = idOn ? v.serial : undefined;
+      const pts = state.ctx.points.values();
+      const dm = mac && findDuplicate(pts, point, 'mac', mac); const ds = serial && findDuplicate(state.ctx.points.values(), point, 'serial', serial);
+      if (dm || ds) { toast(`${dm ? 'Такой MAC' : 'Такой серийный номер'} уже у точки ${(dm || ds).label}`); return false; }
       if (v.length !== undefined && !(v.length >= 0)) { toast('Длина должна быть числом'); return false; }
       repo.save(pid, [{ coll: 'points', id: point?.id, data: {
         label, planName: v.planName, cabinet: v.cabinet, floor: v.floor, typeId: v.typeId, length: v.length,
-        configId: isDoorType(v.typeId) ? v.configId : undefined, port: v.port, delayReasonId: v.delayReasonId, note: v.note,
+        configId: isDoorType(v.typeId) ? v.configId : undefined, port: v.port, serial, mac, delayReasonId: v.delayReasonId, note: v.note,
       } }]);
       toast(point ? 'Сохранено' : 'Точка добавлена'); onDone?.();
     },
@@ -138,7 +154,7 @@ export function pointCard(startPoint) {
       ['Шкаф / этаж', [p.cabinet && `шкаф ${p.cabinet}`, p.floor && `этаж ${p.floor}`].filter(Boolean).join(', ')],
       ['Тип', p.typeId], ['Имя в плане', p.planName], ['Кабель', info.cable],
       ['Длина', hasLen ? `${p.length} м на 1 кабель${info.metrage ? ` (всего ${Math.round(info.metrage * 100) / 100} м)` : ''}` : ''],
-      ['Конфигурация', usesConfig(ctx.types.get(p.typeId)) ? cfg?.name : ''], ['Порт', p.port], ['Причина задержки', p.delayReasonId], ['Примечание', p.note],
+      ['Конфигурация', usesConfig(ctx.types.get(p.typeId)) ? cfg?.name : ''], ['Порт', p.port], ['Серийный номер', p.serial], ['MAC', p.mac], ['Причина задержки', p.delayReasonId], ['Примечание', p.note],
     ].filter(([, v]) => v);
     const rows = (ctx.journalByPoint.get(p.id) || []).map((r) => ({ ...r, work: ctx.catalog.get(r.workId)?.name || r.action || '?' }))
       .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.order - a.order));

@@ -387,3 +387,23 @@ test('срок хранения удалённого: год, затем уда�
   assert.equal(purgeDate(now), now + 365 * DAY); assert.equal(purgeDate(0), 0);
   assert.equal(historyCutoff(now), now - 365 * DAY);
 });
+
+test('серийный номер и MAC: разбор считанного', async () => {
+  const d = await import('../src/domain/deviceid.js');
+  assert.equal(d.normalizeMac('a4:14:37:0b:12:cd'), 'A4:14:37:0B:12:CD');
+  assert.equal(d.normalizeMac('A414370B12CD'), 'A4:14:37:0B:12:CD');
+  assert.equal(d.normalizeMac('A4-14-37-0B-12-CD'), 'A4:14:37:0B:12:CD');
+  assert.equal(d.normalizeMac('DS-2CD2143G2'), '');
+  assert.deepEqual(d.macsIn('SN:XYZ12345 MAC: a4:14:37:0b:12:cd'), ['A4:14:37:0B:12:CD']);
+  assert.deepEqual(d.labeledSerials('S/N: DS2CD1234567 MAC 11:22:33:44:55:66'), ['DS2CD1234567']);
+  assert.deepEqual(d.labeledSerials('https://x.com/p?sn=ABC123456&a=1'), ['ABC123456']);
+  const mac = d.candidatesFor('mac', ['DS-2CD2143G2-I20200101AAWR', 'A414370B12CD']);
+  assert.equal(mac[0].value, 'A4:14:37:0B:12:CD'); assert.equal(mac[0].sure, true);
+  const sn = d.candidatesFor('serial', ['A414370B12CD', 'DS-2CD2143G2-I20200101AAWR']);
+  assert.equal(sn[0].value, 'DS-2CD2143G2-I20200101AAWR');
+  assert.equal(d.hasDeviceId({ id: 'Камера' }), true); assert.equal(d.hasDeviceId({ id: 'Дверь' }), false); assert.equal(d.hasDeviceId({ id: 'Дверь', scanId: true }), true);
+  const pts = [{ id: 'a', mac: 'A4:14:37:0B:12:CD' }, { id: 'b', serial: 'abc1' }];
+  assert.equal(d.findDuplicate(pts, { id: 'c' }, 'mac', 'a414370b12cd').id, 'a');
+  assert.equal(d.findDuplicate(pts, { id: 'a' }, 'mac', 'a414370b12cd'), null);
+  assert.equal(d.findDuplicate(pts, { id: 'c' }, 'serial', 'ABC1').id, 'b');
+});
