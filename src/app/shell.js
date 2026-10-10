@@ -6,6 +6,7 @@ import { settingsView, refView, REFS } from './views/settings.js';
 import { membersView } from './views/members.js';
 import { installView } from './views/install.js';
 import { PENDING } from './google.js';
+import { onPendingChange } from './repo.js';
 import { projectView, updateManagerTable, updateTable, backupNow } from './views/project.js';
 import { meterView } from './views/points.js';
 import { cabinetsView } from './views/cabinets.js';
@@ -103,6 +104,7 @@ export function createShell({ user, onLogout, diag }) {
     return badge;
   }
   setInterval(paintBadge, 5000);
+  onPendingChange(paintBadge);
 
   function render() {
     const p = currentProject();

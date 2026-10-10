@@ -1,5 +1,5 @@
 // Состояние приложения: проекты пользователя, данные текущего проекта и контекст расчётов.
-import { COLLECTIONS } from './repo.js';
+import { COLLECTIONS, ownPendingCount } from './repo.js';
 import { buildContext, pointInfo, comparePoints } from '../domain/index.js';
 import { info } from '../log.js';
 
@@ -34,7 +34,8 @@ function rebuild() {
 }
 
 // Сколько записей ещё не отправлено на сервер (Firestore помечает их hasPendingWrites)
-export const pendingCount = () => Object.values(state.data).reduce((n, arr) => n + arr.filter((d) => d._pending).length, 0) + (currentProject()?._pending ? 1 : 0);
+export const pendingCount = () => Math.max(ownPendingCount(),
+  Object.values(state.data).reduce((n, arr) => n + arr.filter((d) => d._pending).length, 0) + (currentProject()?._pending ? 1 : 0));
 
 export const liveProjects = () => state.projects.filter((p) => !p.deleted && !p.archived);
 export const archivedProjects = () => state.projects.filter((p) => !p.deleted && p.archived);

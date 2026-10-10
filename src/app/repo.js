@@ -24,6 +24,18 @@ export function newId(len = 12) {
   return Array.from(bytes, (b) => ALPHABET[b % ALPHABET.length]).join('');
 }
 
+// Счётчик записей, отправленных в базу, но ещё не подтверждённых сервером (офлайн они ждут связи)
+let ownPending = 0; const pendingSubs = new Set();
+export const ownPendingCount = () => ownPending;
+export const onPendingChange = (fn) => { pendingSubs.add(fn); return () => pendingSubs.delete(fn); };
+const track = (promise, n) => {
+  if (!promise?.then) return promise;
+  ownPending += n; pendingSubs.forEach((f) => f());
+  const done = () => { ownPending = Math.max(0, ownPending - n); pendingSubs.forEach((f) => f()); };
+  promise.then(done, done);
+  return promise;
+};
+
 const clean = (obj) => JSON.parse(JSON.stringify(obj, (k, v) => (v === undefined ? null : v)));
 const strip = (obj) => { const c = clean(obj); delete c._pending; return c; };
 
@@ -224,7 +236,7 @@ export function createRepo(backend, user) {
         ids.push(id);
       });
       info(`Запись в базу: ${ops.map((o) => `${o.coll}${o.data?.deleted ? '(удал.)' : ''}`).join(', ')}`);
-      backend.commit(pid, writes)?.catch?.((e) => error('Запись отклонена', `${e.code || ''} ${e.message || e}`));
+      track(backend.commit(pid, writes), ops.length)?.catch?.((e) => error('Запись отклонена', `${e.code || ''} ${e.message || e}`));
       return ids;
     },
     // Мягкое удаление: запись остаётся, помечается deleted (откат — restore)
@@ -257,7 +269,7 @@ export function createRepo(backend, user) {
     saveProject(pid, patch) {
       const now = Date.now();
       const data = clean({ ...patch, id: pid, updatedBy: by.uid, updatedByName: by.name, updatedAt: now });
-      backend.commit(pid, [{ coll: 'projects', id: pid, data }])?.catch?.((e) => error('Запись проекта отклонена', `${e.code || ''} ${e.message || e}`));
+      track(backend.commit(pid, [{ coll: 'projects', id: pid, data }]), 1)?.catch?.((e) => error('Запись проекта отклонена', `${e.code || ''} ${e.message || e}`));
     },
     // История изменений и откат. Откат сам записывается в историю, поэтому его тоже можно отменить.
     loadHistory: (pid, since, max = 2000) => backend.loadHistory(pid, since, max),
