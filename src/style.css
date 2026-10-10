@@ -109,7 +109,8 @@ html, body { overflow-x: hidden; }
 .guide-li { position: relative; padding-left: 16px; margin: 6px 0; line-height: 1.45; }
 .guide-li::before { content: '•'; position: absolute; left: 4px; color: var(--mut); }
 .guide-p { margin: 6px 0; line-height: 1.45; }
-.guide-he { color: var(--mut); font-weight: 400; margin-inline-start: 8px; }
+.guide-term { display: flex; justify-content: space-between; align-items: baseline; gap: 16px; }
+.guide-he { color: var(--mut); font-weight: 400; white-space: nowrap; }
 .guide-hint { border: 1px dashed var(--line); border-radius: 12px; padding: 12px 14px; color: var(--mut); line-height: 1.45; }
 .guide-hint .btns { margin-top: 8px; }
 

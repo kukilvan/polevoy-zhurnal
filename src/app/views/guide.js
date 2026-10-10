@@ -183,7 +183,7 @@ const DICT = [
   ['Арон', 'ארון', 'Шкаф (коммутационный). В приложении — «Шкаф».'],
   ['Бакар', 'בקר', 'Контроллер системы доступа (управляет дверьми).'],
   ['Галай', 'גלאי', 'Датчик, детектор (например, движения).'],
-  ['Вайфай (экспоинт)', 'אקספוינט', 'Устройство, которое раздаёт Wi-Fi.'],
+  ['Вайфай (аксэспоинт)', 'אקסס פוינט', 'Устройство, которое раздаёт Wi-Fi.'],
   ['Авизарим', 'אביזרים', 'Устройства и принадлежности, которые устанавливают на точке (считыватели, замки, кнопки…).'],
   ['Коре картисим', 'קורא כרטיסים', 'Считыватель карт.'],
   ['Коре биометри', 'קורא ביומטרי', 'Биометрический считыватель.'],
@@ -265,15 +265,15 @@ function dictCard() {
       .sort((x, y) => x.a.localeCompare(y.a, 'ru'));
     const items = all.filter((x) => !f || `${x.a} ${x.he} ${x.d}`.toLowerCase().includes(f));
     list.replaceChildren(...(items.length ? items.map((x) => h('div', { class: 'item guide-dict', onclick: x.mine ? () => wordForm(x.mine) : null },
-      h('div', { class: 'name' }, x.mine ? '✏️ ' : '', x.a, x.he ? h('span', { class: 'guide-he', dir: 'rtl' }, x.he) : null, h('div', { class: 'sub' }, x.d)))) : [h('div', { class: 'empty' }, 'Ничего не найдено')]));
+      h('div', { class: 'name' }, h('div', { class: 'guide-term' }, h('span', {}, x.mine ? '✏️ ' : '', x.a), x.he ? h('span', { class: 'guide-he', dir: 'rtl' }, x.he) : null), h('div', { class: 'sub' }, x.d)))) : [h('div', { class: 'empty' }, 'Ничего не найдено')]));
   };
   fill();
   return h('div', { class: 'card guide-card', id: 'guide-dict' },
     h('div', { class: 'guide-title' }, '📖 Словарик'),
     h('div', { class: 'guide-short' }, 'Слова из работы и их значение. Иврит написан так, как слова стоят в документах. Свои слова отмечены значком ✏️: нажмите на слово, чтобы изменить или удалить.'),
+    h('div', { class: 'btns' }, h('button', { onclick: () => wordForm(null) }, '➕ Добавить слово')),
     h('input', { type: 'search', placeholder: 'Найти слово', oninput: (e) => { q = e.target.value; fill(); }, style: { marginTop: '8px' } }),
-    h('div', { style: { marginTop: '6px' } }, list),
-    h('div', { class: 'btns' }, h('button', { onclick: () => wordForm(null) }, '➕ Добавить слово')));
+    h('div', { style: { marginTop: '6px' } }, list));
 }
 
 export function openGuide(ui, id) {
