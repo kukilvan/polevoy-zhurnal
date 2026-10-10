@@ -407,3 +407,18 @@ test('серийный номер и MAC: разбор считанного', as
   assert.equal(d.findDuplicate(pts, { id: 'a' }, 'mac', 'a414370b12cd'), null);
   assert.equal(d.findDuplicate(pts, { id: 'c' }, 'serial', 'ABC1').id, 'b');
 });
+
+test('«Что осталось»: чего не хватает точке, с учётом этапов типа и привязки установки', async () => {
+  const { remaining, missingStages } = await import('../src/domain/remaining.js');
+  const bakar = { id: 'b1', projectId: 'P1', label: '1A-B1', cabinet: '1A', typeId: 'Бакар' };
+  const cam2 = { id: 'c2', projectId: 'P1', label: '2B-01', cabinet: '2B', typeId: 'Камера' };
+  const ctx = scenario([cam, bakar, cam2], [day('D1', '2026-10-05')], [
+    entry('e1', 'D1', 'Хивут', 'HIV_KEY', ['c1']),
+    entry('e2', 'D1', 'Хивут', 'HIV_DEV', ['b1']), entry('e3', 'D1', 'Проверка', 'CHK_FLUKE', ['b1']),
+  ]);
+  assert.deepEqual(missingStages(ctx.points.get('c1'), ctx), ['Установка', 'Проверка']);
+  assert.deepEqual(missingStages(ctx.points.get('b1'), ctx), []); // у бакара установки нет, всё остальное сделано
+  assert.deepEqual(missingStages(ctx.points.get('c2'), ctx), ['Хивут', 'Установка', 'Проверка']);
+  const r = remaining(ctx);
+  assert.deepEqual(r.map((g) => [g.cabinet, g.items.length]), [['1A', 1], ['2B', 1]]);
+});

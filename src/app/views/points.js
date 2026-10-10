@@ -1,7 +1,7 @@
 // Точки: форма точки, генератор пачкой, карточка точки с историей, вкладка «Точки».
 import { h, formModal, openModal, confirmDialog, toast } from '../ui.js';
 import { state, getRepo, pointsSorted, infoOf, currentProject } from '../store.js';
-import { generateLabels, parseSuffixes, comparePoints, usesConfig, hasDeviceId, normalizeMac, findDuplicate } from '../../domain/index.js';
+import { generateLabels, parseSuffixes, comparePoints, usesConfig, remaining, REMAIN_STAGES, hasDeviceId, normalizeMac, findDuplicate } from '../../domain/index.js';
 import { scanDevice } from '../scan.js';
 import { statusClass } from './project.js';
 import { hint } from './guide.js';
@@ -180,6 +180,28 @@ export function pointCard(startPoint) {
   close = openModal(startPoint.label, body);
 }
 
+// «Что осталось»: точки без хивута / установки / проверки по шкафам
+function remainingModal() {
+  let stage = '';
+  const body = h('div', {});
+  let close = () => {};
+  const fill = () => {
+    const groups = remaining(state.ctx).map((g) => ({ ...g, items: g.items.filter((x) => !stage || x.missing.includes(stage)) })).filter((g) => g.items.length);
+    const n = groups.reduce((s, g) => s + g.items.length, 0);
+    const sel = h('select', { onchange: (e) => { stage = e.target.value; fill(); } },
+      h('option', { value: '' }, 'Все этапы'), ...REMAIN_STAGES.map((s) => h('option', { value: s, selected: s === stage }, `Без этапа «${s}»`)));
+    body.replaceChildren(sel, h('div', { class: 'mut', style: { margin: '8px 2px' } }, n ? `Точек, где ещё что-то не сделано: ${n}` : 'Всё сделано 🎉'),
+      ...groups.flatMap((g) => [
+        h('div', { class: 'group' }, `${g.cabinet ? `Шкаф ${g.cabinet}` : 'Без шкафа'} · ${g.items.length}`),
+        ...g.items.map(({ point, missing }) => h('div', { class: 'item', onclick: () => { close(); setTimeout(() => pointCard(point), 60); } },
+          h('div', { class: 'name' }, point.label, h('div', { class: 'sub' }, `${point.typeId}${point.planName ? ` · ${point.planName}` : ''}`)),
+          h('div', { class: 'sub', style: { textAlign: 'right' } }, missing.map((m) => `без ${({ 'Хивут': 'хивута', 'Установка': 'установки', 'Проверка': 'проверки' })[m] || m}`).join(', ')))),
+      ]));
+  };
+  fill();
+  close = openModal('Что осталось', body);
+}
+
 // Массовые действия: выбранные точки (живёт, пока открыто приложение)
 let selMode = false; const selected = new Set();
 
@@ -267,7 +289,8 @@ export function meterView(ui) {
   return h('div', {},
     h('div', { class: 'btns', style: { marginTop: 0 } },
       h('button', { onclick: () => generatorForm() }, '➕ Точки пачкой'),
-      h('button', { class: 'sec', onclick: () => pointForm(null) }, 'Новая точка')),
+      h('button', { class: 'sec', onclick: () => pointForm(null) }, 'Новая точка'),
+      h('button', { class: 'wide sec', onclick: () => remainingModal() }, '🧾 Что осталось')),
     h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '10px 2px' } },
       h('span', { class: 'mut' }, `Точек: ${total.length} · с длиной: ${withLen}`),
       selMode ? null : h('button', { class: 'sec', style: { padding: '6px 12px' }, onclick: () => { selMode = true; ui.render(); } }, '☑ Выбрать')),
