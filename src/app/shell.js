@@ -1,6 +1,6 @@
 // Оболочка: верхняя панель, нижняя панель из 5 экранов, меню, переключение экранов.
-import { h, openModal } from './ui.js';
-import { state, subscribe, currentProject, ready, getRepo, setCurrentProject } from './store.js';
+import { h, openModal, toast } from './ui.js';
+import { state, subscribe, currentProject, ready, getRepo, setCurrentProject, pendingCount } from './store.js';
 import { projectsView, projectForm } from './views/projects.js';
 import { settingsView, refView, REFS } from './views/settings.js';
 import { membersView } from './views/members.js';
@@ -82,6 +82,28 @@ export function createShell({ user, onLogout, diag }) {
     }
   }
 
+  // «⏳ N ждут отправки»: записи, ещё не дошедшие до сервера. Если онлайн, а они висят дольше полутора минут — красный
+  let pendingSince = 0; let badge = null;
+  const paintBadge = () => {
+    const n = pendingCount();
+    if (!n) { pendingSince = 0; if (badge) badge.style.display = 'none'; return n; }
+    if (!pendingSince) pendingSince = Date.now();
+    if (badge) {
+      badge.style.display = ''; badge.textContent = `⏳ ${n} ждут отправки`;
+      badge.className = `pill ${state.online && Date.now() - pendingSince > 90000 ? 'err' : 'warn'}`;
+    }
+    return n;
+  };
+  function pendingBadge() {
+    badge = h('span', { class: 'pill warn', style: { display: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }, onclick: () => {
+      const n = pendingCount();
+      toast(!n ? 'Всё отправлено на сервер' : state.online ? `Ждут отправки: ${n}. Если число не уменьшается — проверьте связь или лимит базы (Проект → «Чтений базы»)` : `Ждут отправки: ${n}. Они уйдут на сервер сами, когда появится интернет`);
+    } });
+    paintBadge();
+    return badge;
+  }
+  setInterval(paintBadge, 5000);
+
   function render() {
     const p = currentProject();
     const title = ui.screen === 'ref' ? REFS[state.settingsRef]?.title : ui.screen ? SCREEN_TITLES[ui.screen] : (p?.name || 'Полевой журнал');
@@ -89,6 +111,7 @@ export function createShell({ user, onLogout, diag }) {
       h('div', { class: 'topbar' },
         ui.screen ? h('button', { class: 'sec', onclick: () => ui.back() }, '←') : h('button', { class: 'sec', onclick: menu }, '☰'),
         h('div', { class: 'title' }, title),
+        pendingBadge(),
         h('span', { class: `pill ${state.online ? 'ok' : 'warn'}` }, state.online ? 'онлайн' : 'офлайн'),
         ui.screen ? null : h('button', { class: 'sec', onclick: menu }, '⋯')),
       h('div', { class: 'wrap' }, invitesBanner(), content()),
