@@ -16,8 +16,7 @@ export const COLUMNS = [
   { id: 'type', ru: 'Тип', he: 'סוג', w: 120 },
   { id: 'cable', ru: 'Кабель', he: 'כבל', w: 110 },
   { id: 'cables', ru: 'Кабелей', he: "מס' כבלים", w: 85, kind: 'num' },
-  { id: 'length', ru: 'Длина, м', he: "אורך (מ')", w: 90, kind: 'num' },
-  { id: 'metrage', ru: 'Метраж, м', he: "מטראז' (מ')", w: 100, kind: 'num' },
+  { id: 'length', ru: 'Длина (орэх), м', he: "אורך (מ')", w: 100, kind: 'num' },
   { id: 'port', ru: 'Порт', he: 'פורט', w: 80 },
   { id: 'config', ru: 'Конфигурация двери', he: 'תצורת דלת', w: 220 },
   { id: 'delay', ru: 'Причина задержки', he: 'סיבת עיכוב', w: 150 },
@@ -57,10 +56,12 @@ export const defaultTables = () => [
   { id: 't_main', name: 'Для руководства', main: true, lang: 'he', cabinets: [], types: [], statuses: [], layout: 'one', summary: true,
     columns: ['label', 'planName', 'type', 'cabinet', 'floor', 'cable', 'pulled', 'hived', 'installed', 'checked'] },
   { id: 't_ext', name: 'Расширенная', main: false, lang: 'ru', cabinets: [], types: [], statuses: [], layout: 'one', summary: true,
-    columns: ['label', 'planName', 'cabinet', 'floor', 'type', 'cable', 'cables', 'length', 'metrage', 'port', 'config', 'delay', 'status',
+    columns: ['label', 'planName', 'cabinet', 'floor', 'type', 'cable', 'cables', 'length', 'port', 'config', 'delay', 'status',
       'pulled', 'hived', 'installed', 'checked', 'checkResult', 'shilut', 'lastBy', 'note'] },
 ];
-export const tablesOf = (project) => (project?.tables?.length ? project.tables : defaultTables());
+// Старый столбец «метраж» слит со столбцом «длина»: в сохранённых профилях заменяем и убираем дубли
+const fixColumns = (t) => ({ ...t, columns: [...new Set((t.columns || []).map((c) => (c === 'metrage' ? 'length' : c)))] });
+export const tablesOf = (project) => (project?.tables?.length ? project.tables.map(fixColumns) : defaultTables());
 export const mainTable = (project) => { const t = tablesOf(project); return t.find((x) => x.main) || t[0]; };
 // Новый список профилей с изменениями одного (patch); основной всегда ровно один
 export function withTable(project, id, patch) {
@@ -114,8 +115,7 @@ function cellOf(col, point, info, ctx, project, lang, nameOf) {
     case 'type': return lang === 'he' ? (type?.nameHe || point.typeId) : point.typeId;
     case 'cable': { const id = cableOf(point, ctx); return lang === 'he' ? (ctx.cables.get(id)?.nameHe || s(id)) : s(id); }
     case 'cables': return cablesCountOf(point, ctx);
-    case 'length': return point.length === undefined || point.length === null || point.length === '' ? '' : Number(point.length);
-    case 'metrage': return info.metrage || '';
+    case 'length': return info.metrage || '';
     case 'port': return s(point.port);
     case 'config': return configText(point, project, ctx, lang);
     case 'delay': { const r = ctx.delayReasons.get(point.delayReasonId); return r ? (lang === 'he' ? (r.he || r.id) : r.id) : s(point.delayReasonId); }

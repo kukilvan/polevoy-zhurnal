@@ -28,7 +28,7 @@ export function sheetRequests(sheetId, sh) {
   sh.rules.forEach((r) => {
     const cell = `${colLetter(r.col)}${rowNo}`;
     const cond = r.kind === 'number' ? { type: 'CUSTOM_FORMULA', values: [{ userEnteredValue: `=ISNUMBER(${cell})` }] }
-      : r.kind === 'blank' ? { type: 'CUSTOM_FORMULA', values: [{ userEnteredValue: `=AND(COUNTA($A${rowNo}:$Z${rowNo})>0,LEN(${cell})=0)` }] }
+      : r.kind === 'blank' ? { type: 'CUSTOM_FORMULA', values: [{ userEnteredValue: `=AND(COUNTA($A${rowNo}:$${colLetter(Math.max(nCols - 1, 0))}${rowNo})>0,LEN(${cell})=0)` }] }
         : { type: r.kind === 'eq' ? 'TEXT_EQ' : 'TEXT_STARTS_WITH', values: [{ userEnteredValue: r.text }] };
     const format = { backgroundColor: rgb(r.color), ...(r.textColor ? { textFormat: { foregroundColor: rgb(r.textColor) } } : {}) };
     out.push({ addConditionalFormatRule: { rule: { ranges: [range(first, lastRow, r.col, r.col + 1)], booleanRule: { condition: cond, format } }, index: 0 } });
