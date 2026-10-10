@@ -40,7 +40,7 @@ const fail = (m, e) => { console.log(`::error::${m}: ${String(e?.stack || e).rep
 try {
 for (const ref of await db.collection('projects').listDocuments()) {
   const { project, data } = await readProject(ref, NEED);
-  if (isDeleted(project)) continue;
+  if (isDeleted(project) || project.archived) continue; // архивные проекты не обновляем
   // адрес сервера записываем в проект: приложение откроет ему доступ к файлам таблиц
   await ref.set({ serverEmail: cred.client_email }, { merge: true });
   if (!autoTables(project).length) { console.log(`${project.name}: нет таблиц для автообновления`); continue; }
