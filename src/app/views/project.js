@@ -1,5 +1,5 @@
 // Вкладка «Проект»: карточка текущего проекта и сводка по точкам.
-import { readsCount } from '../repo.js';
+import { readsCount, readsToday, readsResetAt, DAILY_READ_LIMIT } from '../repo.js';
 import { state, currentProject, pointsSorted, infoOf, getRepo } from '../store.js';
 import { projectForm } from './projects.js';
 import { pointForm, generatorForm } from './points.js';
@@ -112,6 +112,14 @@ function ctxMetres() {
   return m ? `Метраж по точкам с длиной: ${Math.round(m * 100) / 100} м` : '';
 }
 
+// Чтения базы: сколько осталось от суточного лимита (по этому устройству) и когда лимит сбросится
+function readsLine() {
+  const used = readsToday(); const left = Math.max(0, DAILY_READ_LIMIT - used);
+  const at = readsResetAt(); const hhmm = at.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+  const day = at.toDateString() === new Date().toDateString() ? 'сегодня' : 'завтра';
+  return `📈 Чтений базы: осталось ${left.toLocaleString('ru-RU')} из ${DAILY_READ_LIMIT.toLocaleString('ru-RU')} (с этого телефона; за этот запуск ${readsCount()}). Лимит сбросится ${day} в ${hhmm}`;
+}
+
 // Ночная копия на сервере: когда была последняя; красным, если давно (копии идут раз в 2 дня)
 function autoBackupLine(p) {
   if (!p.serverBackupAt) return h('div', { class: 'mut', style: { width: '100%' } }, 'Автокопия на сервере ещё не запускалась');
@@ -152,7 +160,7 @@ export function projectView(ui) {
       h('button', { class: 'wide', onclick: () => openToday(ui) }, '📝 Сегодня'),
       h('button', { class: 'sec', onclick: () => ui.open('projects') }, 'Все проекты'),
       autoBackupLine(p),
-      h('div', { class: 'mut', style: { width: '100%' } }, `📈 Чтений базы с сервера за этот запуск: ${readsCount()} (лимит в день — 50 000)`),
+      h('div', { class: 'mut', style: { width: '100%' } }, readsLine()),
       h('button', { class: 'sec', onclick: backupNow }, p.backupAt ? `💾 Резервная копия (последняя: ${new Date(p.backupAt).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })})` : '💾 Резервная копия на Диск'),
       h('button', { class: 'sec', onclick: exportExcel }, '📊 Выгрузить всё в Excel'),
       h('button', { class: 'sec', onclick: updateManagerTable }, '🔄 Обновить таблицу для руководства'),

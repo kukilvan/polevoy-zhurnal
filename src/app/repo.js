@@ -93,6 +93,25 @@ const metaSet = (k, v) => { try { localStorage.setItem(k, JSON.stringify(v)); } 
 const srvMillis = (d) => { const v = d.get('updatedAtServer'); return v && typeof v.toMillis === 'function' ? v.toMillis() : 0; };
 let serverReads = 0; // сколько документов прочитано с сервера за этот запуск (для проверки экономии)
 export const readsCount = () => serverReads;
+// Суточный счётчик чтений на этом устройстве. Суточный лимит Firebase сбрасывается в полночь по тихоокеанскому времени (США).
+export const DAILY_READ_LIMIT = 50000;
+const ptNow = () => {
+  const f = new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Los_Angeles', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' });
+  return Object.fromEntries(f.formatToParts(new Date()).map((x) => [x.type, x.value]));
+};
+const ptDay = () => { const t = ptNow(); return `${t.year}-${t.month}-${t.day}`; };
+export function readsToday() {
+  try { const o = JSON.parse(localStorage.getItem('pz.reads') || 'null'); return o && o.day === ptDay() ? o.n : 0; } catch { return 0; }
+}
+// Когда сбросится лимит (местное время)
+export function readsResetAt() {
+  const t = ptNow(); const left = 86400 - (Number(t.hour) * 3600 + Number(t.minute) * 60 + Number(t.second));
+  return new Date(Date.now() + left * 1000);
+}
+const addReads = (n) => {
+  if (!n) return; serverReads += n;
+  try { localStorage.setItem('pz.reads', JSON.stringify({ day: ptDay(), n: readsToday() + n })); } catch { /* без хранилища */ }
+};
 
 // ---------- хранилище: Firestore ----------
 export function createFirestoreBackend(db, uid) {
@@ -105,7 +124,7 @@ export function createFirestoreBackend(db, uid) {
     },
     async loadHistory(pid, since, max) {
       const q = query(collection(db, 'projects', pid, 'history'), where('at', '>=', since), orderBy('at', 'desc'), fbLimit(max));
-      const snap = await getDocs(q); serverReads += snap.size;
+      const snap = await getDocs(q); addReads(snap.size);
       return snap.docs.map((d) => d.data());
     },
     listenInvitations(email, uid, cb) {
@@ -130,7 +149,7 @@ export function createFirestoreBackend(db, uid) {
         unsub = onSnapshot(col, (snap) => {
           tries = 0;
           if (!snap.metadata.fromCache) {
-            serverReads += snap.docChanges().length;
+            addReads(snap.docChanges().length);
             const prev = metaGet(key) || {};
             const last = maxMillis([prev.last, ...snap.docs.map(srvMillis)]);
             if (last > 0 && !snap.metadata.hasPendingWrites) { metaSet(key, { last, full: stamped ? prev.full : Date.now(), n: snap.size }); stamped = true; }
@@ -144,7 +163,7 @@ export function createFirestoreBackend(db, uid) {
         const q = query(col, where('updatedAtServer', '>', Timestamp.fromMillis(meta.last - DELTA_MARGIN)));
         unsub = onSnapshot(q, (snap) => {
           tries = 0;
-          if (!snap.metadata.fromCache) serverReads += snap.docChanges().length;
+          if (!snap.metadata.fromCache) addReads(snap.docChanges().length);
           snap.docChanges().forEach((ch) => { if (ch.type === 'removed') map.delete(ch.doc.id); else map.set(ch.doc.id, shape(ch.doc)); });
           const prev = metaGet(key) || meta;
           if (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites) {
