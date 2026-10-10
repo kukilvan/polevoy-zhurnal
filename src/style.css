@@ -103,3 +103,19 @@ html, body { overflow-x: hidden; }
 .guide-he { color: var(--mut); font-weight: 400; margin-inline-start: 8px; }
 .guide-hint { border: 1px dashed var(--line); border-radius: 12px; padding: 12px 14px; color: var(--mut); line-height: 1.45; }
 .guide-hint .btns { margin-top: 8px; }
+
+/* «Что осталось»: свой прокручиваемый список, заголовки шкафов липнут к его верху */
+.rem-total { margin: 10px 2px; font-size: 15px; color: var(--mut); } .rem-total b { color: var(--txt); font-size: 18px; }
+.rem-list { overflow: auto; max-height: 58vh; border: 1px solid var(--line); border-radius: 10px; background: #172033; }
+.rem-group { position: sticky; top: 0; z-index: 2; display: flex; justify-content: space-between; align-items: center; padding: 9px 12px; background: #0b1220; border-bottom: 1px solid var(--line); border-left: 4px solid var(--warn); font-weight: 700; font-size: 14px; letter-spacing: .03em; text-transform: uppercase; }
+.rem-count { background: var(--warn); color: #1c1203; border-radius: 999px; padding: 1px 9px; font-size: 13px; }
+.rem-row { display: flex; align-items: center; gap: 10px; padding: 11px 12px; border-bottom: 1px solid var(--line); cursor: pointer; }
+.rem-row:nth-child(odd) { background: #1b2740; }
+.rem-row:active { background: #243350; }
+.rem-name { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; }
+.rem-name b { font-size: 18px; color: #fff; } .rem-name span { font-size: 13px; color: var(--mut); }
+.rem-chips { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; max-width: 66%; }
+.chip { font-size: 11.5px; font-weight: 700; padding: 2px 7px; border-radius: 999px; border: 1px solid; white-space: nowrap; }
+.chip.hiv { color: #fbbf24; border-color: #b4770f; background: #3a2a0a; }
+.chip.ins { color: #c4b5fd; border-color: #6d54c9; background: #261f4a; }
+.chip.chk { color: #5eead4; border-color: #1f8a7c; background: #0d3330; }

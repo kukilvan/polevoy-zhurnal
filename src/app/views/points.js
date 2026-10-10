@@ -190,13 +190,14 @@ function remainingModal() {
     const n = groups.reduce((s, g) => s + g.items.length, 0);
     const sel = h('select', { onchange: (e) => { stage = e.target.value; fill(); } },
       h('option', { value: '' }, 'Все этапы'), ...REMAIN_STAGES.map((s) => h('option', { value: s, selected: s === stage }, `Без этапа «${s}»`)));
-    body.replaceChildren(sel, h('div', { class: 'mut', style: { margin: '8px 2px' } }, n ? `Точек, где ещё что-то не сделано: ${n}` : 'Всё сделано 🎉'),
-      ...groups.flatMap((g) => [
-        h('div', { class: 'group' }, `${g.cabinet ? `Шкаф ${g.cabinet}` : 'Без шкафа'} · ${g.items.length}`),
-        ...g.items.map(({ point, missing }) => h('div', { class: 'item', onclick: () => { close(); setTimeout(() => pointCard(point), 60); } },
-          h('div', { class: 'name' }, point.label, h('div', { class: 'sub' }, `${point.typeId}${point.planName ? ` · ${point.planName}` : ''}`)),
-          h('div', { class: 'sub', style: { textAlign: 'right' } }, missing.map((m) => `без ${({ 'Хивут': 'хивута', 'Установка': 'установки', 'Проверка': 'проверки' })[m] || m}`).join(', ')))),
-      ]));
+    const CHIP = { 'Хивут': ['hiv', 'хивут'], 'Установка': ['ins', 'установка'], 'Проверка': ['chk', 'проверка'] };
+    const list = h('div', { class: 'rem-list' }, ...groups.flatMap((g) => [
+      h('div', { class: 'rem-group' }, h('span', {}, g.cabinet ? `Шкаф ${g.cabinet}` : 'Без шкафа'), h('span', { class: 'rem-count' }, g.items.length)),
+      ...g.items.map(({ point, missing }) => h('div', { class: 'rem-row', onclick: () => { close(); setTimeout(() => pointCard(point), 60); } },
+        h('div', { class: 'rem-name' }, h('b', {}, point.label), h('span', {}, `${point.typeId}${point.planName ? ` · ${point.planName}` : ''}`)),
+        h('div', { class: 'rem-chips' }, missing.map((m) => h('span', { class: `chip ${CHIP[m]?.[0] || ''}` }, CHIP[m]?.[1] || m))))),
+    ]));
+    body.replaceChildren(sel, h('div', { class: 'rem-total' }, n ? h('span', {}, 'Осталось точек: ', h('b', {}, n)) : 'Всё сделано 🎉'), n ? list : '');
   };
   fill();
   close = openModal('Что осталось', body);
