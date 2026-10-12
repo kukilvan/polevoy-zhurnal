@@ -14,6 +14,9 @@
   python3 tohnit.py crop  PLAN.pdf x0 y0 x1 y1 OUT.png [стр] → вырезать место крупно (координаты как в scan.json)
   python3 tohnit.py symbols WORK/ ИМЯ x0 y0 x1 y1 [стр]  → найти все векторные значки как в образце (значки без текста, любой поворот)
   python3 tohnit.py find WORK/ 'regex'                → где встречается текст (с координатами); list WORK/ c05 — вся группа
+  python3 tohnit.py layers WORK/                      → слои чертежа (AutoCAD), сколько в каждом линий и какого цвета
+  python3 tohnit.py hide WORK/ 'regex' …              → скрыть слои (рамки колонн, штриховки…) на всех картинках; без regex — показать все
+  python3 tohnit.py blobs WORK/                       → сам найти все цветные значки без подписей и разложить по видам (b/…png)
 
 Нужен PyMuPDF (pip install pymupdf) или pdfplumber (обычно уже установлен) + Pillow.
 """
@@ -187,6 +190,11 @@ def scan(pdf, work):
         kinds = collections.Counter(a['kind'] for a in an)
         lines += ['', f"## ⚠️ Пометки поверх чертежа (аннотации PDF): {', '.join(f'{k}×{v}' for k, v in kinds.items())}",
                   'Это могут быть рукописные исправления, зачёркивания, облака изменений — посмотри их на overview.png; точки под ними build отметит в отчёте.']
+    lay = layer_stats(pdf)
+    if lay:
+        lines += ['', f'## Слои чертежа: {len(lay)} (полный список: python3 tohnit.py layers WORK/)',
+                  'Мешающие слои (рамки колонн, штриховки, сетка осей, размеры) можно скрыть на всех картинках: python3 tohnit.py hide WORK/ \'KOTERET|Hatch\'. Крупнейшие:']
+        lines += [f'- {n}: {c} шт., цвет {col}' for n, c, col in lay[:15]]
     lines += ['', f"overview.png: 1 пиксель = {meta['pages'][0]['w'] / 2400:.3f} pt PDF (для area: x_pt = x_px × это число). Вырезать место крупно: python3 tohnit.py crop PLAN.pdf x0 y0 x1 y1 out.png"]
     open(os.path.join(work, 'clusters.md'), 'w').write('\n'.join(lines))
     render_overview(pdf, work, clusters, allspans)
@@ -195,6 +203,19 @@ def scan(pdf, work):
 
 # ---------------------------------------------------------------- картинки
 _DL = {}
+_HIDE = []  # regex слоёв, которые не рисовать (рамки колонн, штриховки, сетка осей…)
+def _hidden(name): return any(re.search(h, name or '', re.I) for h in _HIDE)
+def _open_hidden(fitz, pdf):
+    doc = fitz.open(pdf)
+    if _HIDE:
+        try:
+            for u in doc.layer_ui_configs():
+                if _hidden(u['text']): doc.set_layer_ui_config(u['number'], 2)  # 2 = выключить
+        except Exception: pass
+    return doc
+def _set_hide(meta, extra=()):
+    global _HIDE
+    _HIDE = list(meta.get('hide', [])) + list(extra); _DL.clear()
 def _dl_clip(fitz, p, dl, zoom, clip):
     # список отрисовки страницы уже в повёрнутых координатах (как scan.json)
     return dl.get_pixmap(matrix=fitz.Matrix(zoom, zoom), clip=fitz.Rect(*clip), alpha=False)
@@ -206,7 +227,7 @@ def render_page(pdf, page, zoom, clip=None):
     if fitz:
         key = (pdf, page)
         if key not in _DL:  # список отрисовки страницы строится один раз — вырезки потом быстрые
-            doc = fitz.open(pdf); p = doc[page]; _DL[key] = (doc, p, p.get_displaylist())
+            doc = _open_hidden(fitz, pdf); p = doc[page]; _DL[key] = (doc, p, p.get_displaylist())
         doc, p, dl = _DL[key]
         if clip:  # clip — в координатах повёрнутой страницы (как scan.json)
             pix = p.get_pixmap(matrix=fitz.Matrix(zoom, zoom), alpha=False, clip=fitz.Rect(*clip)) if dl is None else _dl_clip(fitz, p, dl, zoom, clip)
@@ -259,9 +280,53 @@ def sort_num(label):
     m = re.findall(r'\d+(?:\.\d+)?', label)
     return float(m[-1]) if m else 0
 
+def _snake(lst, start='left', strips=None):
+    """Порядок нумерации: полосы поперёк направления start→другой край; в полосе — туда-обратно (змейка)."""
+    out = []
+    for pg in sorted({x[0]['page'] for x in lst}):
+        L = [x for x in lst if x[0]['page'] == pg]
+        def uv(x):  # u — вдоль направления нумерации, v — поперёк
+            cx, cy = (x[0]['x0'] + x[0]['x1']) / 2, (x[0]['y0'] + x[0]['y1']) / 2
+            return {'left': (cx, cy), 'right': (-cx, cy), 'top': (cy, cx), 'bottom': (-cy, cx)}.get(start, (cx, cy))
+        us = [uv(x)[0] for x in L]; lo, hi = min(us), max(us); vs = [uv(x)[1] for x in L]
+        cell = 2.5 * math.sqrt(max(1.0, (hi - lo)) * max(1.0, max(vs) - min(vs)) / len(L))  # ширина полосы ~ по плотности точек
+        k = int(strips) if strips else max(1, round((hi - lo) / cell))
+        w = (hi - lo) / k or 1
+        band = lambda x: min(k - 1, int((uv(x)[0] - lo) / w))
+        out += sorted(L, key=lambda x: (band(x), uv(x)[1] * (1 if band(x) % 2 == 0 else -1)))
+    return out
+
+def _path(lst, start='left'):
+    """Порядок нумерации «цепочкой»: от крайней точки со стороны start к ближайшей следующей; шаг назад (к start) штрафуется,
+    поэтому номера идут подряд по соседям и в целом от start к другому краю. Потом цепочка распрямляется (2-opt)."""
+    out = []
+    for pg in sorted({x[0]['page'] for x in lst}):
+        L = [x for x in lst if x[0]['page'] == pg]
+        def uv(x):
+            cx, cy = (x[0]['x0'] + x[0]['x1']) / 2, (x[0]['y0'] + x[0]['y1']) / 2
+            return {'left': (cx, cy), 'right': (-cx, cy), 'top': (cy, cx), 'bottom': (-cy, cx)}.get(start, (cx, cy))
+        P = [uv(x) for x in L]; n = len(P)
+        cost = lambda i, j: math.dist(P[i], P[j]) + 2.0 * max(0.0, P[i][0] - P[j][0])
+        cur = min(range(n), key=lambda i: (P[i][0], P[i][1])); seq = [cur]; left = set(range(n)) - {cur}
+        while left:
+            cur = min(left, key=lambda j: cost(seq[-1], j)); seq.append(cur); left.remove(cur)
+        if 3 < n <= 200:  # 2-opt: убрать перекрёстки цепочки (первая точка остаётся первой)
+            total = lambda s: sum(cost(s[i], s[i + 1]) for i in range(len(s) - 1))
+            best = total(seq); improved = True; it = 0
+            while improved and it < 20:
+                improved = False; it += 1
+                for i in range(1, n - 1):
+                    for j in range(i + 1, n):
+                        cand = seq[:i] + seq[i:j + 1][::-1] + seq[j + 1:]
+                        c = total(cand)
+                        if c < best - 1e-6: seq, best, improved = cand, c, True
+        out += [L[i] for i in seq]
+    return out
+
 def build(work, mapfile, out):
     sc = json.load(open(os.path.join(work, 'scan.json'))); mp = json.load(open(mapfile))
     spans = sc['spans']; meta = sc['meta']
+    _set_hide(meta, mp.get('hide_layers', []))
     rules = mp.get('rules', [])
     renames = [(re.compile(a), b) for a, b in mp.get('rename', [])]
     cab_re = re.compile(mp['cabinet_regex']) if mp.get('cabinet_regex') else None
@@ -316,14 +381,17 @@ def build(work, mapfile, out):
                 if near_pts: skipped[f"значок «{s0['t']}» уже подписан рядом"] += 1; continue
             keep.append((s0, r))
         icons[prefix] = keep
-    # значки без номеров: нумерация по порядку (сверху вниз, слева направо полосами)
+    # значки без номеров: каждый вид (prefix) с 1, от края start (по умолчанию слева) к другому краю; соседние номера — рядом.
+    # order: path (по умолчанию, цепочка по соседям) | snake (полосы туда-обратно) | rows (строками)
     for prefix, lst in icons.items():
-        band = 60
-        lst.sort(key=lambda x: (x[0]['page'], round(x[0]['y0'] / band), x[0]['x0']))
+        r0 = lst[0][1] if lst else {}
+        order = r0.get('order', mp.get('order', 'path')); start = r0.get('start', mp.get('start', 'left'))
+        digits = int(r0.get('digits', mp.get('digits', 2)))
+        lst = _path(lst, start) if order == 'path' else _snake(lst, start, r0.get('strips', mp.get('strips'))) if order == 'snake' else sorted(lst, key=lambda x: (x[0]['page'], round(x[0]['y0'] / 60), x[0]['x0']))
         n = 0
         for s, r in lst:
             per = int(r.get('per_icon', 1))
-            n += 1; base = f"{prefix}{n:03d}"
+            n += 1; base = f"{prefix}{n:0{digits}d}"
             for k in range(per):
                 pts.append(dict(label=base if per == 1 else f'{base}.{k + 1}', orig=s['t'], typeId=r['type'], s=s, rule=r, invented=True))
     # шкаф, этаж
@@ -468,6 +536,8 @@ def render_check(meta, work, final, unknown):
 
 def crop(pdf, x0, y0, x1, y1, out, page=0):
     """Вырезать область чертежа крупно (координаты PDF с учётом поворота, как в scan.json)."""
+    if os.path.isdir(pdf):  # crop WORK/ … — тот же чертёж, со скрытыми слоями
+        meta = json.load(open(os.path.join(pdf, 'scan.json')))['meta']; _set_hide(meta); pdf = meta['pdf']
     x0, y0, x1, y1 = map(float, (x0, y0, x1, y1)); z = min(8.0, 2400 / max(1.0, x1 - x0, y1 - y0))
     render_page(pdf, int(page), z, clip=(x0, y0, x1, y1)).save(out); print(out)
 
@@ -491,10 +561,11 @@ def symbols(work, name, x0, y0, x1, y1, page=0, tol=0.12):
     fitz = _fitz()
     if not fitz: print('Нужен PyMuPDF (pip install pymupdf)'); return
     sc = json.load(open(os.path.join(work, 'scan.json'))); pdf = sc['meta']['pdf']; page = int(page)
-    p = fitz.open(pdf)[page]; rm = p.rotation_matrix
+    p = fitz.open(pdf)[page]; rm = p.rotation_matrix; _set_hide(sc['meta'])
     x0, y0, x1, y1 = map(float, (x0, y0, x1, y1))
     paths = []
     for d in p.get_drawings():
+        if _hidden(d.get('layer')): continue
         r = d['rect'] * rm
         if r.width > 300 or r.height > 300: continue
         sig = (_color_hex(d.get('fill')) if d.get('fill') is not None else '', _color_hex(d.get('color')) if d.get('color') is not None else '', ''.join(sorted(it[0] for it in d['items'])))
@@ -526,6 +597,126 @@ def symbols(work, name, x0, y0, x1, y1, page=0, tol=0.12):
     json.dump(sc, open(os.path.join(work, 'scan.json'), 'w'), ensure_ascii=False)
     print(f'Значков «{name}» найдено: {len(found)} (группа sym:{name}; образец из {len(tpl)} элементов). Сверь число с легендой и посмотри на check.png после build.'
           + ('' if found else ' Ничего не найдено — группа удалена; попробуй образец точнее (только сам значок) или другой экземпляр.'))
+
+def layer_stats(pdf):
+    """[(слой, число линий/фигур, главный цвет)] — по убыванию."""
+    fitz = _fitz()
+    if not fitz: return []
+    try:
+        doc = fitz.open(pdf)
+        if not doc.get_ocgs(): return []
+        cnt = collections.Counter(); col = collections.defaultdict(collections.Counter)
+        for p in doc:
+            for d in p.get_drawings():
+                L = d.get('layer') or '—'; cnt[L] += 1; col[L]['#' + _color_hex(d.get('color') if d.get('color') is not None else d.get('fill'))] += 1
+        names = {v['name'] for v in doc.get_ocgs().values()}
+        return [(n, cnt[n], col[n].most_common(1)[0][0] if col[n] else '') for n in sorted(names | set(cnt), key=lambda n: -cnt[n])]
+    except Exception: return []
+
+def layers(work):
+    sc = json.load(open(os.path.join(work, 'scan.json'))); hide = sc['meta'].get('hide', [])
+    global _HIDE; _HIDE = hide
+    for n, c, col in layer_stats(sc['meta']['pdf']): print(f"{'СКРЫТ  ' if _hidden(n) else ''}{n}\t{c}\t{col}")
+
+def hide(work, regs):
+    """Скрыть слои на всех картинках (overview, c/, crop, check). Повторный вызов заменяет список; без regex — показать все."""
+    path = os.path.join(work, 'scan.json'); sc = json.load(open(path))
+    sc['meta']['hide'] = regs; json.dump(sc, open(path, 'w'), ensure_ascii=False); _set_hide(sc['meta'])
+    off = [n for n, c, col in layer_stats(sc['meta']['pdf']) if _hidden(n)]
+    print(f"Скрыто слоёв: {len(off)}: {', '.join(off) or '—'}")
+    render_overview(sc['meta']['pdf'], work, sc['clusters'], sc['spans']); print(f'Перерисовано: {work}/overview.png и c/*.png')
+
+def blobs(work, gap=1.5):
+    """Найти все цветные значки (не чёрные и не серые): соседние линии одного цвета склеиваются в значок,
+    значки раскладываются по видам (цвет + число линий + длина контура — от поворота не зависит).
+    Каждый вид — группа b:kNN в scan.json (для правил icon), картинки b/kNN.png и b/_all.png, список b/blobs.md."""
+    fitz = _fitz()
+    if not fitz: print('Нужен PyMuPDF (pip install pymupdf)'); return
+    sc = json.load(open(os.path.join(work, 'scan.json'))); meta = sc['meta']; pdf = meta['pdf']; _set_hide(meta)
+    os.makedirs(os.path.join(work, 'b'), exist_ok=True)
+    doc = fitz.open(pdf); found = []
+    for pi, p in enumerate(doc):
+        rm = p.rotation_matrix; items = collections.defaultdict(list)
+        for d in p.get_drawings():
+            if _hidden(d.get('layer')): continue
+            c = d.get('color') if d.get('color') is not None else d.get('fill')
+            if c is None: continue
+            hx = _color_hex(c); rgb = [int(hx[i:i + 2], 16) for i in (0, 2, 4)]
+            if max(rgb) - min(rgb) < 30: continue  # чёрный/серый — архитектура
+            r = d['rect'] * rm
+            if r.width > 60 or r.height > 60: continue
+            items[hx].append((r.x0, r.y0, r.x1, r.y1, _plen(d['items'], rm)))
+        for hx, L in items.items():
+            par = list(range(len(L)))
+            def f(i):
+                while par[i] != i: par[i] = par[par[i]]; i = par[i]
+                return i
+            idx = sorted(range(len(L)), key=lambda i: L[i][0])
+            for a in range(len(idx)):
+                i = idx[a]
+                for b in range(a + 1, len(idx)):
+                    j = idx[b]
+                    if L[j][0] > L[i][2] + gap: break
+                    if L[j][1] <= L[i][3] + gap and L[i][1] <= L[j][3] + gap: par[f(i)] = f(j)
+            comp = collections.defaultdict(list)
+            for i in range(len(L)): comp[f(i)].append(L[i])
+            for c in comp.values():
+                x0, y0 = min(q[0] for q in c), min(q[1] for q in c); x1, y1 = max(q[2] for q in c), max(q[3] for q in c)
+                if max(x1 - x0, y1 - y0) > 70: continue
+                found.append(dict(page=pi, color=hx, n=len(c), plen=sum(q[4] for q in c), x0=x0, y0=y0, x1=x1, y1=y1))
+    # текст внутри значка (буква/цифра в рамке): значки с текстом делятся на виды по цвету + тексту + размеру,
+    # без текста — по цвету + числу частей + длине контура (±8%; от поворота не зависит)
+    txt = [s for s in sc['spans'] if not str(s.get('c', '')).startswith(('b:', 'sym:')) and len(s['t']) <= 4]
+    for b in found:
+        t = [s['t'] for s in txt if s['page'] == b['page'] and b['x0'] - 2 <= (s['x0'] + s['x1']) / 2 <= b['x1'] + 2 and b['y0'] - 2 <= (s['y0'] + s['y1']) / 2 <= b['y1'] + 2]
+        b['inner'] = ' '.join(sorted(t)); b['sz'] = max(b['x1'] - b['x0'], b['y1'] - b['y0'])
+    kinds = []
+    for b in sorted(found, key=lambda b: (b['color'], b['inner'], b['n'], b['plen'])):
+        if b['inner']: k = next((k for k in kinds if k['color'] == b['color'] and k['inner'] == b['inner'] and abs(k['sz'] - b['sz']) <= 0.25 * k['sz'] + 1), None)
+        else: k = next((k for k in kinds if not k['inner'] and k['color'] == b['color'] and k['n'] == b['n'] and abs(k['plen'] - b['plen']) <= 0.08 * k['plen'] + 0.5), None)
+        if not k: k = dict(color=b['color'], n=b['n'], plen=b['plen'], inner=b['inner'], sz=b['sz'], items=[]); kinds.append(k)
+        k['items'].append(b)
+    kinds = [k for k in kinds if k['plen'] >= 6 and (k['inner'] or k['sz'] >= 4)]  # точки/обрывки линий — не значки
+    kinds.sort(key=lambda k: (-len(k['items']), k['color']))
+    sc['spans'] = [q for q in sc['spans'] if not str(q.get('c', '')).startswith('b:')]
+    sc['clusters'] = [c for c in sc['clusters'] if not c['id'].startswith('b:')]
+    from PIL import Image, ImageDraw
+    lines = [f'# Цветные значки без подписей: {len(kinds)} видов, {sum(len(k["items"]) for k in kinds)} шт.', '',
+             'Вид · цвет · частей · размер · сколько · текст внутри значка (если есть) · картинка b/<вид>.png (6 примеров) — сравни с легендой',
+             'В числе есть и значки самой легенды — исключи их правилом с area + skip.', '']
+    allimg = []
+    for i, k in enumerate(kinds, 1):
+        kid = f'b:k{i:02d}'; inner = collections.Counter()
+        for b in k['items']:
+            inner[b['inner']] += 1
+            sc['spans'].append(dict(t=b['inner'] or kid[2:], x0=b['x0'], y0=b['y0'], x1=b['x1'], y1=b['y1'], color=k['color'], font='значок', size=0, page=b['page'], c=kid))
+        w = sorted(round(max(b['x1'] - b['x0'], b['y1'] - b['y0'])) for b in k['items'])[len(k['items']) // 2]
+        sc['clusters'].append(dict(id=kid, color=k['color'], font='значок', size=0, bg='', n=len(k['items']), labelish=0, shapes=[], samples=[kid[2:]], short=len(k['items'])))
+        it = ', '.join(f'«{a}»×{n}' for a, n in inner.most_common(4) if a)
+        lines.append(f"- **{kid}** · #{k['color']} · {k['n']} · ~{w} pt · **{len(k['items'])}**" + (f' · внутри: {it}' if it else ''))
+        ex = [k['items'][int(j * len(k['items']) / 6)] for j in range(min(6, len(k['items'])))]
+        crops = []
+        for b in ex:
+            pad = 25
+            cr = render_page(pdf, b['page'], 6.0, clip=(b['x0'] - pad, b['y0'] - pad, b['x1'] + pad, b['y1'] + pad)); d = ImageDraw.Draw(cr)
+            d.rectangle([int(pad * 6) - 4, int(pad * 6) - 4, int((b['x1'] - b['x0'] + pad) * 6) + 4, int((b['y1'] - b['y0'] + pad) * 6) + 4], outline=(255, 0, 255), width=3)
+            cr.thumbnail((300, 300)); crops.append(cr)
+        W = sum(c.width for c in crops) + 10 * len(crops); H = max(c.height for c in crops) + 36
+        sheet = Image.new('RGB', (W, H), 'white'); x = 0
+        for cr in crops: sheet.paste(cr, (x, 36)); x += cr.width + 10
+        ImageDraw.Draw(sheet).text((6, 6), f"{kid[2:]}  #{k['color']}  {len(k['items'])} шт." + (f'  внутри: {it}' if it else ''), fill='black', font=_font(18))
+        sheet.save(os.path.join(work, 'b', f'{kid[2:]}.png')); allimg.append((kid[2:], crops[0], len(k['items'])))
+    # одна картинка: по одному примеру каждого вида — удобно сверять с легендой
+    if allimg:
+        cols = 6; cw, ch = 220, 250; rows = (len(allimg) + cols - 1) // cols
+        sheet = Image.new('RGB', (cols * cw, rows * ch), 'white'); dr = ImageDraw.Draw(sheet)
+        for j, (kid, cr, n) in enumerate(allimg):
+            c2 = cr.copy(); c2.thumbnail((cw - 10, ch - 40)); x, y = (j % cols) * cw, (j // cols) * ch
+            sheet.paste(c2, (x + 5, y + 34)); dr.text((x + 5, y + 6), f'{kid}: {n} шт.', fill='black', font=_font(20))
+        sheet.save(os.path.join(work, 'b', '_all.png'))
+    json.dump(sc, open(os.path.join(work, 'scan.json'), 'w'), ensure_ascii=False)
+    open(os.path.join(work, 'b', 'blobs.md'), 'w').write('\n'.join(lines))
+    print('\n'.join(lines)); print(f'\nКартинки: {work}/b/_all.png (по одному каждого вида), {work}/b/kNN.png')
 
 def find(work, what, group=None):
     """Найти текст (regex) или показать всю группу: текст, группа, координаты (для crop/area/add)."""
@@ -571,5 +762,8 @@ if __name__ == '__main__':
     elif len(sys.argv) >= 4 and sys.argv[1] == 'find': find(sys.argv[2], sys.argv[3])
     elif len(sys.argv) >= 4 and sys.argv[1] == 'list': find(sys.argv[2], '', group=sys.argv[3])
     elif len(sys.argv) >= 8 and sys.argv[1] == 'symbols': symbols(sys.argv[2], sys.argv[3], *sys.argv[4:8], *(sys.argv[8:9]))
+    elif len(sys.argv) >= 3 and sys.argv[1] == 'layers': layers(sys.argv[2])
+    elif len(sys.argv) >= 3 and sys.argv[1] == 'hide': hide(sys.argv[2], sys.argv[3:])
+    elif len(sys.argv) >= 3 and sys.argv[1] == 'blobs': blobs(sys.argv[2])
     elif len(sys.argv) >= 8 and sys.argv[1] == 'crop': crop(sys.argv[2], *sys.argv[3:7], sys.argv[7], sys.argv[8] if len(sys.argv) > 8 else 0)
     else: print(__doc__)
