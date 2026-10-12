@@ -1,11 +1,11 @@
 // Точки: форма точки, генератор пачкой, карточка точки с историей, вкладка «Точки».
-import { h, formModal, openModal, confirmDialog, toast } from '../ui.js';
+import { h, formModal, openModal, confirmDialog, toast, qtyList } from '../ui.js';
 import { state, getRepo, pointsSorted, infoOf, currentProject } from '../store.js';
 import { generateLabels, parseSuffixes, comparePoints, usesConfig, remaining, REMAIN_STAGES, hasDeviceId, normalizeMac, findDuplicate } from '../../domain/index.js';
 import { scanDevice } from '../scan.js';
 import { statusClass } from './project.js';
 import { hint } from './guide.js';
-import { dateText, cablesText, missingDetails } from '../../domain/index.js';
+import { dateText, cablesText, missingDetails, isComposedType } from '../../domain/index.js';
 import { addWorkForPoint } from './doh.js';
 import { whoIs } from './journal.js';
 
@@ -14,6 +14,57 @@ const hasIdType = (id) => hasDeviceId(state.ctx.types.get(id));
 const isDoorType = (id) => usesConfig(state.ctx.types.get(id));
 const configOptions = () => [...state.ctx.configs.values()].map((c) => ({ value: c.id, label: c.name }));
 const reasonOptions = () => [...state.ctx.delayReasons.values()].map((r) => ({ value: r.id, label: r.id }));
+
+// ---- состав точки (тип из устройств): галочки устройств с количеством + кабели самой точки ----
+const typeOf = (id) => state.ctx.types.get(id);
+const composedType = (id) => isComposedType(typeOf(id));
+const sameList = (a, b, k) => JSON.stringify((a || []).map((x) => [x[k], Number(x.count)])) === JSON.stringify((b || []).map((x) => [x[k], Number(x.count)]));
+function compField(point) {
+  const ctx = state.ctx; const allDev = [...ctx.devices.values()].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
+  let typeId = null; let rows = []; // [{ deviceId, count, on }]
+  const devBox = h('div', { class: 'picklist', style: { maxHeight: 'none' } });
+  const addSel = h('select', {}); const cableQ = qtyList([...ctx.cables.values()].map((c) => ({ value: c.id, label: c.id })), { addLabel: '➕ Кабель точки', empty: 'Кабелей точки нет' });
+  const draw = () => {
+    devBox.replaceChildren(...(rows.length ? rows.map((r) => {
+      const cb = h('input', { type: 'checkbox', checked: r.on, onchange: () => { r.on = cb.checked; } });
+      const cnt = h('input', { type: 'text', inputMode: 'numeric', value: String(r.count), class: 'qty', style: { width: '52px', textAlign: 'center' }, oninput: (e) => { r.count = Number(e.target.value) || 0; } });
+      return h('label', { class: 'pickrow' }, cb, h('span', {}, ctx.devices.get(r.deviceId)?.name || r.deviceId), h('small', {}, '×'), cnt);
+    }) : [h('div', { class: 'empty' }, 'Устройств нет')]));
+    addSel.replaceChildren(h('option', { value: '' }, '➕ Добавить устройство…'), ...allDev.filter((d) => !rows.some((r) => r.deviceId === d.id)).map((d) => h('option', { value: d.id }, d.name)));
+  };
+  addSel.onchange = () => { if (addSel.value) { rows.push({ deviceId: addSel.value, count: 1, on: true }); draw(); } };
+  const load = (tid, own) => {
+    typeId = tid; const t = typeOf(tid);
+    const devs = own && Array.isArray(point?.devices) ? point.devices : (t?.devices || []);
+    rows = devs.map((d) => ({ deviceId: d.deviceId, count: Number(d.count) || 1, on: true }));
+    // устройства типа, снятые у этой точки, показываем без галочки
+    if (own && Array.isArray(point?.devices)) (t?.devices || []).forEach((d) => { if (!rows.some((r) => r.deviceId === d.deviceId)) rows.push({ deviceId: d.deviceId, count: Number(d.count) || 1, on: false }); });
+    const cbl = own && Array.isArray(point?.cables) ? point.cables : (t?.cables || []);
+    cableQ.set(cbl.map((c) => ({ value: c.cable, count: c.count })));
+    draw();
+  };
+  return {
+    key: 'comp', label: 'Состав точки', type: 'custom', visible: (v) => composedType(v.typeId),
+    hint: 'Снимите галочку, если устройства на этой точке нет; количество можно поменять. Кабели точки — если авизарим сидят на общем кабеле.',
+    build: (api) => ({
+      el: h('div', {}, devBox, addSel, h('div', { class: 'mut', style: { margin: '8px 0 0' } }, 'Кабели точки'), cableQ.el),
+      update: (v) => { if (v.typeId !== typeId) load(v.typeId, typeId === null && point && v.typeId === point.typeId); },
+      get: () => ({ devices: rows.filter((r) => r.on && r.count > 0).map((r) => ({ deviceId: r.deviceId, count: r.count })),
+        cables: cableQ.get().map((c) => ({ cable: c.value, count: c.count })) }),
+    }),
+  };
+}
+// Что записать в точку: свой состав только если он отличается от типа (иначе точка следует за типом)
+function compData(typeId, comp) {
+  const t = typeOf(typeId);
+  if (!isComposedType(t) || !comp) return { devices: null, cables: null };
+  return { devices: sameList(comp.devices, t.devices, 'deviceId') ? null : comp.devices, cables: sameList(comp.cables, t.cables, 'cable') ? null : comp.cables };
+}
+const compText = (p) => {
+  const ctx = state.ctx; const t = typeOf(p.typeId); if (!isComposedType(t)) return '';
+  const devs = Array.isArray(p.devices) ? p.devices : (t.devices || []);
+  return devs.map((d) => `${ctx.devices.get(d.deviceId)?.name || d.deviceId}${d.count > 1 ? ` ×${d.count}` : ''}`).join(', ') + (Array.isArray(p.devices) || Array.isArray(p.cables) ? ' (свой состав)' : '');
+};
 
 // Поле со сканером: текстовое поле + кнопка «📷»
 function scanField(key, label, kind, value) {
@@ -30,8 +81,9 @@ export function pointForm(point, { onDone } = {}) {
     { key: 'planName', label: 'Имя в плане заказчика (по тохниту)' },
     { key: 'cabinet', label: 'Шкаф' }, { key: 'floor', label: 'Этаж' },
     { key: 'typeId', label: 'Тип', type: 'select', required: true, options: typeOptions(), emptyLabel: 'Выберите тип' },
+    compField(point),
     { key: 'length', label: 'Длина (м на 1 кабель)', type: 'number' },
-    { key: 'configId', label: 'Конфигурация двери (если отличается от проекта)', type: 'select', options: configOptions(), visible: (v) => isDoorType(v.typeId) },
+    { key: 'configId', label: 'Конфигурация двери (если отличается от проекта)', type: 'select', options: configOptions(), visible: (v) => isDoorType(v.typeId) && !composedType(v.typeId) },
     { key: 'port', label: 'Порт' },
     { ...scanField('serial', 'Серийный номер', 'serial', point?.serial), visible: (v) => hasIdType(v.typeId) },
     { ...scanField('mac', 'MAC', 'mac', point?.mac), visible: (v) => hasIdType(v.typeId) },
@@ -57,6 +109,7 @@ export function pointForm(point, { onDone } = {}) {
       repo.save(pid, [{ coll: 'points', id: point?.id, data: {
         label, planName: v.planName, cabinet: v.cabinet, floor: v.floor, typeId: v.typeId, length: v.length,
         configId: isDoorType(v.typeId) ? v.configId : undefined, port: v.port, serial, mac, delayReasonId: v.delayReasonId, note: v.note,
+        ...compData(v.typeId, v.comp),
       } }]);
       toast(point ? 'Сохранено' : 'Точка добавлена'); onDone?.();
     },
@@ -73,8 +126,9 @@ export function generatorForm() {
     { key: 'suffixes', label: 'Суффиксы через запятую', hint: 'Например: A,B — на каждый номер будет по точке с каждым суффиксом' },
     { key: 'pair', label: 'Пара номеров (вид 01-02)', type: 'checkbox' },
     { key: 'typeId', label: 'Тип', type: 'select', required: true, options: typeOptions(), emptyLabel: 'Выберите тип' },
+    compField(null),
     { key: 'cabinet', label: 'Шкаф' }, { key: 'floor', label: 'Этаж' },
-    { key: 'configId', label: 'Конфигурация двери', type: 'select', options: configOptions(), visible: (v) => isDoorType(v.typeId) },
+    { key: 'configId', label: 'Конфигурация двери', type: 'select', options: configOptions(), visible: (v) => isDoorType(v.typeId) && !composedType(v.typeId) },
   ];
   const labelsOf = (v) => generateLabels({ prefix: v.prefix ?? '', from: v.from, to: v.to, step: v.step ?? 1, digits: v.digits ?? 0, suffixes: parseSuffixes(v.suffixes), pair: !!v.pair });
   formModal({
@@ -89,6 +143,7 @@ export function generatorForm() {
       if (fresh.length > 100 && !(await confirmDialog(`Создать ${fresh.length} точек?`, { yes: 'Создать' }))) return false;
       repo.save(pid, fresh.map((label) => ({ coll: 'points', data: {
         label, cabinet: v.cabinet, floor: v.floor, typeId: v.typeId, configId: isDoorType(v.typeId) ? v.configId : undefined,
+        ...compData(v.typeId, v.comp),
       } })));
       toast(`Создано точек: ${fresh.length}${labels.length > fresh.length ? `, уже были: ${labels.length - fresh.length}` : ''}`);
     },
@@ -153,7 +208,7 @@ export function pointCard(startPoint) {
     const hasLen = p.length !== undefined && p.length !== null && p.length !== '';
     const facts = [
       ['Шкаф / этаж', [p.cabinet && `шкаф ${p.cabinet}`, p.floor && `этаж ${p.floor}`].filter(Boolean).join(', ')],
-      ['Тип', p.typeId], ['Имя в плане', p.planName], ['Кабель', info.cableList.length > 1 ? cablesText(info.cableList) : info.cable],
+      ['Тип', p.typeId], ['Состав', compText(p)], ['Имя в плане', p.planName], ['Кабель', info.cableList.length > 1 ? cablesText(info.cableList) : info.cable],
       ['Длина', hasLen ? `${p.length} м на 1 кабель${info.metrage ? ` (всего ${Math.round(info.metrage * 100) / 100} м)` : ''}` : ''],
       ['Конфигурация', usesConfig(ctx.types.get(p.typeId)) ? cfg?.name : ''], ['Порт', p.port], ['Серийный номер', p.serial], ['MAC', p.mac], ['Причина задержки', p.delayReasonId], ['Примечание', p.note],
     ].filter(([, v]) => v);
@@ -230,7 +285,7 @@ function bulkEditForm(ids, done) {
         const data = {};
         if (v.cabinet) data.cabinet = v.cabinet;
         if (v.floor) data.floor = v.floor;
-        if (v.typeId) { data.typeId = v.typeId; if (!isDoorType(v.typeId)) data.configId = undefined; }
+        if (v.typeId) { data.typeId = v.typeId; data.devices = null; data.cables = null; if (!isDoorType(v.typeId)) data.configId = undefined; }
         return { coll: 'points', id, data };
       });
       repo.save(pid, ops); toast(`Изменено точек: ${ids.length}`); done();
