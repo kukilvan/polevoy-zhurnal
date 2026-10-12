@@ -108,7 +108,9 @@ def merge_spans(spans):
     spans = sorted(spans, key=lambda s: (key(s), round((s['y0'] + s['y1']) / 2, 0), s['x0']))
     out = []
     for s in spans:
-        if out:
+        if s['font'].startswith('аннотация'):  # подпись-аннотация — всегда целый текст, с соседями не склеиваем («C» «C», «H=90» «A»)
+            out.append(dict(s)); continue
+        if out and not out[-1]['font'].startswith('аннотация'):
             o = out[-1]
             same = key(o) == key(s) and abs((o['y0'] + o['y1']) / 2 - (s['y0'] + s['y1']) / 2) < s['size'] * 0.3
             gap = s['x0'] - o['x1']
@@ -147,9 +149,13 @@ def scan(pdf, work):
     allspans = []
     for pg in pages:  # подпись-аннотация, повторяющая текст страницы на том же месте, — дубль: убираем
         page_txt = [x for x in pg['spans'] if not x['font'].startswith('аннотация')]
-        def dup(a):
-            k = a['t'].replace(' ', '')
-            return any(x['t'].replace(' ', '') == k and a['x0'] - 8 <= (x['x0'] + x['x1']) / 2 <= a['x1'] + 8 and a['y0'] - 8 <= (x['y0'] + x['y1']) / 2 <= a['y1'] + 8 for x in page_txt)
+        def dup(a):  # тот же текст на том же месте и того же размера (рядом стоящая такая же буква другого значка — не дубль)
+            k = a['t'].replace(' ', ''); ac = ((a['x0'] + a['x1']) / 2, (a['y0'] + a['y1']) / 2); ah = max(1.0, min(a['x1'] - a['x0'], a['y1'] - a['y0']))
+            for x in page_txt:
+                if x['t'].replace(' ', '') != k: continue
+                xc = ((x['x0'] + x['x1']) / 2, (x['y0'] + x['y1']) / 2); xh = max(1.0, min(x['x1'] - x['x0'], x['y1'] - x['y0']))
+                if abs(ac[0] - xc[0]) <= max(2.0, 0.4 * ah) and abs(ac[1] - xc[1]) <= max(2.0, 0.4 * ah) and 0.5 <= ah / xh <= 2.0: return True
+            return False
         pg['spans'] = page_txt + [a for a in pg['spans'] if a['font'].startswith('аннотация') and not dup(a)]
     for pi, pg in enumerate(pages):
         grid = collections.defaultdict(list)  # сетка 50pt для быстрого поиска фона
@@ -549,6 +555,8 @@ def build(work, mapfile, out):
     open(os.path.join(work, 'report.md'), 'w').write('\n'.join(rep))
     open(os.path.join(work, 'points.md'), 'w').write('\n'.join(f"{p['cabinet'] or '—'}\t{p['typeId']}\t{p['label']}" + (f"\t({p['orig']})" if p.get('orig') and p['orig'] != p['label'] else '') for p in final))
     render_check(meta, work, final, unknown)
+    try: render_pdf(meta, final, os.path.splitext(out)[0] + '.pdf')
+    except Exception as e: print(f'PDF с номерами не получился: {e}')
     print('\n'.join(rep[:120]))
     print(f'\nФайл точек: {out}\nПроверочная картинка: {work}/check*.png')
 
@@ -586,6 +594,68 @@ def render_check(meta, work, final, unknown):
         for i, (a, b) in enumerate([(0, 0), (1, 0), (0, 1), (1, 1)]):
             part = img.crop((int(a * W / 2) - (40 if a else 0), int(b * H / 2) - (40 if b else 0), int((a + 1) * W / 2), int((b + 1) * H / 2)))
             part.thumbnail((2400, 2400)); part.save(os.path.join(work, f'check{suf}_{i + 1}.png'))
+
+def _strip_layers(doc, page, hidden_xrefs):
+    """Вырезать из содержимого страницы всё, что нарисовано в скрытых слоях (/OC … BDC … EMC) — в любом просмотрщике их не будет."""
+    res = doc.xref_get_key(page.xref, 'Resources/Properties')
+    props = dict(re.findall(r'/([^\s/<>\[\]()]+)\s+(\d+)\s+0\s+R', res[1])) if res and res[1] else {}
+    names = {n.encode() for n, x in props.items() if int(x) in hidden_xrefs}
+    if not names: return 0
+    page.clean_contents()  # одна склеенная последовательность команд
+    xref = page.get_contents()[0]; data = doc.xref_stream(xref)
+    tok = re.compile(rb'\((?:\\.|[^\\)])*\)|<[0-9A-Fa-f\s]*>|/OC\s*/([^\s/<>\[\]()]+)\s*BDC|\bBDC\b|\bBMC\b|\bEMC\b')
+    stack = []; cut = []; removed = 0
+    for m in tok.finditer(data):
+        t = m.group(0)
+        if t[:1] in (b'(', b'<'): continue
+        if m.group(1) is not None: stack.append((m.start(), m.group(1) in names))
+        elif t in (b'BDC', b'BMC'): stack.append((m.start(), False))
+        elif t == b'EMC' and stack:
+            st, hid = stack.pop()
+            if hid and not any(h for _, h in stack): cut.append((st, m.end())); removed += 1
+    if not cut: return 0
+    out = []; pos = 0
+    for a, b in cut: out.append(data[pos:a]); pos = b
+    out.append(data[pos:]); doc.update_stream(xref, b' '.join(out))
+    return removed
+
+def render_pdf(meta, final, out_pdf):
+    """Копия чертежа PDF: мешающие слои убраны, у каждой точки — рамка цвета типа, у придуманных номеров — подпись.
+    Это обычный векторный PDF: масштабируется без потери, номера можно переносить на чертёж или печатать."""
+    fitz = _fitz()
+    if not fitz: print('PDF с номерами: нужен PyMuPDF'); return
+    doc = fitz.open(meta['pdf'])
+    ocgs = doc.get_ocgs() if hasattr(doc, 'get_ocgs') else {}
+    hidden = {x for x, v in ocgs.items() if _hidden(v['name'])}
+    if hidden:
+        try: doc.set_layer(-1, off=list(hidden))  # и в настройках слоёв PDF выключены
+        except Exception: pass
+    pal = [(0, 0.6, 0), (0, 0.4, 1), (0.8, 0, 0.8), (1, 0.45, 0), (0, 0.6, 0.6), (0.5, 0.25, 0), (0.35, 0.35, 0.35)]
+    colors = {}
+    for pi, p in enumerate(doc):
+        if hidden: _strip_layers(doc, p, hidden)
+        dm = p.derotation_matrix; drawn = set()
+        pts = [q for q in final if q.get('s') and q['s']['page'] == pi]
+        if not pts: continue
+        hs = sorted(max(q['s']['x1'] - q['s']['x0'], q['s']['y1'] - q['s']['y0']) for q in pts)
+        fs = max(3.0, min(14.0, hs[len(hs) // 2] * 0.9))  # размер подписи — как значок
+        for q in pts:
+            sp = q['s']; col = colors.setdefault(q['typeId'], pal[len(colors) % len(pal)])
+            r = fitz.Rect(sp['x0'] - 1, sp['y0'] - 1, sp['x1'] + 1, sp['y1'] + 1)
+            p.draw_rect(r * dm, color=col, width=max(0.4, fs / 10), overlay=True)
+            if not (q.get('invented') or q.get('dup')): continue
+            lab = re.sub(r'\.\d+$', '', q['label']) if q.get('invented') else q['label']
+            key = (round(sp['x0']), round(sp['y0']), lab)
+            if key in drawn: continue
+            drawn.add(key)
+            w = fitz.get_text_length(lab, fontname='hebo', fontsize=fs)
+            x = sp['x1'] + 1.5; cy = (sp['y0'] + sp['y1']) / 2
+            box = fitz.Rect(x - 0.5, cy - fs * 0.62, x + w + 0.8, cy + fs * 0.5)
+            p.draw_rect(box * dm, color=None, fill=(1, 1, 1), fill_opacity=0.85, overlay=True)
+            p.insert_text(fitz.Point(x, cy + fs * 0.35) * dm, lab, fontsize=fs, fontname='hebo',
+                          color=(0.85, 0, 0) if q.get('dup') else col, rotate=p.rotation, overlay=True)
+    doc.save(out_pdf, garbage=3, deflate=True)
+    print(f'PDF с номерами: {out_pdf}' + (f' (убраны слои: {len(hidden)})' if hidden else ''))
 
 def crop(pdf, x0, y0, x1, y1, out, page=0):
     """Вырезать область чертежа крупно (координаты PDF с учётом поворота, как в scan.json)."""
@@ -642,7 +712,7 @@ def symbols(work, name, x0, y0, x1, y1, page=0, tol=0.12):
         if not others or ok >= 0.8 * len(others):
             if any(math.dist((b[0], b[1]), (c[1], c[2])) < 2 for b in found): continue
             found.append((c[1], c[2]))
-    found = [b for b in found if math.dist(b, (anchor[1], anchor[2])) >= 2]  # сам образец не считаем
+    # сам образец тоже считается (если он из легенды — исключи легенду правилом area + skip, как и другие её значки)
     h = size / 2
     sc['spans'] = [q for q in sc['spans'] if q.get('c') != f'sym:{name}']
     for cx, cy in found: sc['spans'].append(dict(t=name, x0=cx - h, y0=cy - h, x1=cx + h, y1=cy + h, color='', font='значок', size=0, page=page, c=f'sym:{name}'))
@@ -808,6 +878,9 @@ def merge(out, files):
     print(f'Точек: {len(allp)} → {out}' + (f"\nПовторы между файлами (взята первая): {', '.join(dup)}" if dup else ''))
 
 if __name__ == '__main__':
+    try:
+        import signal; signal.signal(signal.SIGPIPE, signal.SIG_DFL)  # «… | head» без BrokenPipe
+    except Exception: pass
     if len(sys.argv) >= 4 and sys.argv[1] == 'scan': scan(sys.argv[2], sys.argv[3])
     elif len(sys.argv) >= 5 and sys.argv[1] == 'build': build(sys.argv[2], sys.argv[3], sys.argv[4])
     elif len(sys.argv) >= 4 and sys.argv[1] == 'tiles': tiles(sys.argv[2], sys.argv[3], int(sys.argv[4]) if len(sys.argv) > 4 else 3)
