@@ -12,7 +12,8 @@
   python3 tohnit.py merge ALL.json A.json B.json …    → один файл точек из нескольких (по этажам)
   python3 tohnit.py tiles PLAN.pdf WORK/ [3]          → крупные части чертежа (если текста в PDF нет — скан/фото)
   python3 tohnit.py crop  PLAN.pdf x0 y0 x1 y1 OUT.png [стр] → вырезать место крупно (координаты как в scan.json)
-  python3 tohnit.py symbols WORK/ ИМЯ x0 y0 x1 y1 [стр]  → найти все векторные значки как в образце (значки без текста)
+  python3 tohnit.py symbols WORK/ ИМЯ x0 y0 x1 y1 [стр]  → найти все векторные значки как в образце (значки без текста, любой поворот)
+  python3 tohnit.py find WORK/ 'regex'                → где встречается текст (с координатами); list WORK/ c05 — вся группа
 
 Нужен PyMuPDF (pip install pymupdf) или pdfplumber (обычно уже установлен) + Pillow.
 """
@@ -273,7 +274,7 @@ def build(work, mapfile, out):
             if r.get('clusters') and s['c'] not in r['clusters']: continue
             if r.get('match') and not re.search(r['match'], t): continue
             if r.get('page') is not None and s['page'] != r['page']: continue
-            if r.get('area') and not (r['area'][0] <= s['x0'] <= r['area'][2] and r['area'][1] <= s['y0'] <= r['area'][3]): continue
+            if r.get('area') and not (r['area'][0] <= (s['x0'] + s['x1']) / 2 <= r['area'][2] and r['area'][1] <= (s['y0'] + s['y1']) / 2 <= r['area'][3]): continue  # по центру текста
             rule = r; break
         if rule is None:
             if s['c'] in used_clusters and labelish(t): unknown.append(s)
@@ -327,6 +328,8 @@ def build(work, mapfile, out):
                 pts.append(dict(label=base if per == 1 else f'{base}.{k + 1}', orig=s['t'], typeId=r['type'], s=s, rule=r, invented=True))
     # шкаф, этаж
     for p in pts:
+        if 'cabinet' in p['rule'] and not p.get('near') and p['rule']['cabinet'] is not None:
+            p['cabinet'] = p['rule']['cabinet']; continue  # шкаф задан правилом явно ('' — без шкафа)
         cab = p['rule'].get('cabinet')
         if not cab and p.get('near'): cab = next((q.get('cabinet') or (cab_re.search(q['label']).group(1) if cab_re and cab_re.search(q['label']) else '') for q in pts if q['label'] == p['near']), '')
         if not cab and cab_re:
@@ -351,6 +354,8 @@ def build(work, mapfile, out):
         final.append(keep[0])
         for i, p in enumerate(keep[1:], 2):  # второй и далее — с пометкой, чтобы Иван решил
             q = dict(p); q['label'] = f"{lab}#{i}"; q['dup'] = True; final.append(q)
+    for p in final:  # переименование конкретных точек (в том числе дублей «#2»): relabel {"R-C10#2": "R-C11"}
+        if p['label'] in mp.get('relabel', {}): p['label'] = mp['relabel'][p['label']]; p.pop('dup', None)
     for e in mp.get('add', []):  # вручную; с координатами (x, y) — нарисуется на check.png
         s0 = dict(x0=e['x'] - 6, y0=e['y'] - 6, x1=e['x'] + 6, y1=e['y'] + 6, page=e.get('page', 0), t=e['label']) if 'x' in e else None
         final.append(dict(label=e['label'], typeId=e['type'], cabinet=e.get('cabinet', mp.get('default_cabinet', '')), s=s0, rule={}, note=e.get('note', 'добавлено вручную')))
@@ -466,9 +471,23 @@ def crop(pdf, x0, y0, x1, y1, out, page=0):
     x0, y0, x1, y1 = map(float, (x0, y0, x1, y1)); z = min(8.0, 2400 / max(1.0, x1 - x0, y1 - y0))
     render_page(pdf, int(page), z, clip=(x0, y0, x1, y1)).save(out); print(out)
 
+def _plen(items, rm):
+    """Длина контура пути (не меняется при повороте значка)."""
+    L = 0.0
+    for it in items:
+        k = it[0]
+        if k == 'l': pts = [it[1], it[2]]
+        elif k == 'c': pts = [it[1], it[2], it[3], it[4]]
+        elif k == 're': r = it[1]; L += 2 * (r.width + r.height); continue
+        elif k == 'qu': q = it[1]; pts = [q.ul, q.ur, q.lr, q.ll, q.ul]
+        else: continue
+        L += sum(math.dist(pts[i], pts[i + 1]) for i in range(len(pts) - 1))
+    return L
+
 def symbols(work, name, x0, y0, x1, y1, page=0, tol=0.12):
-    """Найти на листе все такие же векторные значки, как в области (x0..y1) — образец (например, значок из легенды
-    или один значок на плане). Найденные добавляются в scan.json как текст «name» в группе «sym:name» — для правил icon/near."""
+    """Найти на листе все такие же векторные значки, как в области (x0..y1) — образец (значок из легенды или на плане).
+    Сравнение не зависит от поворота значка (длина контуров + расстояния между частями).
+    Найденные добавляются в scan.json как текст «name» в группе «sym:name» — для правил icon/near. Повторный запуск с тем же именем заменяет найденное."""
     fitz = _fitz()
     if not fitz: print('Нужен PyMuPDF (pip install pymupdf)'); return
     sc = json.load(open(os.path.join(work, 'scan.json'))); pdf = sc['meta']['pdf']; page = int(page)
@@ -477,36 +496,44 @@ def symbols(work, name, x0, y0, x1, y1, page=0, tol=0.12):
     paths = []
     for d in p.get_drawings():
         r = d['rect'] * rm
-        if r.width > 200 or r.height > 200: continue
-        sig = (_color_hex(d.get('fill')) if d.get('fill') is not None else '', _color_hex(d.get('color')) if d.get('color') is not None else '', ''.join(it[0] for it in d['items']))
-        paths.append((sig, r.x0, r.y0, r.x1, r.y1))
-    tpl = [q for q in paths if q[1] >= x0 - 1 and q[2] >= y0 - 1 and q[3] <= x1 + 1 and q[4] <= y1 + 1]
+        if r.width > 300 or r.height > 300: continue
+        sig = (_color_hex(d.get('fill')) if d.get('fill') is not None else '', _color_hex(d.get('color')) if d.get('color') is not None else '', ''.join(sorted(it[0] for it in d['items'])))
+        paths.append((sig, (r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, _plen(d['items'], rm), r))
+    tpl = [q for q in paths if q[4].x0 >= x0 - 1 and q[4].y0 >= y0 - 1 and q[4].x1 <= x1 + 1 and q[4].y1 <= y1 + 1]
     if not tpl: print('В области нет векторных элементов — увеличь область'); return
-    size_ok = lambda a, b: abs((a[3] - a[1]) - (b[3] - b[1])) <= tol * max(1, b[3] - b[1]) + 0.3 and abs((a[4] - a[2]) - (b[4] - b[2])) <= tol * max(1, b[4] - b[2]) + 0.3
-    anchor = max(tpl, key=lambda q: (q[3] - q[1]) * (q[4] - q[2]))
-    ac = ((anchor[1] + anchor[3]) / 2, (anchor[2] + anchor[4]) / 2)
-    others = [q for q in tpl if q is not anchor]
+    same = lambda a, b: a[0] == b[0] and abs(a[3] - b[3]) <= tol * max(1.0, b[3]) + 0.5
+    anchor = max(tpl, key=lambda q: q[3])
+    # части значка — того же цвета, что главный контур (стрелки-выноски, штриховка мебели в образец не входят)
+    others = [q for q in tpl if q is not anchor and (q[0][0], q[0][1]) == (anchor[0][0], anchor[0][1])]
+    tpl = [anchor] + others
+    rad = [(q, math.dist((q[1], q[2]), (anchor[1], anchor[2]))) for q in others]
     grid = collections.defaultdict(list)
-    for q in paths: grid[(q[0], int((q[1] + q[3]) / 20), int((q[2] + q[4]) / 20))].append(q)
+    for q in paths: grid[(int(q[1] // 30), int(q[2] // 30))].append(q)
+    size = max(x1 - x0, y1 - y0)
     found = []
     for c in paths:
-        if c[0] != anchor[0] or not size_ok(c, anchor): continue
-        dx, dy = (c[1] + c[3]) / 2 - ac[0], (c[2] + c[4]) / 2 - ac[1]
-        ok = 0
-        for q in others:
-            tx, ty = (q[1] + q[3]) / 2 + dx, (q[2] + q[4]) / 2 + dy
-            cand = [z for gx in (int(tx * 2 / 20) - 1, int(tx * 2 / 20), int(tx * 2 / 20) + 1) for gy in (int(ty * 2 / 20) - 1, int(ty * 2 / 20), int(ty * 2 / 20) + 1) for z in grid.get((q[0], gx, gy), [])]
-            if any(abs((z[1] + z[3]) / 2 - tx) < 1.5 and abs((z[2] + z[4]) / 2 - ty) < 1.5 and size_ok(z, q) for z in cand): ok += 1
+        if not same(c, anchor): continue
+        near = [z for gx in range(int((c[1] - size) // 30), int((c[1] + size) // 30) + 1) for gy in range(int((c[2] - size) // 30), int((c[2] + size) // 30) + 1) for z in grid.get((gx, gy), [])]
+        ok = sum(1 for q, rq in rad if any(same(z, q) and abs(math.dist((z[1], z[2]), (c[1], c[2])) - rq) <= max(1.5, 0.1 * rq) for z in near))
         if not others or ok >= 0.8 * len(others):
-            box = (x0 + dx, y0 + dy, x1 + dx, y1 + dy)
-            if any(abs(b[0] - box[0]) < 2 and abs(b[1] - box[1]) < 2 for b in found): continue
-            found.append(box)
-    found = [b for b in found if not (abs(b[0] - x0) < 2 and abs(b[1] - y0) < 2)]  # сам образец не считаем
+            if any(math.dist((b[0], b[1]), (c[1], c[2])) < 2 for b in found): continue
+            found.append((c[1], c[2]))
+    found = [b for b in found if math.dist(b, (anchor[1], anchor[2])) >= 2]  # сам образец не считаем
+    h = size / 2
     sc['spans'] = [q for q in sc['spans'] if q.get('c') != f'sym:{name}']
-    for b in found: sc['spans'].append(dict(t=name, x0=b[0], y0=b[1], x1=b[2], y1=b[3], color='', font='значок', size=0, page=page, c=f'sym:{name}'))
-    sc['clusters'] = [c for c in sc['clusters'] if c['id'] != f'sym:{name}'] + [dict(id=f'sym:{name}', color='', font='значок', size=0, bg='', n=len(found), labelish=0, shapes=[], samples=[name], short=len(found))]
+    for cx, cy in found: sc['spans'].append(dict(t=name, x0=cx - h, y0=cy - h, x1=cx + h, y1=cy + h, color='', font='значок', size=0, page=page, c=f'sym:{name}'))
+    sc['clusters'] = [c for c in sc['clusters'] if c['id'] != f'sym:{name}'] + ([dict(id=f'sym:{name}', color='', font='значок', size=0, bg='', n=len(found), labelish=0, shapes=[], samples=[name], short=len(found))] if found else [])
     json.dump(sc, open(os.path.join(work, 'scan.json'), 'w'), ensure_ascii=False)
-    print(f'Значков «{name}» найдено: {len(found)} (группа sym:{name}). Образец {len(tpl)} элементов. Проверь число по легенде и на check.png после build.')
+    print(f'Значков «{name}» найдено: {len(found)} (группа sym:{name}; образец из {len(tpl)} элементов). Сверь число с легендой и посмотри на check.png после build.'
+          + ('' if found else ' Ничего не найдено — группа удалена; попробуй образец точнее (только сам значок) или другой экземпляр.'))
+
+def find(work, what, group=None):
+    """Найти текст (regex) или показать всю группу: текст, группа, координаты (для crop/area/add)."""
+    sc = json.load(open(os.path.join(work, 'scan.json')))
+    rows = [q for q in sc['spans'] if (q.get('c') == group if group else re.search(what, q['t'], re.I) or re.search(what, q['t'][::-1], re.I))]
+    for q in sorted(rows, key=lambda q: (q['page'], q['y0'], q['x0'])):
+        print(f"{heb(q['t'])}\t{q.get('c')}\tстр {q['page']}\tx {q['x0']:.0f}..{q['x1']:.0f}\ty {q['y0']:.0f}..{q['y1']:.0f}")
+    print(f'— {len(rows)} шт.')
 
 def tiles(pdf, work, n=3):
     """Чертёж без текстового слоя (скан, фото): крупные части n×n с перекрытием 10% — для чтения глазами."""
@@ -541,6 +568,8 @@ if __name__ == '__main__':
     elif len(sys.argv) >= 5 and sys.argv[1] == 'build': build(sys.argv[2], sys.argv[3], sys.argv[4])
     elif len(sys.argv) >= 4 and sys.argv[1] == 'tiles': tiles(sys.argv[2], sys.argv[3], int(sys.argv[4]) if len(sys.argv) > 4 else 3)
     elif len(sys.argv) >= 4 and sys.argv[1] == 'merge': merge(sys.argv[2], sys.argv[3:])
+    elif len(sys.argv) >= 4 and sys.argv[1] == 'find': find(sys.argv[2], sys.argv[3])
+    elif len(sys.argv) >= 4 and sys.argv[1] == 'list': find(sys.argv[2], '', group=sys.argv[3])
     elif len(sys.argv) >= 8 and sys.argv[1] == 'symbols': symbols(sys.argv[2], sys.argv[3], *sys.argv[4:8], *(sys.argv[8:9]))
     elif len(sys.argv) >= 8 and sys.argv[1] == 'crop': crop(sys.argv[2], *sys.argv[3:7], sys.argv[7], sys.argv[8] if len(sys.argv) > 8 else 0)
     else: print(__doc__)
