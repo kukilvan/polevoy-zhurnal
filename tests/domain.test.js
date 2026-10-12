@@ -587,3 +587,16 @@ test('кабели самой точки: дверь 2×6005, авизарим �
   assert.deepEqual(works, ['CHK_FLUKE', 'HIV_DEV', 'HIV_KEY', 'INS_BIO', 'SHL', 'pull:6005', 'pull:cat7']);
   assert.equal(tasksOf(ctx.points.get('z'), ctx).find((t) => t.workId === 'HIV_DEV').qty, 2); // в шкафу — оба кабеля
 });
+
+test('устройство, изменённое у точки: свои кабели и работы вместо заданных в «Устройствах»', async () => {
+  const { tasksOf } = await import('../src/domain/index.js');
+  const cables = [{ id: '6005', accounting: 'Метры', workIds: ['HIV_DEV'] }, { id: 'cat7', accounting: 'Точки', workIds: ['HIV_KEY', 'HIV_DEV', 'CHK_FLUKE', 'SHL'] }];
+  const devices = [{ id: 'DV_INT', name: 'Интерком', cables: [{ cable: '6005', count: 1 }, { cable: 'cat7', count: 1 }], workIds: ['INS_INT'] }];
+  const types = [{ id: 'INT', devices: [{ deviceId: 'DV_INT', count: 1 }] }];
+  const p = { id: 'a', projectId: 'P1', label: 'I1', typeId: 'INT', devices: [{ deviceId: 'DV_INT', count: 1, cables: [{ cable: 'cat7', count: 1 }], workIds: [] }] };
+  const ctx = make({ cables, devices, types, points: [p] });
+  const info = pointInfo(ctx.points.get('a'), ctx);
+  assert.equal(info.cableList.map((c) => c.cable).join(','), 'cat7');
+  assert.equal(info.installTotal, 0);
+  assert.ok(!tasksOf(ctx.points.get('a'), ctx).some((t) => t.workId === 'INS_INT'));
+});

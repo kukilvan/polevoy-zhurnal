@@ -18,17 +18,41 @@ const reasonOptions = () => [...state.ctx.delayReasons.values()].map((r) => ({ v
 // ---- состав точки (тип из устройств): галочки устройств с количеством + кабели самой точки ----
 const typeOf = (id) => state.ctx.types.get(id);
 const composedType = (id) => isComposedType(typeOf(id));
-const sameList = (a, b, k) => JSON.stringify((a || []).map((x) => [x[k], Number(x.count)])) === JSON.stringify((b || []).map((x) => [x[k], Number(x.count)]));
+const sameList = (a, b, k) => JSON.stringify((a || []).map((x) => [x[k], Number(x.count), x.cables || null, x.workIds || null]))
+  === JSON.stringify((b || []).map((x) => [x[k], Number(x.count), x.cables || null, x.workIds || null]));
 function compField(point) {
   const ctx = state.ctx; const allDev = [...ctx.devices.values()].sort((a, b) => a.name.localeCompare(b.name, 'ru'));
-  let typeId = null; let rows = []; // [{ deviceId, count, on }]
+  let typeId = null; let rows = []; // [{ deviceId, count, on, cables?, workIds?, open? }] — cables/workIds: изменено у этой точки
+  const works = [...ctx.catalog.values()].filter((w) => ['Хивут', 'Установка', 'Проверка', 'Шилют', 'Доп. работа'].includes(w.workType) && w.active !== false)
+    .sort((a, b) => a.workType.localeCompare(b.workType, 'ru') || a.name.localeCompare(b.name, 'ru'));
+  const cableOpts = [...ctx.cables.values()].map((c) => ({ value: c.id, label: c.id }));
+  // редактор устройства для этой точки: кабели и работы (по умолчанию — как в «Устройствах»)
+  const editor = (r) => {
+    const dev = ctx.devices.get(r.deviceId) || {};
+    const q = qtyList(cableOpts, { addLabel: '➕ Кабель', empty: 'Без кабеля', onChange: () => { r.cables = q.get().map((c) => ({ cable: c.value, count: c.count })); mark(); } });
+    q.set((Array.isArray(r.cables) ? r.cables : dev.cables || []).map((c) => ({ value: c.cable, count: c.count })));
+    const cur = new Set(Array.isArray(r.workIds) ? r.workIds : dev.workIds || []);
+    const wl = h('div', { class: 'picklist', style: { maxHeight: '180px' } }, [...works].sort((a, b) => cur.has(b.id) - cur.has(a.id)).map((w) => {
+      const cb = h('input', { type: 'checkbox', checked: cur.has(w.id), onchange: () => { cb.checked ? cur.add(w.id) : cur.delete(w.id); r.workIds = works.filter((x) => cur.has(x.id)).map((x) => x.id); mark(); } });
+      return h('label', { class: 'pickrow' }, cb, h('span', {}, w.name), h('small', {}, w.workType));
+    }));
+    const mark = () => { title.textContent = `Устройство «${dev.name || r.deviceId}» на этой точке${Array.isArray(r.cables) || Array.isArray(r.workIds) ? ' — изменено' : ''}`; };
+    const title = h('div', { class: 'mut', style: { fontWeight: 600 } }); mark();
+    return h('div', { class: 'dev-edit' }, title,
+      h('div', { class: 'mut', style: { marginTop: '6px' } }, 'Кабели'), q.el,
+      h('div', { class: 'mut' }, 'Работы (кроме работ кабелей — они добавятся сами)'), wl,
+      h('button', { type: 'button', class: 'sec', onclick: () => { delete r.cables; delete r.workIds; r.open = false; draw(); } }, '↩︎ Как в «Устройствах»'));
+  };
   const devBox = h('div', { class: 'picklist', style: { maxHeight: 'none' } });
   const addSel = h('select', {}); const cableQ = qtyList([...ctx.cables.values()].map((c) => ({ value: c.id, label: c.id })), { addLabel: '➕ Кабель точки', empty: 'Кабелей точки нет' });
   const draw = () => {
-    devBox.replaceChildren(...(rows.length ? rows.map((r) => {
+    devBox.replaceChildren(...(rows.length ? rows.flatMap((r) => {
       const cb = h('input', { type: 'checkbox', checked: r.on, onchange: () => { r.on = cb.checked; } });
       const cnt = h('input', { type: 'text', inputMode: 'numeric', value: String(r.count), class: 'qty', style: { width: '52px', textAlign: 'center' }, oninput: (e) => { r.count = Number(e.target.value) || 0; } });
-      return h('label', { class: 'pickrow' }, cb, h('span', {}, ctx.devices.get(r.deviceId)?.name || r.deviceId), h('small', {}, '×'), cnt);
+      const changed = Array.isArray(r.cables) || Array.isArray(r.workIds);
+      const gear = h('button', { type: 'button', class: 'sec', style: { padding: '6px 10px', flex: 'none' }, onclick: () => { r.open = !r.open; draw(); } }, r.open ? '▲' : '⚙️');
+      const row = h('div', { class: 'pickrow' }, cb, h('span', { onclick: () => { cb.checked = !cb.checked; r.on = cb.checked; } }, ctx.devices.get(r.deviceId)?.name || r.deviceId, changed ? h('small', { style: { color: 'var(--warn)' } }, ' · изменено') : null), h('small', {}, '×'), cnt, gear);
+      return r.open ? [row, editor(r)] : [row];
     }) : [h('div', { class: 'empty' }, 'Устройств нет')]));
     addSel.replaceChildren(h('option', { value: '' }, '➕ Добавить устройство…'), ...allDev.filter((d) => !rows.some((r) => r.deviceId === d.id)).map((d) => h('option', { value: d.id }, d.name)));
   };
@@ -36,7 +60,8 @@ function compField(point) {
   const load = (tid, own) => {
     typeId = tid; const t = typeOf(tid);
     const devs = own && Array.isArray(point?.devices) ? point.devices : (t?.devices || []);
-    rows = devs.map((d) => ({ deviceId: d.deviceId, count: Number(d.count) || 1, on: true }));
+    rows = devs.map((d) => ({ deviceId: d.deviceId, count: Number(d.count) || 1, on: true,
+      ...(Array.isArray(d.cables) ? { cables: d.cables } : {}), ...(Array.isArray(d.workIds) ? { workIds: d.workIds } : {}) }));
     // устройства типа, снятые у этой точки, показываем без галочки
     if (own && Array.isArray(point?.devices)) (t?.devices || []).forEach((d) => { if (!rows.some((r) => r.deviceId === d.deviceId)) rows.push({ deviceId: d.deviceId, count: Number(d.count) || 1, on: false }); });
     const cbl = own && Array.isArray(point?.cables) ? point.cables : (t?.cables || []);
@@ -49,7 +74,8 @@ function compField(point) {
     build: (api) => ({
       el: h('div', {}, devBox, addSel, h('div', { class: 'mut', style: { margin: '8px 0 0' } }, 'Кабели точки'), cableQ.el),
       update: (v) => { if (v.typeId !== typeId) load(v.typeId, typeId === null && point && v.typeId === point.typeId); },
-      get: () => ({ devices: rows.filter((r) => r.on && r.count > 0).map((r) => ({ deviceId: r.deviceId, count: r.count })),
+      get: () => ({ devices: rows.filter((r) => r.on && r.count > 0).map((r) => ({ deviceId: r.deviceId, count: r.count,
+        ...(Array.isArray(r.cables) ? { cables: r.cables } : {}), ...(Array.isArray(r.workIds) ? { workIds: r.workIds } : {}) })),
         cables: cableQ.get().map((c) => ({ cable: c.value, count: c.count })) }),
     }),
   };
@@ -63,7 +89,7 @@ function compData(typeId, comp) {
 const compText = (p) => {
   const ctx = state.ctx; const t = typeOf(p.typeId); if (!isComposedType(t)) return '';
   const devs = Array.isArray(p.devices) ? p.devices : (t.devices || []);
-  return devs.map((d) => `${ctx.devices.get(d.deviceId)?.name || d.deviceId}${d.count > 1 ? ` ×${d.count}` : ''}`).join(', ') + (Array.isArray(p.devices) || Array.isArray(p.cables) ? ' (свой состав)' : '');
+  return devs.map((d) => `${ctx.devices.get(d.deviceId)?.name || d.deviceId}${d.count > 1 ? ` ×${d.count}` : ''}${d.cables || d.workIds ? ' (изменено)' : ''}`).join(', ') + (Array.isArray(p.devices) || Array.isArray(p.cables) ? ' (свой состав)' : '');
 };
 
 // Поле со сканером: текстовое поле + кнопка «📷»

@@ -156,3 +156,4 @@ html, body { overflow-x: hidden; }
 .qtyrow select { flex: 1; min-width: 0; }
 .qtyrow input.qty { width: 56px; flex: none; text-align: center; }
 .qtyrow button.x { flex: none; padding: 8px 12px; }
+.dev-edit { border-left: 3px solid var(--acc); margin: 2px 0 10px 8px; padding: 6px 0 6px 10px; display: flex; flex-direction: column; gap: 4px; }
