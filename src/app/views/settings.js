@@ -8,6 +8,7 @@ import { projectForm } from './projects.js';
 import { themeLabel, setTheme, nextTheme } from '../theme.js';
 import { updateManagerTable, backupNow } from './project.js';
 import { exportExcel } from '../excel.js';
+import { pointsFromFile } from './pointsfile.js';
 
 export const WORK_TYPES = ['Протяжка', 'Перетяжка', 'Перенос', 'Хивут', 'Установка', 'Проверка', 'Шилют', 'Доп. работа', 'Время'];
 const STAGES = ['Протяжка', 'Хивут', 'Установка', 'Проверка', 'Шилют'];
@@ -300,7 +301,8 @@ export function settingsView(ui) {
       mainTable(p).link ? row('📊', 'Открыть таблицу руководства', null, () => window.open(mainTable(p).link, '_blank')) : null,
       row('💾', 'Резервная копия на Диск', p.backupAt ? `Последняя: ${new Date(p.backupAt).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}` : null, backupNow),
       row('📊', 'Выгрузить всё в Excel', 'Файл .xlsx: точки, журнал, дни, справочники', exportExcel),
-      row('📥', 'Импорт данных', null, () => ui.open('import')),
+      row('📥', 'Точки из файла', 'Добавить точки из JSON (после разбора тохнита), без замены', pointsFromFile),
+      row('📥', 'Импорт данных (замена всего проекта)', null, () => ui.open('import')),
       row('🕘', 'История и откат', null, () => ui.open('history')),
       row('🧾', 'Журнал событий', null, () => ui.open('log'))));
 }

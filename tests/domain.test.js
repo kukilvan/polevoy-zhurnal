@@ -612,3 +612,22 @@ test('перевод старых типов на устройства: стат
   const shl = r.ops.find((o) => o.coll === 'journal');
   assert.deepEqual([shl.data.editWorkId, shl.data.editDate], ['SHL', '2026-10-05']);
 });
+
+test('добавление точек из файла: дубли пропускаются, ошибки и подозрительные обозначения, новые типы', async () => {
+  const { parsePointsFile, planPointsImport, pointsImportOps } = await import('../src/domain/index.js');
+  assert.throws(() => parsePointsFile('{"format":"x"}'));
+  const ctx = make({ points: [cam] });
+  const data = parsePointsFile(JSON.stringify({ format: 'polevoy-points-1', floor: '1', points: [
+    { label: '1A-01', typeId: 'Камера' }, { label: '1A-C2', typeId: 'Камера', cabinet: '1A' }, { label: 'H240', typeId: 'Камера' },
+    { label: '1A-INT1', typeId: 'Интерком', cabinet: '1A' }, { label: 'X1', typeId: 'Нет такого' }, { label: '1A-C2', typeId: 'Камера' },
+  ], types: [{ id: 'Интерком', nameHe: 'אינטרקום', devices: [] , cables: [{ cable: 'cat7', count: 1 }] }] }));
+  const plan = planPointsImport(ctx, data);
+  assert.deepEqual(plan.add.map((p) => p.label), ['1A-C2', 'H240', '1A-INT1']);
+  assert.deepEqual(plan.skipped, ['1A-01']);
+  assert.equal(plan.errors.length, 2);
+  assert.ok(plan.warnings.some((w) => w.startsWith('H240')));
+  assert.deepEqual(plan.newTypes.map((t) => t.id), ['Интерком']);
+  let n = 0; const ops = pointsImportOps(plan, () => `id${n++}`);
+  assert.deepEqual(ops.map((o) => o.coll), ['types', 'points', 'points', 'points']);
+  assert.equal(ops[1].data.floor, '1');
+});

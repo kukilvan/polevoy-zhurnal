@@ -12,3 +12,4 @@ export * from './deviceid.js';
 export * from './remaining.js';
 export * from './export.js';
 export * from './compose.js';
+export * from './pointsimport.js';
