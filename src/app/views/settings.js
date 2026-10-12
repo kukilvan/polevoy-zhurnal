@@ -1,8 +1,8 @@
 // Вкладка «Настройки»: все справочники (выпадающие списки), привязка установки и служебные действия проекта в одном месте.
-import { h, formModal, confirmDialog, toast, qtyList } from '../ui.js';
+import { h, formModal, confirmDialog, toast, qtyList, openModal } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { newId } from '../repo.js';
-import { installBinding, tablesOf, mainTable, hasDeviceId, libraryOps, migrateProject } from '../../domain/index.js';
+import { installBinding, tablesOf, mainTable, hasDeviceId, libraryOps, migrateProject, auditRefs, buildContext } from '../../domain/index.js';
 import { installFields, describeBinding } from './install.js';
 import { projectForm } from './projects.js';
 import { themeLabel, setTheme, nextTheme } from '../theme.js';
@@ -194,26 +194,63 @@ function itemForm(key, existing) {
   });
 }
 
-// Стандартная библиотека: добавить в проект недостающие устройства, работы, новые типы и работы кабелей (имеющееся не меняется)
+// Все id, которые когда-либо были в проекте (вместе с удалёнными) — удалённое из библиотеки не возвращаем
+const knownIds = () => Object.fromEntries(['catalog', 'devices', 'cables', 'types'].map((c) => [c, new Set((state.data[c] || []).map((x) => x.id))]));
+// Контекст «как будет после» операций (для предпросмотра)
+function ctxAfter(ops) {
+  const data = { ...state.data, projects: [currentProject()] };
+  ['catalog', 'devices', 'cables', 'types', 'journal'].forEach((c) => {
+    const m = new Map((data[c] || []).map((x) => [x.id, x]));
+    ops.filter((o) => o.coll === c).forEach((o) => m.set(o.id, { ...(m.get(o.id) || {}), ...o.data, id: o.id, deleted: false }));
+    data[c] = [...m.values()];
+  });
+  return buildContext(data);
+}
+const auditBox = (list) => {
+  const icon = { error: '❌', warn: '⚠️', info: 'ℹ️' };
+  const order = { error: 0, warn: 1, info: 2 };
+  return list.length ? h('div', { style: { fontSize: '14px' } }, [...list].sort((a, b) => order[a.level] - order[b.level]).map((x) => h('div', { style: { padding: '3px 0' } }, `${icon[x.level]} ${x.text}`)))
+    : h('div', {}, '✅ Противоречий нет');
+};
+export function auditModal() {
+  openModal('Проверка справочников', h('div', {},
+    h('div', { class: 'mut', style: { marginBottom: '8px' } }, '❌ — ссылка на то, чего нет (исправьте); ⚠️ — стоит посмотреть; ℹ️ — для сведения (не используется).'),
+    auditBox(auditRefs(state.ctx))));
+}
+
+// Стандартная библиотека: добавить в проект недостающее (то, что вы удаляли, не возвращается)
 async function addLibrary() {
-  const ops = libraryOps(state.ctx);
-  if (!ops.length) { toast('Всё стандартное уже есть в проекте'); return; }
-  const n = (c) => ops.filter((o) => o.coll === c).length;
-  const what = [['devices', 'устройств'], ['types', 'типов точек'], ['catalog', 'работ'], ['cables', 'кабелей (работы)']].filter(([c]) => n(c)).map(([c, t]) => `${t}: ${n(c)}`).join(', ');
-  if (!(await confirmDialog(`Добавить из стандартной библиотеки — ${what}? То, что уже есть в проекте, не изменится.`, { yes: 'Добавить' }))) return;
+  const ops = libraryOps(state.ctx, knownIds());
+  if (!ops.length) { toast('Добавлять нечего: всё стандартное есть или было удалено вами'); return; }
+  const names = (c) => ops.filter((o) => o.coll === c).map((o) => o.data.name || o.id);
+  const what = [['devices', 'Устройства'], ['types', 'Типы точек'], ['catalog', 'Работы'], ['cables', 'Кабели (работы кабеля)']].filter(([c]) => names(c).length).map(([c, t]) => `${t}: ${names(c).join(', ')}`).join('. ');
+  if (!(await confirmDialog(`Добавить из стандартной библиотеки? ${what}. То, что уже есть или было удалено, не изменится.`, { yes: 'Добавить' }))) return;
   getRepo().save(currentProject().id, ops.map((o) => ({ ...o, data: { ...o.data, deleted: false } })));
   toast('Добавлено');
 }
 
-// Перевод типов старой схемы на устройства (стандартный состав), шилют задним числом там, где есть проверка
-async function migrateTypes() {
-  const r = migrateProject(state.ctx);
+// Перевод типов старой схемы на устройства: подробный предпросмотр и проверка «как будет после»
+function migrateTypes() {
+  const ctx = state.ctx; const r = migrateProject(ctx, knownIds());
   if (!r.converted.length) { toast('Старых типов нет'); return; }
-  const msg = `Перевести на устройства типы: ${r.converted.join(', ')}? Состав возьмётся стандартный (его потом можно поменять). `
-    + `Недостающие устройства и работы добавятся. Шилют задним числом (где есть проверка): ${r.backfilled}. Вернуть можно через «История и откат».`;
-  if (!(await confirmDialog(msg, { yes: 'Перевести' }))) return;
-  getRepo().save(currentProject().id, r.ops.map((o) => ({ ...o, data: { ...o.data, deleted: false } })));
-  toast(`Переведено типов: ${r.converted.length}`);
+  const after = ctxAfter(r.ops);
+  const dn = (id) => after.devices.get(id)?.name || id; const wn = (id) => after.catalog.get(id)?.name || id;
+  const added = (c) => r.ops.filter((o) => o.coll === c && !ctx[c].has(o.id));
+  const sec = (title, ...kids) => h('div', { style: { margin: '10px 0' } }, h('b', {}, title), ...kids);
+  const body = h('div', { style: { fontSize: '14px' } },
+    sec('Типы → состав', ...r.converted.map((id) => { const t = after.types.get(id);
+      return h('div', {}, `• ${id}: ${(t.devices || []).map((x) => dn(x.deviceId)).join(' + ') || '— пусто'}${t.workIds?.length ? `; на точку: ${t.workIds.map(wn).join(', ')}` : ''} (точек: ${[...ctx.points.values()].filter((p) => p.typeId === id).length})`); })),
+    added('devices').length ? sec('Будут добавлены устройства', h('div', {}, added('devices').map((o) => o.data.name).join(', '))) : null,
+    added('catalog').length ? sec('Будут добавлены работы', h('div', {}, added('catalog').map((o) => o.data.name).join(', '))) : null,
+    added('types').length ? sec('Будут добавлены типы', h('div', {}, added('types').map((o) => o.id).join(', '))) : null,
+    r.ops.some((o) => o.coll === 'cables') ? sec('Работы кабелей', h('div', {}, r.ops.filter((o) => o.coll === 'cables').map((o) => `${o.id}: ${(o.data.workIds || []).map(wn).join(', ')}`).join('; '))) : null,
+    sec(`Шилют задним числом: ${r.backfilled} точек`, h('div', { class: 'mut' }, 'Там, где проверка уже отмечена.')),
+    sec('Проверка «как будет после»', auditBox(auditRefs(after).filter((x) => x.level !== 'info'))),
+    h('div', { class: 'mut' }, 'Что не так — можно поправить и до, и после перевода (в «Устройствах» и «Типах точек»). Вернуть всё можно через «История и откат».'),
+    h('div', { class: 'btns' },
+      h('button', { onclick: () => { getRepo().save(currentProject().id, r.ops.map((o) => ({ ...o, data: { ...o.data, deleted: false } }))); close(); toast(`Переведено типов: ${r.converted.length}`); } }, '🔄 Перевести'),
+      h('button', { class: 'sec', onclick: () => close() }, 'Отмена')));
+  const close = openModal('Перевод на устройства', body);
 }
 
 export function refView() {
@@ -233,7 +270,7 @@ export function refView() {
     h('div', { class: 'mut', style: { marginBottom: '10px' } }, def.hint),
     h('div', { class: 'btns', style: { marginTop: 0 } }, h('button', { onclick: () => itemForm(key, null) }, '➕ Добавить пункт'),
       ['devices', 'types', 'cables'].includes(key) ? h('button', { class: 'sec', onclick: addLibrary }, '📚 Добавить стандартные') : null,
-      key === 'types' && migrateProject(state.ctx).converted.length ? h('button', { class: 'wide', onclick: migrateTypes }, '🔄 Перевести старые типы на устройства') : null),
+      key === 'types' && migrateProject(state.ctx, knownIds()).converted.length ? h('button', { class: 'wide', onclick: migrateTypes }, '🔄 Перевести старые типы на устройства') : null),
     h('div', { class: 'card', style: { padding: 0, marginTop: '12px' } }, rows.length ? rows : h('div', { class: 'empty' }, 'Список пуст.')));
 }
 
@@ -247,7 +284,8 @@ export function settingsView(ui) {
       row('🎨', `Тема: ${themeLabel()}`, 'Нажмите, чтобы переключить: тёмная → светлая → как в телефоне (только на этом устройстве)', () => { setTheme(nextTheme()); ui.render(); })),
     h('div', { class: 'card', style: { padding: 0 } },
       h('div', { class: 'group', style: { padding: '10px 14px 4px' } }, 'Выпадающие списки (справочники)'),
-      ['types', 'devices', 'cables', 'catalog', 'configs', 'units', 'culprits', 'delayReasons'].map(ref)),
+      ['types', 'devices', 'cables', 'catalog', 'configs', 'units', 'culprits', 'delayReasons'].map(ref),
+      row('🩺', 'Проверка справочников', 'Ссылки на удалённое, неиспользуемые устройства и работы', auditModal)),
     h('div', { class: 'card', style: { padding: 0 } },
       h('div', { class: 'group', style: { padding: '10px 14px 4px' } }, `Проект «${p.name}»`),
       row('🔧', 'Привязка установки', 'Что считается установкой для каждого типа точек', () => ui.open('install')),

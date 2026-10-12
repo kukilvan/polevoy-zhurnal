@@ -224,9 +224,11 @@ export function migrationOps(ctx, { typeDevices, typeWorks, libraryOps }) {
   const added = (coll) => new Map(ops.filter((o) => o.coll === coll).map((o) => [o.id, { ...(ctx[coll].get(o.id) || {}), ...o.data, id: o.id }]));
   const merge = (coll) => { const m = new Map(ctx[coll]); added(coll).forEach((v, k) => m.set(k, v)); return m; };
   const types = merge('types'); const converted = [];
+  const ctx2pre = { devices: merge('devices'), catalog: merge('catalog') };
   [...types.values()].forEach((t) => {
     if (isComposedType(t) || !typeDevices[t.id]) return;
-    const data = { devices: typeDevices[t.id].map(([deviceId, count = 1]) => ({ deviceId, count })), cables: [], workIds: typeWorks[t.id] || [] };
+    const devs = typeDevices[t.id].filter(([deviceId]) => ctx2pre.devices.has(deviceId)).map(([deviceId, count = 1]) => ({ deviceId, count }));
+    const data = { devices: devs, cables: [], workIds: (typeWorks[t.id] || []).filter((w) => ctx2pre.catalog.has(w)) };
     types.set(t.id, { ...t, ...data }); converted.push(t.id);
     ops.push({ coll: 'types', id: t.id, data });
   });
@@ -243,4 +245,37 @@ export function migrationOps(ctx, { typeDevices, typeWorks, libraryOps }) {
     });
   });
   return { ops, converted, backfilled };
+}
+
+// ---------- проверка справочников на противоречия ----------
+// → [{ level: 'error' | 'warn' | 'info', text }]
+export function auditRefs(ctx) {
+  const out = []; const W = (id) => ctx.catalog.get(id)?.name || id;
+  const err = (text) => out.push({ level: 'error', text }); const warn = (text) => out.push({ level: 'warn', text }); const info = (text) => out.push({ level: 'info', text });
+  ctx.cables.forEach((c) => (c.workIds || []).forEach((w) => { if (!ctx.catalog.has(w)) err(`Кабель ${c.id}: работы «${w}» нет в каталоге`); }));
+  ctx.devices.forEach((d) => {
+    (d.workIds || []).forEach((w) => { if (!ctx.catalog.has(w)) err(`Устройство «${d.name}»: работы «${w}» нет в каталоге`); });
+    (d.cables || []).forEach((c) => { if (!ctx.cables.has(c.cable)) err(`Устройство «${d.name}»: кабеля «${c.cable}» нет в «Кабелях»`); });
+  });
+  const usedDev = new Set(); const usedWork = new Set();
+  ctx.cables.forEach((c) => (c.workIds || []).forEach((w) => usedWork.add(w)));
+  ctx.devices.forEach((d) => (d.workIds || []).forEach((w) => usedWork.add(w)));
+  ctx.types.forEach((t) => {
+    if (!isComposedType(t)) { warn(`Тип «${t.id}» — старая схема (ещё не переведён на устройства)`); (t.installWorkIds || []).forEach((w) => usedWork.add(w)); return; }
+    (t.devices || []).forEach((x) => { usedDev.add(x.deviceId); if (!ctx.devices.has(x.deviceId)) err(`Тип «${t.id}»: устройства «${x.deviceId}» нет`); });
+    (t.cables || []).forEach((c) => { if (!ctx.cables.has(c.cable)) err(`Тип «${t.id}»: кабеля «${c.cable}» нет`); });
+    (t.workIds || []).forEach((w) => { usedWork.add(w); if (!ctx.catalog.has(w)) err(`Тип «${t.id}»: работы «${w}» нет в каталоге`); });
+    if (!(t.devices || []).length && !(t.cables || []).length) warn(`Тип «${t.id}»: состав пуст`);
+  });
+  ctx.points.forEach((p) => (Array.isArray(p.devices) ? p.devices : []).forEach((x) => {
+    usedDev.add(x.deviceId);
+    if (!ctx.devices.has(x.deviceId)) err(`Точка ${p.label}: устройства «${x.deviceId}» нет`);
+    (x.workIds || []).forEach((w) => { usedWork.add(w); if (!ctx.catalog.has(w)) err(`Точка ${p.label}: работы «${w}» нет в каталоге`); });
+  }));
+  ctx.points.forEach((p) => { if (!ctx.types.has(p.typeId)) err(`Точка ${p.label}: типа «${p.typeId}» нет`); });
+  ctx.devices.forEach((d) => { if (!usedDev.has(d.id)) info(`Устройство «${d.name}» не входит ни в один тип и ни в одну точку`); });
+  ctx.catalog.forEach((w) => {
+    if (['Хивут', 'Установка', 'Проверка', 'Шилют'].includes(w.workType) && w.active !== false && !usedWork.has(w.id)) info(`Работа «${W(w.id)}» (${w.workType}) не требуется ни одним кабелем, устройством или типом`);
+  });
+  return out;
 }

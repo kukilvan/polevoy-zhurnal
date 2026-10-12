@@ -136,17 +136,32 @@ const compose = (t) => ({ ...t, devices: (TYPE_DEVICES[t.id] || []).map(([device
 export const composedTypes = (types) => [...types, ...NEW_TYPES.filter((n) => !types.some((t) => t.id === n.id))].map(compose);
 
 // Чего не хватает проекту из стандартной библиотеки (не трогая того, что уже есть): операции записи
-export const migrateProject = (ctx) => migrationOps(ctx, { typeDevices: TYPE_DEVICES, typeWorks: TYPE_WORKS, libraryOps: libraryOps(ctx) });
-export function libraryOps(ctx) {
+// Перевод проекта на устройства. known — все id, которые когда-либо были в проекте (включая удалённые): удалённое не возвращаем.
+export const migrateProject = (ctx, known) => migrationOps(ctx, { typeDevices: TYPE_DEVICES, typeWorks: TYPE_WORKS, libraryOps: libraryOps(ctx, known) });
+
+// Чего не хватает проекту из стандартной библиотеки: только то, чего в проекте никогда не было (удалённое Иваном не возвращается).
+// Ссылки на удалённые работы/кабели/устройства из библиотечных записей убираются.
+export function libraryOps(ctx, known) {
+  const ever = (coll, id) => (known?.[coll] ? known[coll].has(id) : ctx[coll].has(id));
   const ops = [];
-  CATALOG.filter((w) => !ctx.catalog.has(w.id)).forEach((w) => ops.push({ coll: 'catalog', id: w.id, data: w }));
+  const add = (coll, id, data) => ops.push({ coll, id, data });
+  const has = (coll, id) => ctx[coll].has(id) || ops.some((o) => o.coll === coll && o.id === id);
+  // работы — только те, что нужны новым устройствам, и только если их никогда не было
+  const needWorks = new Set(DEVICES.filter((d) => !ever('devices', d.id)).flatMap((d) => d.workIds));
+  CABLES.forEach((c) => c.workIds.forEach((w) => needWorks.add(w)));
+  CATALOG.filter((w) => needWorks.has(w.id) && !ever('catalog', w.id)).forEach((w) => add('catalog', w.id, w));
   CABLES.forEach((c) => {
     const cur = ctx.cables.get(c.id);
-    if (!cur) ops.push({ coll: 'cables', id: c.id, data: c });
-    else if (!Array.isArray(cur.workIds)) ops.push({ coll: 'cables', id: c.id, data: { workIds: c.workIds } });
+    if (!cur && !ever('cables', c.id)) add('cables', c.id, { ...c, workIds: c.workIds.filter((w) => has('catalog', w)) });
+    else if (cur && !Array.isArray(cur.workIds)) add('cables', c.id, { workIds: c.workIds.filter((w) => has('catalog', w)) });
   });
-  DEVICES.filter((d) => !ctx.devices.has(d.id)).forEach((d) => ops.push({ coll: 'devices', id: d.id, data: d }));
-  NEW_TYPES.filter((t) => !ctx.types.has(t.id)).forEach((t) => ops.push({ coll: 'types', id: t.id, data: compose(t) }));
+  DEVICES.filter((d) => !ever('devices', d.id)).forEach((d) => add('devices', d.id, {
+    ...d, workIds: d.workIds.filter((w) => has('catalog', w)), cables: d.cables.filter((c) => has('cables', c.cable)),
+  }));
+  NEW_TYPES.filter((t) => !ever('types', t.id)).forEach((t) => {
+    const c = compose(t);
+    add('types', t.id, { ...c, devices: c.devices.filter((x) => has('devices', x.deviceId)), workIds: c.workIds.filter((w) => has('catalog', w)) });
+  });
   return ops;
 }
 
