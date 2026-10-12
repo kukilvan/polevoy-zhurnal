@@ -2,7 +2,7 @@
 import { h, formModal, confirmDialog, toast, qtyList } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { newId } from '../repo.js';
-import { installBinding, tablesOf, mainTable, hasDeviceId, libraryOps } from '../../domain/index.js';
+import { installBinding, tablesOf, mainTable, hasDeviceId, libraryOps, migrateProject } from '../../domain/index.js';
 import { installFields, describeBinding } from './install.js';
 import { projectForm } from './projects.js';
 import { themeLabel, setTheme, nextTheme } from '../theme.js';
@@ -205,6 +205,17 @@ async function addLibrary() {
   toast('Добавлено');
 }
 
+// Перевод типов старой схемы на устройства (стандартный состав), шилют задним числом там, где есть проверка
+async function migrateTypes() {
+  const r = migrateProject(state.ctx);
+  if (!r.converted.length) { toast('Старых типов нет'); return; }
+  const msg = `Перевести на устройства типы: ${r.converted.join(', ')}? Состав возьмётся стандартный (его потом можно поменять). `
+    + `Недостающие устройства и работы добавятся. Шилют задним числом (где есть проверка): ${r.backfilled}. Вернуть можно через «История и откат».`;
+  if (!(await confirmDialog(msg, { yes: 'Перевести' }))) return;
+  getRepo().save(currentProject().id, r.ops.map((o) => ({ ...o, data: { ...o.data, deleted: false } })));
+  toast(`Переведено типов: ${r.converted.length}`);
+}
+
 export function refView() {
   const key = state.settingsRef; const def = REFS[key];
   const items = def.items();
@@ -221,7 +232,8 @@ export function refView() {
   return h('div', {},
     h('div', { class: 'mut', style: { marginBottom: '10px' } }, def.hint),
     h('div', { class: 'btns', style: { marginTop: 0 } }, h('button', { onclick: () => itemForm(key, null) }, '➕ Добавить пункт'),
-      ['devices', 'types', 'cables'].includes(key) ? h('button', { class: 'sec', onclick: addLibrary }, '📚 Добавить стандартные') : null),
+      ['devices', 'types', 'cables'].includes(key) ? h('button', { class: 'sec', onclick: addLibrary }, '📚 Добавить стандартные') : null,
+      key === 'types' && migrateProject(state.ctx).converted.length ? h('button', { class: 'wide', onclick: migrateTypes }, '🔄 Перевести старые типы на устройства') : null),
     h('div', { class: 'card', style: { padding: 0, marginTop: '12px' } }, rows.length ? rows : h('div', { class: 'empty' }, 'Список пуст.')));
 }
 

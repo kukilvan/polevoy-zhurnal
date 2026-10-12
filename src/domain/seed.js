@@ -1,3 +1,4 @@
+import { migrationOps } from './compose.js';
 // Начальные справочники для нового проекта (раздел 4 описания функционала).
 // Цены не переносятся. Справочники лежат внутри проекта, чтобы все участники видели одно и то же.
 
@@ -135,6 +136,7 @@ const compose = (t) => ({ ...t, devices: (TYPE_DEVICES[t.id] || []).map(([device
 export const composedTypes = (types) => [...types, ...NEW_TYPES.filter((n) => !types.some((t) => t.id === n.id))].map(compose);
 
 // Чего не хватает проекту из стандартной библиотеки (не трогая того, что уже есть): операции записи
+export const migrateProject = (ctx) => migrationOps(ctx, { typeDevices: TYPE_DEVICES, typeWorks: TYPE_WORKS, libraryOps: libraryOps(ctx) });
 export function libraryOps(ctx) {
   const ops = [];
   CATALOG.filter((w) => !ctx.catalog.has(w.id)).forEach((w) => ops.push({ coll: 'catalog', id: w.id, data: w }));

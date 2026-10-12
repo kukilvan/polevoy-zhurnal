@@ -600,3 +600,15 @@ test('устройство, изменённое у точки: свои каб�
   assert.equal(info.installTotal, 0);
   assert.ok(!tasksOf(ctx.points.get('a'), ctx).some((t) => t.workId === 'INS_INT'));
 });
+
+test('перевод старых типов на устройства: статусы не меняются, шилют задним числом при наличии проверки', async () => {
+  const { migrateProject } = await import('../src/domain/index.js');
+  const bak = { id: 'b', projectId: 'P1', label: '1A-01-02', cabinet: '1A', typeId: 'Бакар' };
+  const D = day('D1', '2026-10-05');
+  const es = ['PR_PTS', 'HIV_KEY', 'HIV_DEV', 'CHK_FLUKE'].map((w, i) => entry(`E${i}`, 'D1', CATALOG.find((x) => x.id === w).workType, w, ['b']));
+  const ctx = make({ points: [bak], days: [D], entries: es, journal: es.map((e) => ({ id: `j${e.id}`, entryId: e.id, pointId: 'b' })), devices: [] });
+  const r = migrateProject(ctx);
+  assert.ok(r.converted.includes('Бакар'));
+  const shl = r.ops.find((o) => o.coll === 'journal');
+  assert.deepEqual([shl.data.editWorkId, shl.data.editDate], ['SHL', '2026-10-05']);
+});

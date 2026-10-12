@@ -215,3 +215,32 @@ export function pullGroups(points, ctx, deviceIds, mainCable) {
   });
   return { groups: [...m.entries()].map(([c, ids]) => [c || undefined, ids]), done };
 }
+
+// ---------- перевод типов проекта на устройства ----------
+// typeDevices: { тип: [[deviceId, count]] }, typeWorks: { тип: [workId] }, library: { ops, devices, cables, catalog } — что будет добавлено.
+// Задним числом: если у точки есть проверка, а шилют по новой схеме не отмечен — шилют с датой проверки (по просьбе Ивана).
+export function migrationOps(ctx, { typeDevices, typeWorks, libraryOps }) {
+  const ops = [...libraryOps];
+  const added = (coll) => new Map(ops.filter((o) => o.coll === coll).map((o) => [o.id, { ...(ctx[coll].get(o.id) || {}), ...o.data, id: o.id }]));
+  const merge = (coll) => { const m = new Map(ctx[coll]); added(coll).forEach((v, k) => m.set(k, v)); return m; };
+  const types = merge('types'); const converted = [];
+  [...types.values()].forEach((t) => {
+    if (isComposedType(t) || !typeDevices[t.id]) return;
+    const data = { devices: typeDevices[t.id].map(([deviceId, count = 1]) => ({ deviceId, count })), cables: [], workIds: typeWorks[t.id] || [] };
+    types.set(t.id, { ...t, ...data }); converted.push(t.id);
+    ops.push({ coll: 'types', id: t.id, data });
+  });
+  const ctx2 = { ...ctx, types, devices: merge('devices'), cables: merge('cables'), catalog: merge('catalog') };
+  let backfilled = 0;
+  [...ctx.points.values()].filter((p) => converted.includes(p.typeId) && !Array.isArray(p.devices)).forEach((p) => {
+    const rows = ctx.journalByPoint.get(p.id) || [];
+    const checkDate = maxDate(rows.filter((r) => r.action === 'Проверка'));
+    if (!checkDate) return;
+    const info = composedInfo(p, ctx2, compositionOf(p, ctx2));
+    [...new Set(info.tasks.filter((t) => !t.done && t.stage === 'Шилют').map((t) => t.workId))].forEach((w) => {
+      ops.push({ coll: 'journal', id: `edit_${p.id}_${w}`, data: { pointId: p.id, editDate: checkDate, editWorkId: w, entryId: null, deleted: false } });
+      backfilled += 1;
+    });
+  });
+  return { ops, converted, backfilled };
+}
