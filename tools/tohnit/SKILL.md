@@ -10,17 +10,21 @@
 
 ## Порядок работы
 1. **Подготовка.** Сохрани скрипт из раздела «tohnit.py» ниже в файл `tohnit.py` (дословно). Нужны `pymupdf` (лучше; `pip install pymupdf`, если не стоит) или `pdfplumber`, и `Pillow`. Если запускать код нельзя — скажи Ивану, что в этом чате нет выполнения кода и нужен чат/режим с кодом (Claude desktop с включённым анализом/кодом).
-2. **Скан** каждого файла: `python3 tohnit.py scan ПЛАН.pdf work_этаж/`. Прочитай `work_этаж/clusters.md` (группы текста, сверху — где больше «похожего на обозначения», внизу — найденная легенда/«Quantity»). Посмотри `overview.png` и картинки `c/<группа>.png` (по 6 примеров каждой группы с окружением, текст обведён розовым) — для всех групп с обозначениями, с короткими кодами (APA, OB, INT, BRFC, X2, RW…) и с цифрами внутри значков. Сверься с «Библиотекой обозначений» ниже и с легендой чертежа.
-3. **Если текста почти нет** (скан, фото): `python3 tohnit.py tiles ПЛАН.pdf work/` и читай части глазами; предупреди Ивана, что точность ниже, дважды пересчитай каждую часть и сверь итог с легендой.
-4. **Решения → Ивану на подтверждение (одно сообщение).** Таблица: группа · что это (пример обозначений) · → тип · сколько. Отдельно: что отбрасываешь (помещения, высоты, замки…) и почему. Потом нумерованные вопросы только по неясному (незнакомый код, группа смешанная, номер похож на другой шкаф, повтор обозначений). Предлагай варианты и свой вероятный. Шкаф: из обозначения (`1A-…`) или спроси. Этаж — со слов Ивана.
-5. **Сборка**: напиши `work/map.json` (формат ниже) и запусти `python3 tohnit.py build work/ work/map.json точки_этаж.json`. Прочитай `work/report.md`:
+2. **Первым делом спроси Ивана** (если он сам не сказал): какие системы он делает на этом проекте — камеры, СКУД (двери), галаи, вайфай, бакары, интерком, розетки связи/TV, оптика? Что он не делает — то не точки, даже если есть на чертеже. Какие шкафы, и как их обозначения выглядят на чертеже.
+3. **Скан** каждого файла: `python3 tohnit.py scan ПЛАН.pdf work_этаж/`. Прочитай `work_этаж/clusters.md` (группы текста, сверху — где больше «похожего на обозначения», внизу — найденная легенда/«Quantity»). Посмотри `overview.png` и картинки `c/<группа>.png` (по 6 примеров каждой группы с окружением, текст обведён розовым) — для всех групп с обозначениями, с короткими кодами (APA, OB, INT, BRFC, X2, RW…) и с цифрами внутри значков. Сверься с легендой чертежа (найди её глазами на overview.png — справа или в углу) и с «Библиотекой обозначений» ниже. **Иврит в текстовом слое часто задом наперёд** — в clusters.md показан и обратный порядок, но читай иврит на картинках. Если в clusters.md есть раздел «Пометки поверх чертежа» — посмотри их (часто это отмены и изменения). Нужно место крупнее: `python3 tohnit.py crop ПЛАН.pdf x0 y0 x1 y1 out.png` (координаты — как в scan.json; пересчёт с overview.png указан в конце clusters.md).
+4. **Если текста почти нет** (скан, фото): `python3 tohnit.py tiles ПЛАН.pdf work/` и читай части глазами; предупреди Ивана, что точность ниже, дважды пересчитай каждую часть и сверь итог с легендой.
+5. **Решения → Ивану на подтверждение (одно сообщение).** Таблица: группа · что это (пример обозначений) · → тип · сколько. Отдельно: что отбрасываешь (помещения, высоты, замки…) и почему. Потом нумерованные вопросы только по неясному (незнакомый код, группа смешанная, номер похож на другой шкаф, повтор обозначений). Предлагай варианты и свой вероятный. Шкаф: из обозначения (`1A-…`), из правила (`cabinet`) или по зоне чертежа (`area` + `cabinet`), иначе спроси. Этаж — со слов Ивана. Прочитай мелкие пометки рядом с точками (см. библиотеку: «באחריות לקוח», «עתידי»…).
+6. **Сборка**: напиши `work/map.json` (формат ниже) и запусти `python3 tohnit.py build work/ work/map.json точки_этаж.json`. Прочитай `work/report.md`:
    - «⚠️ Похоже на обозначения, но ни одно правило не подошло» — разберись с каждым (добавь правило или осознанный skip);
    - «Группы, не включённые ни в одно правило» — убедись, что там нет точек;
    - дубли (`#2`), пропуски в сериях, странные обозначения — в вопросы Ивану (дубль на чертеже — ошибка проектировщика; пропуск в серии НЕ добавлять);
    - сверь количества с легендой («Quantity …»), если она есть.
-   Посмотри `check_1..4.png` (рамки точек по цветам типов; красные рамки — «не взято», проверить). Исправь map.json и пересобери, пока отчёт не чистый.
-6. **Итог Ивану**: сколько точек по шкафам и типам, что отброшено, что осталось под вопросом, и **файл `точки_….json`** (отдай файлом). Если обозначения придуманы (чертёж без номеров) — отдай и `check_*.png`, чтобы нанести номера на чертёж. Несколько этажей — можно объединить: `python3 tohnit.py merge все.json a.json b.json`.
-7. **В конце** выпиши блок «Новое для библиотеки»: новые коды/правила, которые Иван подтвердил, — он передаст их, чтобы дополнить этот навык.
+   - «Значки, привязанные к соседней точке» — строки с ⚠️ (неоднозначно, второй значок у той же точки) посмотри на картинке;
+   - «Точки под пометками поверх чертежа» — посмотри crop.
+   Посмотри `check_1..4.png` (рамки точек по цветам типов; красные рамки — «не взято», проверить) и `points.md` (полный список). Исправь map.json и пересобери. **Отчёт чистый**, когда каждый пункт с ⚠️ либо исправлен правилом, либо стал вопросом Ивану.
+7. **Итог Ивану**: сколько точек по шкафам и типам, что отброшено, что осталось под вопросом, и **файл `точки_….json`** (отдай файлом). Если обозначения придуманы (чертёж без номеров) — отдай и `check_*.png`, чтобы нанести номера на чертёж. Несколько этажей — можно объединить: `python3 tohnit.py merge все.json a.json b.json`.
+   Если Иван не ответил на часть вопросов — сомнительные точки в файл не включай и перечисли их отдельно («не вошли, ждут ответа»), вместе с допущениями.
+8. **В конце** выпиши блок «Новое для библиотеки»: новые коды/правила, которые Иван подтвердил, — он передаст их, чтобы дополнить этот навык.
 
 ## Формат map.json
 ```json
@@ -45,10 +49,12 @@
 - Правила проверяются по порядку, срабатывает первое подходящее. `clusters` — группы из clusters.md (номера групп свои у каждого скана!), `match` — regex по тексту, `page` — номер страницы с 0, `area` — [x0,y0,x1,y1] в координатах PDF.
 - `skip` — отбросить (с причиной `why`, она попадёт в отчёт).
 - `icon` — каждый такой текст/значок = точка без номера; обозначение придумывается: `prefix` + 001, 002… по порядку; `per_icon: 2` — двойная розетка = две точки `.1`/`.2`.
-- `near` — точка рядом с другой (BRFC/APA/OB/INT у двери): обозначение = ближайшая точка типа `near` + `suffix`; дальше `max_dist` — нумеруется как icon.
+- `near` — точка рядом с другой (BRFC/APA/OB/INT у двери): обозначение = ближайшая точка типа `near` + `suffix`; если дальше `max_dist` (в pt PDF; начни с 80 — подпись двери обычно в 20–80 pt от значков) — нумеруется как icon (обязательно задай `prefix` и `cabinet`). Расстояния печатаются в отчёте.
+- `cabinet` в правиле — шкаф для всех точек правила (для icon-точек и для деления этажа на зоны шкафов через `area`).
 - `rename` — исправление обозначений (regex → замена), применяется до шкафа. `cabinet_regex` — шкаф из обозначения (группа 1), иначе `default_cabinet` или `cabinet` в правиле.
 - `type` — тип точки как в приложении. Стандартные: Камера, Дверь, Галай, Вайфай, Бакар, Точка, TV, Оптика, Другое, Коре биометри, Интерком, Лахцан птиха, Тревожная кнопка. Новый тип — спроси Ивана и, если он нужен, опиши в `types` (приложение создаст его при загрузке; устройства — `DV_CAM, DV_AP, DV_GALAI, DV_BAKAR, DV_POINT, DV_TV, DV_FIBER, DV_KORE, DV_BIO, DV_KEYB, DV_MANUL, DV_MAGNIT, DV_EMAG, DV_LPTIHA, DV_LNIPUTZ, DV_OB, DV_INT`).
-- `exclude` — убрать конкретные обозначения; `add` — добавить вручную (только со слов Ивана).
+- `exclude` — убрать конкретные обозначения (вместе с привязанными к ним near-значками); `add` — добавить вручную (только со слов Ивана).
+- Координаты для `area`: из scan.json (x0,y0 у текста) или с overview.png × коэффициент из конца clusters.md.
 
 ## Что нельзя
 - Не добавлять точки, которых нет на чертеже, не «чинить» серии.
@@ -61,16 +67,19 @@
 
 Пополняется после каждого проекта. «→ тип» — тип точки в «Полевом журнале». «не точка» — не создавать.
 
+**Главное: тип определяй по значку рядом с подписью и по легенде чертежа (מקרא).** Вид подписи — только подсказка: у разных проектировщиков `C2/1` — камера, а `C` — может быть и что-то другое.
+
 ## Номера точек (то, что становится точкой)
 | Как выглядит | Что это | → тип |
 |---|---|---|
-| `1A-C154`, `C154`, `1-C66`, `B3-CTV-IP-CAB-B03-01` (CTV/CAM/CCTV) | камера | Камера |
-| `1A-Z66`, `Z043` | галай (датчик движения) | Галай |
+| `1A-C154`, `C154`, `1-C66`, `C2/31` (у купольной камеры), `B3-CTV-IP-CAB-B03-01` (CTV/CAM/CCTV) | камера | Камера |
+| `1A-Z66`, `Z043`, `2/Z-1` (кружок «360 AM») | галай (датчик движения; 360 AM — потолочный с антимаскингом) | Галай |
 | `1A-AP-04`, `AP-03`, `W2/1`, `WIFI`, `WAP` | точка доступа Wi-Fi (аксэспоинт) | Вайфай |
 | `1A-17.1`, `2B-7.2`, `D-14`, `CAB2-D62`, `D2/5` | дверь (СКУД). `.1/.2` — две разные двери | Дверь |
+| `P-1`, `P` в кружке у стола (לחצן מצוקה) | тревожная кнопка | Тревожная кнопка |
 | `2B/01-02`, `1A/03-04`, `B10,11` | бакар (контроллер), пара номеров = одна точка | Бакар |
-| `C2/1` (магента), `P26`, `X1`, `X2`, `RJ45`, `TL` у розетки | точка связи (розетка RJ45). `X2` = 2 розетки | Точка |
-| `TV`, `TV-140`, `TV 210`, `TVX1` | точка TV | TV |
+| `P26`, `X1`, `X2`, `RJ45`, `TL` у розетки | точка связи (розетка RJ45). `X2` = 2 розетки (берём, только если Иван делает розетки связи на этом проекте). `X2` рядом со значком бакара — 2 кабеля бакара, НЕ отдельные точки | Точка |
+| `TV`, `TV-140`, `TV 210`, `TVX1` | точка TV. Число под/рядом с TV — размер экрана или высота, не номер. Делает ли Иван TV — спросить | TV |
 | `FO`, `Fiber`, `סיב אופטי` | оптика | Оптика |
 | `APA` | лахцан птиха на столе (отдельная точка, 1×6005) | Лахцан птиха |
 | `OB` | тревожная кнопка (лахцан мецука), отдельная точка, 1×6005 | Тревожная кнопка |
@@ -78,8 +87,13 @@
 | `BRFC` | коре биометри (считыватель с отпечатком) — у двери. Отдельная точка рядом с дверью, подпись `<дверь>-CR` | Коре биометри |
 
 ## Компоненты двери — НЕ отдельные точки (входят в дверь)
-`CR` (коре картис), `M`/магнит, `EL…`/`EFF118/138`/`Electrical lock`/`Electro mechanical` (замки), `AC door`, `B1`/`B2` (тип замка), `KB` (киборд), `BG`/лахцан нипуц, `P`/лахцан птиха у двери, `M` у двери.
+`CR` (коре картис), `M`/магнит, `EL…`/`EFF118/138`/`Electrical lock`/`Electro mechanical` (замки), `AC door`, `B1`/`B2` (тип замка), `KB` (киборд), `BG` (лахцан швира/нипуц), `I`, `I-S`, `I-C` (интерком-варианты у двери — уточнить), `M` у двери.
 Если у двери на чертеже есть набор значков — это можно отметить в примечании точки, но строк не создавать (кроме BRFC/APA/OB/INT по правилам выше).
+
+## Пометки рядом с точкой — читать обязательно (на картинке, иврит в тексте PDF перевёрнут)
+- `באחריות לקוח` — «на ответственности заказчика»: не наша точка (спросить Ивана).
+- `עתידי` — будущее, `קיים` — существующее: обычно не делаем сейчас — спросить.
+- Красные зачёркивания, облака, пометки от руки поверх точки — отменена/изменена — спросить.
 
 ## Никогда не точки
 - Номера помещений (часто голубые рамки `FT-01`, `GO-03-01`, `YE-04`, числа в углах комнат, `121`, `3-63`).
@@ -114,6 +128,7 @@
   python3 tohnit.py build WORK/ MAP.json OUT.json     → OUT.json (точки), WORK/report.md, WORK/check*.png (проверочная разметка)
   python3 tohnit.py merge ALL.json A.json B.json …    → один файл точек из нескольких (по этажам)
   python3 tohnit.py tiles PLAN.pdf WORK/ [3]          → крупные части чертежа (если текста в PDF нет — скан/фото)
+  python3 tohnit.py crop  PLAN.pdf x0 y0 x1 y1 OUT.png [стр] → вырезать место крупно (координаты как в scan.json)
 
 Нужен PyMuPDF (pip install pymupdf) или pdfplumber (обычно уже установлен) + Pillow.
 """
@@ -162,7 +177,11 @@ def extract(path):
                 if f is None: continue
                 r = dr['rect'] * rm
                 if 0 < r.width < 40 and 0 < r.height < 40: fills.append((r.x0, r.y0, r.x1, r.y1, _color_hex(f)))
-            pages.append(dict(w=p.rect.width, h=p.rect.height, spans=spans, fills=fills))
+            annots = []  # пометки поверх чертежа (от руки, зачёркивания, штампы)
+            for a in (p.annots() or []):
+                r = a.rect * rm
+                annots.append(dict(kind=a.type[1], x0=r.x0, y0=r.y0, x1=r.x1, y1=r.y1, text=(a.info.get('content') or '').strip()[:80]))
+            pages.append(dict(w=p.rect.width, h=p.rect.height, spans=spans, fills=fills, annots=annots))
         return pages, 'pymupdf'
     import pdfplumber
     with pdfplumber.open(path) as pdf:
@@ -215,6 +234,11 @@ def shape(t):
     return re.sub(r'(9)9+', r'\g<1>9', re.sub(r'(A)A+', r'\g<1>A', r))  # схлопываем повторы
 
 LABELISH = re.compile(r'^(?=.*\d)(?=.*[A-Za-z\-/])[A-Za-z0-9][A-Za-z0-9\-./_,()]{0,22}$')
+HEB = re.compile(r'[\u0590-\u05FF]')
+def heb(t):
+    """Иврит в CAD-PDF часто хранится задом наперёд: показываем и прямой, и обратный порядок."""
+    return f'{t} (наоборот: {t[::-1]})' if HEB.search(t) else t
+
 def labelish(t):
     """Похоже на обозначение точки: цифры + (латиница, «-» или «/»), без пробелов, коротко; не высота/размер/дата."""
     t = t.strip()
@@ -248,17 +272,25 @@ def scan(pdf, work):
         lab = sum(1 for s in lst if labelish(s['t']))
         for s in lst: s['c'] = cid
         clusters.append(dict(id=cid, color=k[0], font=k[1], size=k[2], bg=k[3], n=len(lst), labelish=lab,
-                             shapes=shapes.most_common(6), samples=list(dict.fromkeys(s['t'] for s in lst))[:14]))
-    meta = dict(pdf=os.path.abspath(pdf), backend=backend, pages=[dict(w=p['w'], h=p['h']) for p in pages])
+                             shapes=shapes.most_common(6), samples=list(dict.fromkeys(s['t'] for s in lst))[:14],
+                             short=sum(1 for s in lst if len(s['t']) <= 8)))
+    meta = dict(pdf=os.path.abspath(pdf), backend=backend, pages=[dict(w=p['w'], h=p['h']) for p in pages],
+                annots=[dict(a, page=pi) for pi, p in enumerate(pages) for a in p.get('annots', [])])
     json.dump(dict(meta=meta, clusters=clusters, spans=allspans), open(os.path.join(work, 'scan.json'), 'w'), ensure_ascii=False)
     # отчёт по группам: сначала те, где много «похожего на обозначения»
     lines = [f'# Группы текста: {os.path.basename(pdf)}', '', f'Страниц: {len(pages)}, фрагментов текста: {len(allspans)}, движок: {backend}', '',
              'Колонки: группа · цвет текста (и фона значка) · шрифт · размер · всего · похожих на обозначение · формы текста · примеры', '']
     for c in sorted(clusters, key=lambda c: (-c['labelish'], -c['n'])):
         sh = ', '.join(f'{a}×{b}' for a, b in c['shapes'])
-        lines.append(f"- **{c['id']}** · #{c['color']}{' на фоне #' + c['bg'] if c['bg'] else ''} · {c['font']} · {c['size']} · {c['n']} · обозн.: {c['labelish']} · {sh}\n  примеры: {' | '.join(c['samples'])}")
-    leg = [s['t'] for s in allspans if re.search(r'quantit|כמות|qty|outlets|מקרא|legend', s['t'], re.I)]
-    if leg: lines += ['', '## Возможная легенда / количества', ''] + [f'- {t}' for t in leg[:40]]
+        lines.append(f"- **{c['id']}** · #{c['color']}{' на фоне #' + c['bg'] if c['bg'] else ''} · {c['font']} · {c['size']} · {c['n']} · обозн.: {c['labelish']} · {sh}\n  примеры: {' | '.join(heb(x) for x in c['samples'])}")
+    leg = [s['t'] for s in allspans if re.search(r'quantit|כמות|qty|outlets|מקרא|legend', s['t'] + s['t'][::-1], re.I)]
+    if leg: lines += ['', '## Возможная легенда / количества (легенду в любом случае найди глазами на overview.png)', ''] + [f'- {heb(t)}' for t in leg[:40]]
+    an = meta['annots']
+    if an:
+        kinds = collections.Counter(a['kind'] for a in an)
+        lines += ['', f"## ⚠️ Пометки поверх чертежа (аннотации PDF): {', '.join(f'{k}×{v}' for k, v in kinds.items())}",
+                  'Это могут быть рукописные исправления, зачёркивания, облака изменений — посмотри их на overview.png; точки под ними build отметит в отчёте.']
+    lines += ['', f"overview.png: 1 пиксель = {meta['pages'][0]['w'] / 2400:.3f} pt PDF (для area: x_pt = x_px × это число). Вырезать место крупно: python3 tohnit.py crop PLAN.pdf x0 y0 x1 y1 out.png"]
     open(os.path.join(work, 'clusters.md'), 'w').write('\n'.join(lines))
     render_overview(pdf, work, clusters, allspans)
     print('\n'.join(lines[:60]))
@@ -290,8 +322,9 @@ def render_overview(pdf, work, clusters, spans):
         # примеры групп: до 6 вырезок с окружением, крупно
         big = 3.0; bimg = None
         for c in clusters:
-            if not c['labelish'] and c['n'] < 3: continue
-            ex = [s for s in spans if s['c'] == c['id'] and s['page'] == pi][:6]
+            if not c['labelish'] and not c['short']: continue
+            allc = [s for s in spans if s['c'] == c['id'] and s['page'] == pi]
+            ex = [allc[int(i * len(allc) / 6)] for i in range(min(6, len(allc)))] if allc else []  # примеры из разных мест
             if not ex: continue
             if bimg is None: bimg = render_page(pdf, pi, big)
             crops = []
@@ -319,7 +352,7 @@ def build(work, mapfile, out):
     renames = [(re.compile(a), b) for a, b in mp.get('rename', [])]
     cab_re = re.compile(mp['cabinet_regex']) if mp.get('cabinet_regex') else None
     used_clusters = {c for r in rules for c in (r.get('clusters') or [])}
-    pts = []; unknown = []; skipped = collections.Counter(); icons = collections.defaultdict(list); nears = []
+    pts = []; unknown = []; skipped = collections.Counter(); icons = collections.defaultdict(list); nears = []; near_log = []
     for s in spans:
         t = s['t'].strip()
         rule = None
@@ -346,11 +379,18 @@ def build(work, mapfile, out):
     for s, r in nears:
         cand = [p for p in pts if p['typeId'] == r['near'] and p['s']['page'] == s['page'] and not p.get('derived')]
         maxd = float(r.get('max_dist', 120))
-        best = min(cand, key=lambda p: math.dist(ctr(p['s']), ctr(s)), default=None)
-        if best is None or math.dist(ctr(best['s']), ctr(s)) > maxd:
+        ranked = sorted(cand, key=lambda p: math.dist(ctr(p['s']), ctr(s)))
+        best = ranked[0] if ranked else None
+        d1 = math.dist(ctr(best['s']), ctr(s)) if best else None
+        d2 = math.dist(ctr(ranked[1]['s']), ctr(s)) if len(ranked) > 1 else None
+        if best is None or d1 > maxd:
+            near_log.append(f"{s['t']} → далеко от «{r['near']}» ({'нет' if d1 is None else f'{d1:.0f} pt'} > {maxd:.0f}) → значок без номера")
             icons[r.get('prefix', 'X')].append((s, dict(r, icon=True))); continue
         base = best['label'] + r.get('suffix', ''); used_lab[base] += 1
         lab = base if used_lab[base] == 1 else f'{base}{used_lab[base]}'
+        amb = d2 is not None and d2 < d1 * 1.5
+        near_log.append(f"{'⚠️ ' if amb or used_lab[base] > 1 else ''}{lab}: ближайшая {best['label']} {d1:.0f} pt" + (f", следующая {ranked[1]['label']} {d2:.0f} pt" if d2 is not None else '')
+                        + (' — неоднозначно, проверить' if amb else '') + (' — к этой точке уже привязан такой же значок' if used_lab[base] > 1 else ''))
         pts.append(dict(label=lab, orig=s['t'], typeId=r['type'], s=s, rule=dict(r, cabinet=r.get('cabinet')), derived=True, near=best['label']))
     # значки без номеров: нумерация по порядку (сверху вниз, слева направо полосами)
     for prefix, lst in icons.items():
@@ -372,7 +412,7 @@ def build(work, mapfile, out):
         p['cabinet'] = cab or mp.get('default_cabinet', '')
     # исключения/добавления вручную
     excl = set(mp.get('exclude', []))
-    pts = [p for p in pts if p['label'] not in excl]
+    pts = [p for p in pts if p['label'] not in excl and p.get('near') not in excl]  # исключённая точка забирает и привязанные к ней значки
     # дубли: одно обозначение в разных местах — предупреждение; в одном месте (наложение слоёв) — склеиваем
     byl = collections.defaultdict(list)
     for p in pts: byl[p['label']].append(p)
@@ -403,7 +443,16 @@ def build(work, mapfile, out):
     for p in final:
         m = re.match(r'^(.*?)(\d+)$', p['label'])
         if m and '.' not in p['label'][-4:]: series[(m.group(1), p['typeId'])].append(int(m.group(2)))
+    pairs = collections.defaultdict(set)  # двери вида 1A-17.1 / 1A-17.2
+    for p in final:
+        m = re.match(r'^(.*?)(\d+)\.(\d+)$', p['label'])
+        if m: series[(m.group(1), p['typeId'])].append(int(m.group(2))); pairs[(m.group(1), int(m.group(2)))].add(int(m.group(3)))
     gaps = []
+    subs_all = collections.defaultdict(set)
+    for (pre, n), ks in pairs.items(): subs_all[pre] |= ks
+    for (pre, n), ks in sorted(pairs.items()):
+        miss = sorted(subs_all[pre] - ks)
+        if miss and len(subs_all[pre]) > 1: gaps.append(f"{pre}{n}: есть .{', .'.join(map(str, sorted(ks)))}, нет .{', .'.join(map(str, miss))}")
     for (pre, typ), nums in series.items():
         nums = sorted(set(nums))
         if len(nums) >= 4:
@@ -431,12 +480,22 @@ def build(work, mapfile, out):
     if dups: rep += ['', '## ⚠️ Одно обозначение в разных местах чертежа'] + [f'- {l}: {n} раза (вторые получили #2, #3…)' for l, n in dups]
     if gaps: rep += ['', '## Пропуски в сериях (на чертеже их нет — не добавлены)'] + [f'- {g}' for g in gaps]
     if probs: rep += ['', '## ⚠️ Странные обозначения'] + [f'- {x}' for x in probs]
+    if near_log: rep += ['', '## Значки, привязанные к соседней точке (near) — проверить строки с ⚠️'] + [f'- {x}' for x in near_log]
+    under = []
+    for p in final:
+        s0 = p.get('s')
+        if not s0: continue
+        for a in meta.get('annots', []):
+            if a['page'] == s0['page'] and a['x0'] - 5 <= (s0['x0'] + s0['x1']) / 2 <= a['x1'] + 5 and a['y0'] - 5 <= (s0['y0'] + s0['y1']) / 2 <= a['y1'] + 5 and a['kind'] not in ('Link', 'Widget'):
+                under.append(f"{p['label']}: под пометкой {a['kind']}{' «' + a['text'] + '»' if a['text'] else ''} — посмотри (crop), не зачёркнута ли"); break
+    if under: rep += ['', '## ⚠️ Точки под пометками поверх чертежа'] + [f'- {x}' for x in under]
     leftovers = collections.Counter(s['c'] for s in spans if s['c'] not in used_clusters and labelish(s['t']))
     if leftovers:
         rep += ['', '## Группы, не включённые ни в одно правило, где есть текст вида «буквы+цифры»']
         cl = {c['id']: c for c in sc['clusters']}
         rep += [f"- {c}: {n} шт., примеры: {' | '.join(cl[c]['samples'][:8])}" for c, n in leftovers.most_common()]
     open(os.path.join(work, 'report.md'), 'w').write('\n'.join(rep))
+    open(os.path.join(work, 'points.md'), 'w').write('\n'.join(f"{p['cabinet'] or '—'}\t{p['typeId']}\t{p['label']}" + (f"\t({p['orig']})" if p.get('orig') and p['orig'] != p['label'] else '') for p in final))
     render_check(meta, work, final, unknown)
     print('\n'.join(rep[:120]))
     print(f'\nФайл точек: {out}\nПроверочная картинка: {work}/check*.png')
@@ -476,6 +535,12 @@ def render_check(meta, work, final, unknown):
             part = img.crop((int(a * W / 2) - (40 if a else 0), int(b * H / 2) - (40 if b else 0), int((a + 1) * W / 2), int((b + 1) * H / 2)))
             part.thumbnail((2400, 2400)); part.save(os.path.join(work, f'check{suf}_{i + 1}.png'))
 
+def crop(pdf, x0, y0, x1, y1, out, page=0):
+    """Вырезать область чертежа крупно (координаты PDF с учётом поворота, как в scan.json)."""
+    x0, y0, x1, y1 = map(float, (x0, y0, x1, y1)); z = min(8.0, 2400 / max(1.0, x1 - x0))
+    img = render_page(pdf, int(page), z)
+    img.crop((int(x0 * z), int(y0 * z), int(x1 * z), int(y1 * z))).save(out); print(out)
+
 def tiles(pdf, work, n=3):
     """Чертёж без текстового слоя (скан, фото): крупные части n×n с перекрытием 10% — для чтения глазами."""
     os.makedirs(work, exist_ok=True)
@@ -509,6 +574,7 @@ if __name__ == '__main__':
     elif len(sys.argv) >= 5 and sys.argv[1] == 'build': build(sys.argv[2], sys.argv[3], sys.argv[4])
     elif len(sys.argv) >= 4 and sys.argv[1] == 'tiles': tiles(sys.argv[2], sys.argv[3], int(sys.argv[4]) if len(sys.argv) > 4 else 3)
     elif len(sys.argv) >= 4 and sys.argv[1] == 'merge': merge(sys.argv[2], sys.argv[3:])
+    elif len(sys.argv) >= 8 and sys.argv[1] == 'crop': crop(sys.argv[2], *sys.argv[3:7], sys.argv[7], sys.argv[8] if len(sys.argv) > 8 else 0)
     else: print(__doc__)
 
 ```

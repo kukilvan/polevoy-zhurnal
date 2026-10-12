@@ -11,6 +11,7 @@
   python3 tohnit.py build WORK/ MAP.json OUT.json     → OUT.json (точки), WORK/report.md, WORK/check*.png (проверочная разметка)
   python3 tohnit.py merge ALL.json A.json B.json …    → один файл точек из нескольких (по этажам)
   python3 tohnit.py tiles PLAN.pdf WORK/ [3]          → крупные части чертежа (если текста в PDF нет — скан/фото)
+  python3 tohnit.py crop  PLAN.pdf x0 y0 x1 y1 OUT.png [стр] → вырезать место крупно (координаты как в scan.json)
 
 Нужен PyMuPDF (pip install pymupdf) или pdfplumber (обычно уже установлен) + Pillow.
 """
@@ -59,7 +60,11 @@ def extract(path):
                 if f is None: continue
                 r = dr['rect'] * rm
                 if 0 < r.width < 40 and 0 < r.height < 40: fills.append((r.x0, r.y0, r.x1, r.y1, _color_hex(f)))
-            pages.append(dict(w=p.rect.width, h=p.rect.height, spans=spans, fills=fills))
+            annots = []  # пометки поверх чертежа (от руки, зачёркивания, штампы)
+            for a in (p.annots() or []):
+                r = a.rect * rm
+                annots.append(dict(kind=a.type[1], x0=r.x0, y0=r.y0, x1=r.x1, y1=r.y1, text=(a.info.get('content') or '').strip()[:80]))
+            pages.append(dict(w=p.rect.width, h=p.rect.height, spans=spans, fills=fills, annots=annots))
         return pages, 'pymupdf'
     import pdfplumber
     with pdfplumber.open(path) as pdf:
@@ -112,6 +117,11 @@ def shape(t):
     return re.sub(r'(9)9+', r'\g<1>9', re.sub(r'(A)A+', r'\g<1>A', r))  # схлопываем повторы
 
 LABELISH = re.compile(r'^(?=.*\d)(?=.*[A-Za-z\-/])[A-Za-z0-9][A-Za-z0-9\-./_,()]{0,22}$')
+HEB = re.compile(r'[\u0590-\u05FF]')
+def heb(t):
+    """Иврит в CAD-PDF часто хранится задом наперёд: показываем и прямой, и обратный порядок."""
+    return f'{t} (наоборот: {t[::-1]})' if HEB.search(t) else t
+
 def labelish(t):
     """Похоже на обозначение точки: цифры + (латиница, «-» или «/»), без пробелов, коротко; не высота/размер/дата."""
     t = t.strip()
@@ -145,17 +155,25 @@ def scan(pdf, work):
         lab = sum(1 for s in lst if labelish(s['t']))
         for s in lst: s['c'] = cid
         clusters.append(dict(id=cid, color=k[0], font=k[1], size=k[2], bg=k[3], n=len(lst), labelish=lab,
-                             shapes=shapes.most_common(6), samples=list(dict.fromkeys(s['t'] for s in lst))[:14]))
-    meta = dict(pdf=os.path.abspath(pdf), backend=backend, pages=[dict(w=p['w'], h=p['h']) for p in pages])
+                             shapes=shapes.most_common(6), samples=list(dict.fromkeys(s['t'] for s in lst))[:14],
+                             short=sum(1 for s in lst if len(s['t']) <= 8)))
+    meta = dict(pdf=os.path.abspath(pdf), backend=backend, pages=[dict(w=p['w'], h=p['h']) for p in pages],
+                annots=[dict(a, page=pi) for pi, p in enumerate(pages) for a in p.get('annots', [])])
     json.dump(dict(meta=meta, clusters=clusters, spans=allspans), open(os.path.join(work, 'scan.json'), 'w'), ensure_ascii=False)
     # отчёт по группам: сначала те, где много «похожего на обозначения»
     lines = [f'# Группы текста: {os.path.basename(pdf)}', '', f'Страниц: {len(pages)}, фрагментов текста: {len(allspans)}, движок: {backend}', '',
              'Колонки: группа · цвет текста (и фона значка) · шрифт · размер · всего · похожих на обозначение · формы текста · примеры', '']
     for c in sorted(clusters, key=lambda c: (-c['labelish'], -c['n'])):
         sh = ', '.join(f'{a}×{b}' for a, b in c['shapes'])
-        lines.append(f"- **{c['id']}** · #{c['color']}{' на фоне #' + c['bg'] if c['bg'] else ''} · {c['font']} · {c['size']} · {c['n']} · обозн.: {c['labelish']} · {sh}\n  примеры: {' | '.join(c['samples'])}")
-    leg = [s['t'] for s in allspans if re.search(r'quantit|כמות|qty|outlets|מקרא|legend', s['t'], re.I)]
-    if leg: lines += ['', '## Возможная легенда / количества', ''] + [f'- {t}' for t in leg[:40]]
+        lines.append(f"- **{c['id']}** · #{c['color']}{' на фоне #' + c['bg'] if c['bg'] else ''} · {c['font']} · {c['size']} · {c['n']} · обозн.: {c['labelish']} · {sh}\n  примеры: {' | '.join(heb(x) for x in c['samples'])}")
+    leg = [s['t'] for s in allspans if re.search(r'quantit|כמות|qty|outlets|מקרא|legend', s['t'] + s['t'][::-1], re.I)]
+    if leg: lines += ['', '## Возможная легенда / количества (легенду в любом случае найди глазами на overview.png)', ''] + [f'- {heb(t)}' for t in leg[:40]]
+    an = meta['annots']
+    if an:
+        kinds = collections.Counter(a['kind'] for a in an)
+        lines += ['', f"## ⚠️ Пометки поверх чертежа (аннотации PDF): {', '.join(f'{k}×{v}' for k, v in kinds.items())}",
+                  'Это могут быть рукописные исправления, зачёркивания, облака изменений — посмотри их на overview.png; точки под ними build отметит в отчёте.']
+    lines += ['', f"overview.png: 1 пиксель = {meta['pages'][0]['w'] / 2400:.3f} pt PDF (для area: x_pt = x_px × это число). Вырезать место крупно: python3 tohnit.py crop PLAN.pdf x0 y0 x1 y1 out.png"]
     open(os.path.join(work, 'clusters.md'), 'w').write('\n'.join(lines))
     render_overview(pdf, work, clusters, allspans)
     print('\n'.join(lines[:60]))
@@ -187,8 +205,9 @@ def render_overview(pdf, work, clusters, spans):
         # примеры групп: до 6 вырезок с окружением, крупно
         big = 3.0; bimg = None
         for c in clusters:
-            if not c['labelish'] and c['n'] < 3: continue
-            ex = [s for s in spans if s['c'] == c['id'] and s['page'] == pi][:6]
+            if not c['labelish'] and not c['short']: continue
+            allc = [s for s in spans if s['c'] == c['id'] and s['page'] == pi]
+            ex = [allc[int(i * len(allc) / 6)] for i in range(min(6, len(allc)))] if allc else []  # примеры из разных мест
             if not ex: continue
             if bimg is None: bimg = render_page(pdf, pi, big)
             crops = []
@@ -216,7 +235,7 @@ def build(work, mapfile, out):
     renames = [(re.compile(a), b) for a, b in mp.get('rename', [])]
     cab_re = re.compile(mp['cabinet_regex']) if mp.get('cabinet_regex') else None
     used_clusters = {c for r in rules for c in (r.get('clusters') or [])}
-    pts = []; unknown = []; skipped = collections.Counter(); icons = collections.defaultdict(list); nears = []
+    pts = []; unknown = []; skipped = collections.Counter(); icons = collections.defaultdict(list); nears = []; near_log = []
     for s in spans:
         t = s['t'].strip()
         rule = None
@@ -243,11 +262,18 @@ def build(work, mapfile, out):
     for s, r in nears:
         cand = [p for p in pts if p['typeId'] == r['near'] and p['s']['page'] == s['page'] and not p.get('derived')]
         maxd = float(r.get('max_dist', 120))
-        best = min(cand, key=lambda p: math.dist(ctr(p['s']), ctr(s)), default=None)
-        if best is None or math.dist(ctr(best['s']), ctr(s)) > maxd:
+        ranked = sorted(cand, key=lambda p: math.dist(ctr(p['s']), ctr(s)))
+        best = ranked[0] if ranked else None
+        d1 = math.dist(ctr(best['s']), ctr(s)) if best else None
+        d2 = math.dist(ctr(ranked[1]['s']), ctr(s)) if len(ranked) > 1 else None
+        if best is None or d1 > maxd:
+            near_log.append(f"{s['t']} → далеко от «{r['near']}» ({'нет' if d1 is None else f'{d1:.0f} pt'} > {maxd:.0f}) → значок без номера")
             icons[r.get('prefix', 'X')].append((s, dict(r, icon=True))); continue
         base = best['label'] + r.get('suffix', ''); used_lab[base] += 1
         lab = base if used_lab[base] == 1 else f'{base}{used_lab[base]}'
+        amb = d2 is not None and d2 < d1 * 1.5
+        near_log.append(f"{'⚠️ ' if amb or used_lab[base] > 1 else ''}{lab}: ближайшая {best['label']} {d1:.0f} pt" + (f", следующая {ranked[1]['label']} {d2:.0f} pt" if d2 is not None else '')
+                        + (' — неоднозначно, проверить' if amb else '') + (' — к этой точке уже привязан такой же значок' if used_lab[base] > 1 else ''))
         pts.append(dict(label=lab, orig=s['t'], typeId=r['type'], s=s, rule=dict(r, cabinet=r.get('cabinet')), derived=True, near=best['label']))
     # значки без номеров: нумерация по порядку (сверху вниз, слева направо полосами)
     for prefix, lst in icons.items():
@@ -269,7 +295,7 @@ def build(work, mapfile, out):
         p['cabinet'] = cab or mp.get('default_cabinet', '')
     # исключения/добавления вручную
     excl = set(mp.get('exclude', []))
-    pts = [p for p in pts if p['label'] not in excl]
+    pts = [p for p in pts if p['label'] not in excl and p.get('near') not in excl]  # исключённая точка забирает и привязанные к ней значки
     # дубли: одно обозначение в разных местах — предупреждение; в одном месте (наложение слоёв) — склеиваем
     byl = collections.defaultdict(list)
     for p in pts: byl[p['label']].append(p)
@@ -300,7 +326,16 @@ def build(work, mapfile, out):
     for p in final:
         m = re.match(r'^(.*?)(\d+)$', p['label'])
         if m and '.' not in p['label'][-4:]: series[(m.group(1), p['typeId'])].append(int(m.group(2)))
+    pairs = collections.defaultdict(set)  # двери вида 1A-17.1 / 1A-17.2
+    for p in final:
+        m = re.match(r'^(.*?)(\d+)\.(\d+)$', p['label'])
+        if m: series[(m.group(1), p['typeId'])].append(int(m.group(2))); pairs[(m.group(1), int(m.group(2)))].add(int(m.group(3)))
     gaps = []
+    subs_all = collections.defaultdict(set)
+    for (pre, n), ks in pairs.items(): subs_all[pre] |= ks
+    for (pre, n), ks in sorted(pairs.items()):
+        miss = sorted(subs_all[pre] - ks)
+        if miss and len(subs_all[pre]) > 1: gaps.append(f"{pre}{n}: есть .{', .'.join(map(str, sorted(ks)))}, нет .{', .'.join(map(str, miss))}")
     for (pre, typ), nums in series.items():
         nums = sorted(set(nums))
         if len(nums) >= 4:
@@ -328,12 +363,22 @@ def build(work, mapfile, out):
     if dups: rep += ['', '## ⚠️ Одно обозначение в разных местах чертежа'] + [f'- {l}: {n} раза (вторые получили #2, #3…)' for l, n in dups]
     if gaps: rep += ['', '## Пропуски в сериях (на чертеже их нет — не добавлены)'] + [f'- {g}' for g in gaps]
     if probs: rep += ['', '## ⚠️ Странные обозначения'] + [f'- {x}' for x in probs]
+    if near_log: rep += ['', '## Значки, привязанные к соседней точке (near) — проверить строки с ⚠️'] + [f'- {x}' for x in near_log]
+    under = []
+    for p in final:
+        s0 = p.get('s')
+        if not s0: continue
+        for a in meta.get('annots', []):
+            if a['page'] == s0['page'] and a['x0'] - 5 <= (s0['x0'] + s0['x1']) / 2 <= a['x1'] + 5 and a['y0'] - 5 <= (s0['y0'] + s0['y1']) / 2 <= a['y1'] + 5 and a['kind'] not in ('Link', 'Widget'):
+                under.append(f"{p['label']}: под пометкой {a['kind']}{' «' + a['text'] + '»' if a['text'] else ''} — посмотри (crop), не зачёркнута ли"); break
+    if under: rep += ['', '## ⚠️ Точки под пометками поверх чертежа'] + [f'- {x}' for x in under]
     leftovers = collections.Counter(s['c'] for s in spans if s['c'] not in used_clusters and labelish(s['t']))
     if leftovers:
         rep += ['', '## Группы, не включённые ни в одно правило, где есть текст вида «буквы+цифры»']
         cl = {c['id']: c for c in sc['clusters']}
         rep += [f"- {c}: {n} шт., примеры: {' | '.join(cl[c]['samples'][:8])}" for c, n in leftovers.most_common()]
     open(os.path.join(work, 'report.md'), 'w').write('\n'.join(rep))
+    open(os.path.join(work, 'points.md'), 'w').write('\n'.join(f"{p['cabinet'] or '—'}\t{p['typeId']}\t{p['label']}" + (f"\t({p['orig']})" if p.get('orig') and p['orig'] != p['label'] else '') for p in final))
     render_check(meta, work, final, unknown)
     print('\n'.join(rep[:120]))
     print(f'\nФайл точек: {out}\nПроверочная картинка: {work}/check*.png')
@@ -373,6 +418,12 @@ def render_check(meta, work, final, unknown):
             part = img.crop((int(a * W / 2) - (40 if a else 0), int(b * H / 2) - (40 if b else 0), int((a + 1) * W / 2), int((b + 1) * H / 2)))
             part.thumbnail((2400, 2400)); part.save(os.path.join(work, f'check{suf}_{i + 1}.png'))
 
+def crop(pdf, x0, y0, x1, y1, out, page=0):
+    """Вырезать область чертежа крупно (координаты PDF с учётом поворота, как в scan.json)."""
+    x0, y0, x1, y1 = map(float, (x0, y0, x1, y1)); z = min(8.0, 2400 / max(1.0, x1 - x0))
+    img = render_page(pdf, int(page), z)
+    img.crop((int(x0 * z), int(y0 * z), int(x1 * z), int(y1 * z))).save(out); print(out)
+
 def tiles(pdf, work, n=3):
     """Чертёж без текстового слоя (скан, фото): крупные части n×n с перекрытием 10% — для чтения глазами."""
     os.makedirs(work, exist_ok=True)
@@ -406,4 +457,5 @@ if __name__ == '__main__':
     elif len(sys.argv) >= 5 and sys.argv[1] == 'build': build(sys.argv[2], sys.argv[3], sys.argv[4])
     elif len(sys.argv) >= 4 and sys.argv[1] == 'tiles': tiles(sys.argv[2], sys.argv[3], int(sys.argv[4]) if len(sys.argv) > 4 else 3)
     elif len(sys.argv) >= 4 and sys.argv[1] == 'merge': merge(sys.argv[2], sys.argv[3:])
+    elif len(sys.argv) >= 8 and sys.argv[1] == 'crop': crop(sys.argv[2], *sys.argv[3:7], sys.argv[7], sys.argv[8] if len(sys.argv) > 8 else 0)
     else: print(__doc__)
