@@ -5,7 +5,7 @@ import { generateLabels, parseSuffixes, comparePoints, usesConfig, remaining, RE
 import { scanDevice } from '../scan.js';
 import { statusClass } from './project.js';
 import { hint } from './guide.js';
-import { dateText, cablesText } from '../../domain/index.js';
+import { dateText, cablesText, missingDetails } from '../../domain/index.js';
 import { addWorkForPoint } from './doh.js';
 import { whoIs } from './journal.js';
 
@@ -163,6 +163,12 @@ export function pointCard(startPoint) {
       h('div', { style: { margin: '2px 0 10px' } }, h('span', { class: statusClass(info.status) }, info.status)),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px', fontSize: '14px' } },
         facts.flatMap(([k, v]) => [h('span', { class: 'mut' }, k), h('span', { style: { fontWeight: 600 } }, String(v))])),
+      info.composed ? (() => { // что осталось по устройствам
+        const miss = missingDetails(info, ctx);
+        return h('div', { style: { marginTop: '10px', fontSize: '14px' } },
+          h('div', { class: 'group', style: { padding: '4px 0' } }, miss.length ? 'Осталось сделать' : 'Всё сделано ✅'),
+          miss.map((m) => h('div', {}, h('span', { class: 'mut' }, `${m.stage}: `), m.items.join(', '))));
+      })() : null,
       h('div', { class: 'btns' },
         h('button', { onclick: () => { close(); setTimeout(() => addWorkForPoint(p.id), 60); } }, '➕ Добавить работу на эту точку')),
       h('div', { class: 'btns' },

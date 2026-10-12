@@ -171,3 +171,43 @@ export function missingDetails(info, ctx) {
   const ord = (x) => { const i = STAGES.indexOf(x); return i < 0 ? 99 : i; };
   return [...by.entries()].sort((a, b) => ord(a[0]) - ord(b[0])).map(([stage, items]) => ({ stage, items }));
 }
+
+// ---------- работа с дохом ----------
+const PULL_LIKE = ['Протяжка', 'Перетяжка', 'Перенос'];
+const ALL_STD = ['Камера', 'Дверь', 'Галай', 'Вайфай', 'Бакар', 'Точка', 'TV', 'Оптика', 'Другое'];
+// Подходит ли работа точке: старая схема — по «Для каких типов точек»; из устройств — если работа есть в её задачах
+export function workFits(point, ctx, work) {
+  if (!work) return false;
+  const comp = compositionOf(point, ctx);
+  if (!comp) return (work.forTypes || []).includes(point.typeId);
+  // протяжка — любая точка из устройств; перетяжка/перенос — если отмечен этот тип или работа отмечена для всех стандартных типов
+  if (work.workType === 'Протяжка') return (work.forTypes || []).length > 0;
+  if (PULL_LIKE.includes(work.workType)) return (work.forTypes || []).includes(point.typeId) || ALL_STD.every((t) => (work.forTypes || []).includes(t));
+  return (work.forTypes || []).includes(point.typeId) || tasksOf(point, ctx, comp).some((t) => t.workId === work.id);
+}
+// Работа выбирается по точкам (а не количеством)
+export function workUsesPoints(work, ctx) {
+  if (!work) return false;
+  if ((work.forTypes || []).length) return true;
+  return [...ctx.points.values()].some((p) => compositionOf(p, ctx) && workFits(p, ctx, work));
+}
+// Несделанные задачи точки по работе (с учётом галочек устройств); null — точка старой схемы
+export function openTasksFor(point, ctx, work, deviceIds) {
+  const comp = compositionOf(point, ctx); if (!comp) return null;
+  return composedInfo(point, ctx, comp).tasks.filter((t) => !t.done
+    && (work.workType === 'Протяжка' ? t.stage === 'Протяжка' : t.workId === work.id)
+    && (!deviceIds?.length || t.deviceId === null || deviceIds.includes(t.deviceId)));
+}
+// Протяжка по точкам: по записи на каждый вид кабеля, только то, что ещё не протянуто.
+// mainCable(point) — кабель точки старой схемы. → { groups: [[cableId, pointIds]], done: [метки уже протянутых] }
+export function pullGroups(points, ctx, deviceIds, mainCable) {
+  const m = new Map(); const done = [];
+  const add = (cable, id) => { const k = cable || ''; if (!m.has(k)) m.set(k, []); if (!m.get(k).includes(id)) m.get(k).push(id); };
+  points.forEach((p) => {
+    const open = openTasksFor(p, ctx, { workType: 'Протяжка' }, deviceIds);
+    if (open === null) { add(mainCable(p), p.id); return; }
+    if (!open.length) { done.push(p.label); return; }
+    open.forEach((t) => add(t.cable, p.id));
+  });
+  return { groups: [...m.entries()].map(([c, ids]) => [c || undefined, ids]), done };
+}
