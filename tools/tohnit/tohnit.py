@@ -296,7 +296,56 @@ def _snake(lst, start='left', strips=None):
         out += sorted(L, key=lambda x: (band(x), uv(x)[1] * (1 if band(x) % 2 == 0 else -1)))
     return out
 
-def _path(lst, start='left'):
+def _zones(lst, mp, r0):
+    """Деление значков на части чертежа: вручную (zones: [[x0,y0,x1,y1], …] по порядку) или автоматически —
+    группы значков, между которыми большой пустой промежуток (zone_gap pt; по умолчанию 3.5 × обычного расстояния до соседа)."""
+    ctr = lambda x: ((x[0]['x0'] + x[0]['x1']) / 2, (x[0]['y0'] + x[0]['y1']) / 2)
+    zones = r0.get('zones', mp.get('zones'))
+    if zones == 'off' or zones is False or len(lst) < 4: return [lst]
+    if isinstance(zones, list) and zones:
+        out = [[] for _ in zones] + [[]]
+        for x in lst:
+            cx, cy = ctr(x)
+            i = next((i for i, z in enumerate(zones) if z[0] <= cx <= z[2] and z[1] <= cy <= z[3]), len(zones))
+            out[i].append(x)
+        return [z for z in out if z]
+    P = [ctr(x) for x in lst]; n = len(P)
+    nn = sorted(min(math.dist(P[i], P[j]) for j in range(n) if j != i) for i in range(n))
+    gap = float(r0.get('zone_gap', mp.get('zone_gap', 0)) or 3.5 * nn[n // 2])
+    par = list(range(n))
+    def f(i):
+        while par[i] != i: par[i] = par[par[i]]; i = par[i]
+        return i
+    for i in range(n):
+        for j in range(i + 1, n):
+            if lst[i][0]['page'] == lst[j][0]['page'] and math.dist(P[i], P[j]) <= gap: par[f(i)] = f(j)
+    g = collections.defaultdict(list)
+    for i in range(n): g[f(i)].append(lst[i])
+    return list(g.values())
+
+def _zoned(lst, mp, r0, start):
+    """Нумерация по частям чертежа: часть целиком, потом следующая — ближайшая к концу предыдущей (без прыжков через лист)."""
+    zs = _zones(lst, mp, r0)
+    if len(zs) == 1: return _path(lst, start)
+    ctr = lambda x: ((x[0]['x0'] + x[0]['x1']) / 2, (x[0]['y0'] + x[0]['y1']) / 2)
+    key = {'left': lambda c: c[0], 'right': lambda c: -c[0], 'top': lambda c: c[1], 'bottom': lambda c: -c[1]}.get(start, lambda c: c[0])
+    manual = isinstance(r0.get('zones', mp.get('zones')), list)
+    out = []; rest = list(zs)
+    cur = rest.pop(0) if manual else rest.pop(min(range(len(rest)), key=lambda i: min(key(ctr(x)) for x in rest[i])))
+    opp = {'left': 'right', 'right': 'left', 'top': 'bottom', 'bottom': 'top'}
+    while True:
+        d = start
+        if out:  # следующая часть — с того её края, который ближе к концу предыдущей, и дальше к другому краю
+            last = ctr(out[-1])
+            a1 = min(cur, key=lambda x: key(ctr(x))); a2 = max(cur, key=lambda x: key(ctr(x)))
+            d = start if math.dist(last, ctr(a1)) <= math.dist(last, ctr(a2)) else opp.get(start, 'right')
+        out += _path(cur, d)
+        if not rest: break
+        last = ctr(out[-1])
+        cur = rest.pop(0) if manual else rest.pop(min(range(len(rest)), key=lambda i: min(math.dist(last, ctr(x)) for x in rest[i])))
+    return out
+
+def _path(lst, start='left', entry=None):
     """Порядок нумерации «цепочкой»: от крайней точки со стороны start к ближайшей следующей; шаг назад (к start) штрафуется,
     поэтому номера идут подряд по соседям и в целом от start к другому краю. Потом цепочка распрямляется (2-opt)."""
     out = []
@@ -307,7 +356,11 @@ def _path(lst, start='left'):
             return {'left': (cx, cy), 'right': (-cx, cy), 'top': (cy, cx), 'bottom': (-cy, cx)}.get(start, (cx, cy))
         P = [uv(x) for x in L]; n = len(P)
         cost = lambda i, j: math.dist(P[i], P[j]) + 2.0 * max(0.0, P[i][0] - P[j][0])
-        cur = min(range(n), key=lambda i: (P[i][0], P[i][1])); seq = [cur]; left = set(range(n)) - {cur}
+        if entry is not None:  # продолжение с предыдущей части: начинаем с ближайшего к ней значка
+            e = uv(({'x0': entry[0], 'x1': entry[0], 'y0': entry[1], 'y1': entry[1]},))
+            cur = min(range(n), key=lambda i: math.dist(P[i], e))
+        else: cur = min(range(n), key=lambda i: (P[i][0], P[i][1]))
+        seq = [cur]; left = set(range(n)) - {cur}
         while left:
             cur = min(left, key=lambda j: cost(seq[-1], j)); seq.append(cur); left.remove(cur)
         if 3 < n <= 200:  # 2-opt: убрать перекрёстки цепочки (первая точка остаётся первой)
@@ -387,7 +440,7 @@ def build(work, mapfile, out):
         r0 = lst[0][1] if lst else {}
         order = r0.get('order', mp.get('order', 'path')); start = r0.get('start', mp.get('start', 'left'))
         digits = int(r0.get('digits', mp.get('digits', 2)))
-        lst = _path(lst, start) if order == 'path' else _snake(lst, start, r0.get('strips', mp.get('strips'))) if order == 'snake' else sorted(lst, key=lambda x: (x[0]['page'], round(x[0]['y0'] / 60), x[0]['x0']))
+        lst = _zoned(lst, mp, r0, start) if order == 'path' else _snake(lst, start, r0.get('strips', mp.get('strips'))) if order == 'snake' else sorted(lst, key=lambda x: (x[0]['page'], round(x[0]['y0'] / 60), x[0]['x0']))
         n = 0
         for s, r in lst:
             per = int(r.get('per_icon', 1))
