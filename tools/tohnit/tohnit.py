@@ -16,11 +16,14 @@
   python3 tohnit.py find WORK/ 'regex'                → где встречается текст (с координатами); list WORK/ c05 — вся группа
   python3 tohnit.py layers WORK/                      → слои чертежа (AutoCAD), сколько в каждом линий и какого цвета
   python3 tohnit.py hide WORK/ 'regex' …              → скрыть слои (рамки колонн, штриховки…) на всех картинках; без regex — показать все
+  python3 tohnit.py version                           → дата версии скрипта (свежее — новее)
   python3 tohnit.py blobs WORK/                       → сам найти все цветные значки без подписей и разложить по видам (b/…png)
 
 Нужен PyMuPDF (pip install pymupdf) или pdfplumber (обычно уже установлен) + Pillow.
 """
 import json, os, re, sys, math, collections
+
+VERSION = '2026-10-13'  # дата версии: python3 tohnit.py version
 
 # ---------------------------------------------------------------- извлечение текста
 def _color_hex(c):
@@ -102,9 +105,25 @@ def extract(path):
             pages.append(dict(w=H if rot in (90, 270) else W, h=W if rot in (90, 270) else H, spans=spans, fills=fills))
     return pages, 'pdfplumber'
 
+def _join_stacked(spans, key):
+    """Подпись в две строки: «GD1/» над «D-15.2» → «GD1/D-15.2» (строка, кончающаяся на «/», — приставка к строке под ней)."""
+    pre = [s for s in spans if s['t'].strip().endswith('/') and len(s['t'].strip()) <= 6 and not s['font'].startswith('аннотация')]
+    if not pre: return spans
+    used = set(); out = []
+    for p in pre:
+        cx = (p['x0'] + p['x1']) / 2; h = max(p['size'], p['y1'] - p['y0'])
+        cand = [s for s in spans if s is not p and id(s) not in used and key(s) == key(p) and not s['t'].strip().endswith('/')
+                and -0.3 * h <= s['y0'] - p['y1'] <= 0.9 * h and s['x0'] - h <= cx <= s['x1'] + h]
+        if not cand: continue
+        b = min(cand, key=lambda s: (s['y0'] - p['y1']) + abs((s['x0'] + s['x1']) / 2 - cx) * 0.2)
+        used.add(id(p)); used.add(id(b))
+        out.append(dict(b, t=p['t'].strip() + b['t'].strip(), x0=min(p['x0'], b['x0']), x1=max(p['x1'], b['x1']), y0=p['y0'], y1=b['y1']))
+    return [s for s in spans if id(s) not in used] + out
+
 def merge_spans(spans):
     """Соседние фрагменты одной строки и одного стиля («TV» «140», «ACP» «PUP-A1») склеиваются в один (через пробел)."""
     key = lambda s: (s['color'], s['font'], s['size'])
+    spans = _join_stacked(spans, key)
     spans = sorted(spans, key=lambda s: (key(s), round((s['y0'] + s['y1']) / 2, 0), s['x0']))
     out = []
     for s in spans:
@@ -114,7 +133,8 @@ def merge_spans(spans):
             o = out[-1]
             same = key(o) == key(s) and abs((o['y0'] + o['y1']) / 2 - (s['y0'] + s['y1']) / 2) < s['size'] * 0.3
             gap = s['x0'] - o['x1']
-            if same and -0.1 * s['size'] <= gap <= 0.6 * s['size']:
+            both = LABELISH.match(o['t'].split(' ')[-1]) and LABELISH.match(s['t'])  # две целые подписи («D-15.2» «D-14.2») не склеиваем
+            if same and not both and -0.1 * s['size'] <= gap <= 0.6 * s['size']:
                 o['t'] = o['t'] + ' ' + s['t']; o['x1'] = max(o['x1'], s['x1']); o['y0'] = min(o['y0'], s['y0']); o['y1'] = max(o['y1'], s['y1'])
                 continue
         out.append(dict(s))
@@ -499,6 +519,16 @@ def _sample_sheet(pdf, lst, path, title):
     for c in crops: sh.paste(c, (x, 36)); x += c.width + 10
     ImageDraw.Draw(sh).text((6, 6), title, fill='black', font=_font(18)); sh.save(path)
 
+def _split_glued(s):
+    """«GD1/ D-15.2 D-14.2» → «GD1/D-15.2», «GD1/D-14.2» (часть, кончающаяся на «/», — приставка к следующим). Место — по доле символов."""
+    t = s['t']; toks = [(m.start(), m.group()) for m in re.finditer(r'\S+', t)]
+    out = []; pre = ''
+    for pos, tok in toks:
+        if tok.endswith('/') and len(tok) <= 6: pre = tok; continue
+        q = dict(s); n = max(1, len(t)); w = s['x1'] - s['x0']
+        q.update(t=pre + tok, x0=s['x0'] + w * pos / n, x1=s['x0'] + w * (pos + len(tok)) / n, split_from=t); out.append(q)
+    return out if len(out) >= 2 or (len(out) == 1 and pre) else None
+
 def build(work, mapfile, out):
     sc = json.load(open(os.path.join(work, 'scan.json'))); mp = json.load(open(mapfile))
     spans = sc['spans']; meta = sc['meta']
@@ -509,15 +539,24 @@ def build(work, mapfile, out):
     cab_re = re.compile(mp['cabinet_regex']) if mp.get('cabinet_regex') else None
     used_clusters = {c for r in rules for c in (r.get('clusters') or [])}
     pts = []; unknown = []; skipped = collections.Counter(); icons = collections.defaultdict(list); nears = []; near_log = []
-    for s in spans:
-        t = s['t'].strip()
-        rule = None
+    def pick(s, t):
         for r in rules:
             if r.get('clusters') and s['c'] not in r['clusters']: continue
             if r.get('match') and not re.search(r['match'], t): continue
             if r.get('page') is not None and s['page'] != r['page']: continue
             if r.get('area') and not (r['area'][0] <= (s['x0'] + s['x1']) / 2 <= r['area'][2] and r['area'][1] <= (s['y0'] + s['y1']) / 2 <= r['area'][3]): continue  # по центру текста
-            rule = r; break
+            return r
+        return None
+    byicon = []; split_log = []
+    queue = list(spans)
+    while queue:
+        s = queue.pop(0)
+        t = s['t'].strip()
+        rule = pick(s, t)
+        if rule is None and re.search(r'\s', t) and not s.get('split_from'):
+            parts = _split_glued(s)  # «GD1/ D-15.2 D-14.2» — две подписи слиплись в одну строку
+            if parts and all((lambda r: r is not None and not r.get('skip'))(pick(q, q['t'])) for q in parts):
+                split_log.append(f"«{t}» → {', '.join(q['t'] for q in parts)}"); queue[0:0] = parts; continue
         if rule is None:
             if s['c'] in used_clusters and labelish(t): unknown.append(s)
             free[s['c']].append(s)
@@ -530,7 +569,42 @@ def build(work, mapfile, out):
             icons[rule.get('prefix', 'X')].append((s, rule)); continue
         label = t.replace(' ', '')
         for rx, rep in renames: label = rx.sub(rep, label)
+        if rule.get('by_icon'):
+            byicon.append(dict(label=label, orig=t, s=s, rule=rule)); continue
         pts.append(dict(label=label, orig=t, typeId=rule['type'], s=s, rule=rule))
+    # тип подписи — по значку рядом (by_icon: {"sym:tri": "Магнит индикация", "sym:hex": "Галай"}): каждый значок достаётся одной подписи, ближайшей
+    icon_log = []
+    if byicon:
+        groups = {g for b in byicon for g in b['rule']['by_icon']}
+        icn = [x for x in spans if x['c'] in groups]
+        def edge(a, b):  # расстояние от центра значка до прямоугольника подписи
+            cx, cy = (b['x0'] + b['x1']) / 2, (b['y0'] + b['y1']) / 2
+            return math.hypot(max(a['x0'] - cx, 0, cx - a['x1']), max(a['y0'] - cy, 0, cy - a['y1']))
+        pairs = []
+        for i, b in enumerate(byicon):
+            md = float(b['rule'].get('icon_dist', 60))
+            for j, x in enumerate(icn):
+                if x['page'] == b['s']['page'] and x['c'] in b['rule']['by_icon']:
+                    d = edge(b['s'], x)
+                    if d <= md: pairs.append((d, i, j))
+        got = {}; used = set()
+        for d, i, j in sorted(pairs):
+            if i in got or j in used: continue
+            got[i] = (j, d); used.add(j)
+        for i, b in enumerate(byicon):
+            r = b['rule']
+            if i in got:
+                j, d = got[i]; x = icn[j]; typ = r['by_icon'][x['c']]; taken.append(x)
+                alt = [(d2, icn[j2]['c']) for d2, i2, j2 in pairs if i2 == i and icn[j2]['c'] != x['c'] and j2 not in used]
+                amb = alt and min(alt)[0] < d * 1.3 + 3
+                if amb: icon_log.append(f"⚠️ {b['label']} → {typ} ({x['c']} {d:.0f} pt), но рядом и {min(alt)[1]} {min(alt)[0]:.0f} pt — проверить")
+                b.update(typeId=typ, icon_d=d)
+            else:
+                typ = r.get('type')
+                icon_log.append(f"⚠️ {b['label']}: значка рядом нет (≤{float(r.get('icon_dist', 60)):.0f} pt) → " + (f'«{typ}» по умолчанию (type правила) — проверить' if typ else 'не взята, нужен type в правиле или вопрос Ивану'))
+                if not typ: unknown.append(b['s']); continue
+                b['typeId'] = typ
+            pts.append(b)
     # значок рядом с точкой другого типа (BRFC/APA/OB у двери): обозначение = обозначение ближайшей точки + суффикс
     ctr = lambda s: ((s['x0'] + s['x1']) / 2, (s['y0'] + s['y1']) / 2)
     used_lab = collections.Counter()
@@ -663,6 +737,8 @@ def build(work, mapfile, out):
     if gaps: rep += ['', '## Пропуски в сериях (на чертеже их нет — не добавлены)'] + [f'- {g}' for g in gaps]
     if probs: rep += ['', '## ⚠️ Странные обозначения'] + [f'- {x}' for x in probs]
     if near_log: rep += ['', '## Значки, привязанные к соседней точке (near) — проверить строки с ⚠️'] + [f'- {x}' for x in near_log]
+    if icon_log: rep += ['', '## Тип по значку рядом (by_icon) — проверить'] + [f'- {x}' for x in icon_log]
+    if split_log: rep += ['', '## Слипшиеся подписи разделены'] + [f'- {x}' for x in split_log]
     # значки/коды, которых много, но ни одно правило их не взяло — возможно, пропущен целый вид точек
     missed = []
     cl = {c['id']: c for c in sc['clusters']}
@@ -678,12 +754,16 @@ def build(work, mapfile, out):
         if not (c.startswith(('b:', 'sym:')) or c0.get('bg')): continue  # значки и буквы в цветных рамках
         lst = [x for x in lst if not covered(x)]
         if len(lst) >= 3: missed.append((c, lst))
+    ign = [re.compile(x) for x in mp.get('ignore_missed', [])]
+    missed = [(c, lst) for c, lst in missed if not any(x.search(c) for x in ign)]
     if missed:
-        rep += ['', '## ⚠️ Повторяющиеся значки/коды, которые ни одно правило не взяло — спросить Ивана или осознанно skip (картинки work/missed_*.png)']
-        for c, lst in sorted(missed, key=lambda e: -len(e[1])):
+        missed.sort(key=lambda e: -len(e[1])); show = missed[:12]; rest = missed[12:]
+        rep += ['', '## ⚠️ Повторяющиеся значки/коды, которые ни одно правило не взяло — спросить Ивану или осознанно skip (картинки work/missed_*.png)']
+        for c, lst in show:
             rep.append(f"- {c}: {len(lst)} шт., примеры: {' | '.join(dict.fromkeys(x['t'] for x in lst[:30]))[:80]}")
             try: _sample_sheet(meta['pdf'], lst, os.path.join(work, f"missed_{c.replace(':', '_')}.png"), f'{c}: {len(lst)} шт. не взяты')
             except Exception: pass
+        if rest: rep.append(f"- …и ещё {len(rest)} видов поменьше ({sum(len(l) for c, l in rest)} шт.): {', '.join(c for c, l in rest[:30])}{' …' if len(rest) > 30 else ''} — обычно архитектура; если смотрел — убери из отчёта: \"ignore_missed\": [\"^b:\"]")
     if prev_pts is not None:
         rep += ['', '## Сравнение с прошлой версией (previous)'] + (prev_log or ['- нечего сравнивать'])
         rep += _diff_prev(prev_pts, final)
@@ -885,49 +965,106 @@ def _plen(items, rm):
         L += sum(math.dist(pts[i], pts[i + 1]) for i in range(len(pts) - 1))
     return L
 
-def symbols(work, name, x0, y0, x1, y1, page=0, tol=0.12):
+def _pts(items, rm, step=0.3):
+    """Точки вдоль контуров пути (pt листа, с поворотом), шаг ~step."""
+    out = []
+    def seg(a, b):
+        n = max(1, int(math.dist(a, b) / step))
+        out.extend((a[0] + (b[0] - a[0]) * i / n, a[1] + (b[1] - a[1]) * i / n) for i in range(n + 1))
+    for it in items:
+        k = it[0]
+        if k == 'l': ps = [it[1] * rm, it[2] * rm]
+        elif k == 'c':
+            p0, p1, p2, p3 = (q * rm for q in it[1:5]); ps = []
+            for i in range(9):
+                t = i / 8; u = 1 - t
+                ps.append(fitz_point(u ** 3 * p0.x + 3 * u * u * t * p1.x + 3 * u * t * t * p2.x + t ** 3 * p3.x, u ** 3 * p0.y + 3 * u * u * t * p1.y + 3 * u * t * t * p2.y + t ** 3 * p3.y))
+        elif k == 're': r = it[1] * rm; ps = [(r.x0, r.y0), (r.x1, r.y0), (r.x1, r.y1), (r.x0, r.y1), (r.x0, r.y0)]
+        elif k == 'qu': q = it[1] * rm; ps = [q.ul, q.ur, q.lr, q.ll, q.ul]
+        else: continue
+        ps = [(float(p[0]), float(p[1])) for p in ps]
+        for i in range(len(ps) - 1): seg(ps[i], ps[i + 1])
+    return out
+def fitz_point(x, y): return (x, y)
+
+def _shape_sig(pts, step=0.3):
+    """Подпись формы, не зависящая от поворота и от того, как CAD разбил/продублировал линии:
+    длина (по уникальным клеткам сетки), радиус инерции, вытянутость."""
+    cells = {(round(x / step), round(y / step)) for x, y in pts}
+    if len(cells) < 3: return None
+    xs = [c[0] * step for c in cells]; ys = [c[1] * step for c in cells]; n = len(cells)
+    mx, my = sum(xs) / n, sum(ys) / n
+    sxx = sum((x - mx) ** 2 for x in xs) / n; syy = sum((y - my) ** 2 for y in ys) / n; sxy = sum((x - mx) * (y - my) for x, y in zip(xs, ys)) / n
+    tr = sxx + syy; det = sxx * syy - sxy * sxy; disc = math.sqrt(max(0.0, tr * tr / 4 - det))
+    l1, l2 = tr / 2 + disc, tr / 2 - disc
+    return dict(L=n * step, rg=math.sqrt(tr), el=(l2 / l1) if l1 > 0 else 1.0, cx=mx, cy=my)
+
+def symbols(work, name, x0, y0, x1, y1, page=0, tol=0.15, color=None):
     """Найти на листе все такие же векторные значки, как в области (x0..y1) — образец (значок из легенды или на плане).
-    Сравнение не зависит от поворота значка (длина контуров + расстояния между частями).
-    Найденные добавляются в scan.json как текст «name» в группе «sym:name» — для правил icon/near. Повторный запуск с тем же именем заменяет найденное."""
+    Значок = соседние линии одного (главного) цвета; сравнение — по форме (длина контуров, радиус, вытянутость),
+    не зависит от поворота значка и от того, как CAD разбил линии на куски. Чужие цвета (стена, дверь, выноски) не мешают.
+    color — главный цвет вручную (hex, напр. 0000ff), если образец взялся не тот (скрипт печатает цвета в области).
+    Найденные добавляются в scan.json как текст «name» в группе «sym:name» — для правил icon/near/by_icon. Повторный запуск с тем же именем заменяет найденное."""
     fitz = _fitz()
     if not fitz: print('Нужен PyMuPDF (pip install pymupdf)'); return
     sc = json.load(open(os.path.join(work, 'scan.json'))); pdf = sc['meta']['pdf']; page = int(page)
     p = fitz.open(pdf)[page]; rm = p.rotation_matrix; _set_hide(sc['meta'])
-    x0, y0, x1, y1 = map(float, (x0, y0, x1, y1))
+    x0, y0, x1, y1 = map(float, (x0, y0, x1, y1)); size = max(x1 - x0, y1 - y0)
     paths = []
     for d in p.get_drawings():
         if _hidden(d.get('layer')): continue
         r = d['rect'] * rm
-        if r.width > 300 or r.height > 300: continue
-        sig = (_color_hex(d.get('fill')) if d.get('fill') is not None else '', _color_hex(d.get('color')) if d.get('color') is not None else '', ''.join(sorted(it[0] for it in d['items'])))
-        paths.append((sig, (r.x0 + r.x1) / 2, (r.y0 + r.y1) / 2, _plen(d['items'], rm), r))
-    tpl = [q for q in paths if q[4].x0 >= x0 - 1 and q[4].y0 >= y0 - 1 and q[4].x1 <= x1 + 1 and q[4].y1 <= y1 + 1]
-    if not tpl: print('В области нет векторных элементов — увеличь область'); return
-    same = lambda a, b: a[0] == b[0] and abs(a[3] - b[3]) <= tol * max(1.0, b[3]) + 0.5
-    anchor = max(tpl, key=lambda q: q[3])
-    # части значка — того же цвета, что главный контур (стрелки-выноски, штриховка мебели в образец не входят)
-    others = [q for q in tpl if q is not anchor and (q[0][0], q[0][1]) == (anchor[0][0], anchor[0][1])]
-    tpl = [anchor] + others
-    rad = [(q, math.dist((q[1], q[2]), (anchor[1], anchor[2]))) for q in others]
-    grid = collections.defaultdict(list)
-    for q in paths: grid[(int(q[1] // 30), int(q[2] // 30))].append(q)
-    size = max(x1 - x0, y1 - y0)
-    found = []
-    for c in paths:
-        if not same(c, anchor): continue
-        near = [z for gx in range(int((c[1] - size) // 30), int((c[1] + size) // 30) + 1) for gy in range(int((c[2] - size) // 30), int((c[2] + size) // 30) + 1) for z in grid.get((gx, gy), [])]
-        ok = sum(1 for q, rq in rad if any(same(z, q) and abs(math.dist((z[1], z[2]), (c[1], c[2])) - rq) <= max(1.5, 0.1 * rq) for z in near))
-        if not others or ok >= 0.8 * len(others):
-            if any(math.dist((b[0], b[1]), (c[1], c[2])) < 2 for b in found): continue
-            found.append((c[1], c[2]))
-    # сам образец тоже считается (если он из легенды — исключи легенду правилом area + skip, как и другие её значки)
+        if r.width > size * 1.5 + 2 or r.height > size * 1.5 + 2: continue  # крупное (стены, рамки надписей) в значок не входит
+        c = d.get('color') if d.get('color') is not None else d.get('fill')
+        if c is None: continue
+        paths.append((_color_hex(c), r, d['items']))
+    inside = [q for q in paths if q[1].x0 >= x0 - 1 and q[1].y0 >= y0 - 1 and q[1].x1 <= x1 + 1 and q[1].y1 <= y1 + 1]
+    if not inside: print('В области нет векторных элементов — увеличь область (координаты как в scan.json / crop)'); return
+    cols = collections.Counter()
+    cx0, cy0 = (x0 + x1) / 2, (y0 + y1) / 2
+    for hx, r, it in inside:  # главный цвет: больше всего контура ближе к центру области
+        w = 1.0 if abs((r.x0 + r.x1) / 2 - cx0) <= (x1 - x0) * 0.35 and abs((r.y0 + r.y1) / 2 - cy0) <= (y1 - y0) * 0.35 else 0.3
+        cols[hx] += w * max(0.5, _plen(it, rm))
+    main = (color or '').lower().lstrip('#') or cols.most_common(1)[0][0]
+    print('Цвета в области (доля контура): ' + ', '.join(f'#{h} {v / sum(cols.values()):.0%}' for h, v in cols.most_common(5)) + f' → главный #{main}')
+    tp = [pt for hx, r, it in inside if hx == main for pt in _pts(it, rm)]
+    tsig = _shape_sig(tp)
+    if not tsig: print(f'Цвета #{main} в области нет'); return
+    # все значки главного цвета: соседние (зазор ≤1.5 pt) мелкие пути склеиваются
+    L = [q for q in paths if q[0] == main]
+    par = list(range(len(L)))
+    def f(i):
+        while par[i] != i: par[i] = par[par[i]]; i = par[i]
+        return i
+    idx = sorted(range(len(L)), key=lambda i: L[i][1].x0); gap = 1.5
+    for a in range(len(idx)):
+        i = idx[a]
+        for b in range(a + 1, len(idx)):
+            j = idx[b]
+            if L[j][1].x0 > L[i][1].x1 + gap: break
+            if L[j][1].y0 <= L[i][1].y1 + gap and L[i][1].y0 <= L[j][1].y1 + gap: par[f(i)] = f(j)
+    comp = collections.defaultdict(list)
+    for i in range(len(L)): comp[f(i)].append(L[i])
+    found = []; near_miss = 0
+    for c in comp.values():
+        bx0 = min(q[1].x0 for q in c); bx1 = max(q[1].x1 for q in c); by0 = min(q[1].y0 for q in c); by1 = max(q[1].y1 for q in c)
+        if max(bx1 - bx0, by1 - by0) > size * 1.6 + 2: continue
+        sg = _shape_sig([pt for q in c for pt in _pts(q[2], rm)])
+        if not sg: continue
+        dL = abs(sg['L'] - tsig['L']) / tsig['L']; dR = abs(sg['rg'] - tsig['rg']) / max(0.5, tsig['rg']); dE = abs(sg['el'] - tsig['el'])
+        if dL <= tol and dR <= tol and dE <= 0.15: found.append((sg['cx'], sg['cy']))
+        elif dL <= tol * 2.5 and dR <= tol * 2.5: near_miss += 1
     h = size / 2
     sc['spans'] = [q for q in sc['spans'] if q.get('c') != f'sym:{name}']
-    for cx, cy in found: sc['spans'].append(dict(t=name, x0=cx - h, y0=cy - h, x1=cx + h, y1=cy + h, color='', font='значок', size=0, page=page, c=f'sym:{name}'))
-    sc['clusters'] = [c for c in sc['clusters'] if c['id'] != f'sym:{name}'] + ([dict(id=f'sym:{name}', color='', font='значок', size=0, bg='', n=len(found), labelish=0, shapes=[], samples=[name], short=len(found))] if found else [])
+    for cx, cy in found: sc['spans'].append(dict(t=name, x0=cx - h, y0=cy - h, x1=cx + h, y1=cy + h, color=main, font='значок', size=0, page=page, c=f'sym:{name}'))
+    sc['clusters'] = [c for c in sc['clusters'] if c['id'] != f'sym:{name}'] + ([dict(id=f'sym:{name}', color=main, font='значок', size=0, bg='', n=len(found), labelish=0, shapes=[], samples=[name], short=len(found))] if found else [])
     json.dump(sc, open(os.path.join(work, 'scan.json'), 'w'), ensure_ascii=False)
-    print(f'Значков «{name}» найдено: {len(found)} (группа sym:{name}; образец из {len(tpl)} элементов). Сверь число с легендой и посмотри на check.png после build.'
-          + ('' if found else ' Ничего не найдено — группа удалена; попробуй образец точнее (только сам значок) или другой экземпляр.'))
+    print(f'Значков «{name}» найдено: {len(found)} (группа sym:{name}). Сверь число с легендой; примеры — work/sym_{name}.png.'
+          + (f' Похожих, но не прошедших допуск: {near_miss} — если найдено мало, повтори с tol побольше (последний аргумент, напр. 0.25).' if near_miss else '')
+          + ('' if found else ' Ничего не найдено — группа удалена; возьми область точнее (только сам значок) или другой экземпляр, либо задай цвет.'))
+    if found:
+        try: _sample_sheet(pdf, [dict(page=page, x0=cx - h, y0=cy - h, x1=cx + h, y1=cy + h, t=name) for cx, cy in found], os.path.join(work, f'sym_{name}.png'), f'sym:{name}: {len(found)} шт.')
+        except Exception: pass
 
 def layer_stats(pdf):
     """[(слой, число линий/фигур, главный цвет)] — по убыванию."""
@@ -1104,13 +1241,16 @@ if __name__ == '__main__':
     try:
         import signal; signal.signal(signal.SIGPIPE, signal.SIG_DFL)  # «… | head» без BrokenPipe
     except Exception: pass
-    if len(sys.argv) >= 4 and sys.argv[1] == 'scan': scan(sys.argv[2], sys.argv[3])
+    if len(sys.argv) >= 2 and sys.argv[1] == 'version': print(VERSION)
+    elif len(sys.argv) >= 4 and sys.argv[1] == 'scan': scan(sys.argv[2], sys.argv[3])
     elif len(sys.argv) >= 5 and sys.argv[1] == 'build': build(sys.argv[2], sys.argv[3], sys.argv[4])
     elif len(sys.argv) >= 4 and sys.argv[1] == 'tiles': tiles(sys.argv[2], sys.argv[3], int(sys.argv[4]) if len(sys.argv) > 4 else 3)
     elif len(sys.argv) >= 4 and sys.argv[1] == 'merge': merge(sys.argv[2], sys.argv[3:])
     elif len(sys.argv) >= 4 and sys.argv[1] == 'find': find(sys.argv[2], sys.argv[3])
     elif len(sys.argv) >= 4 and sys.argv[1] == 'list': find(sys.argv[2], '', group=sys.argv[3])
-    elif len(sys.argv) >= 8 and sys.argv[1] == 'symbols': symbols(sys.argv[2], sys.argv[3], *sys.argv[4:8], *(sys.argv[8:9]))
+    elif len(sys.argv) >= 8 and sys.argv[1] == 'symbols':
+        opt = [a for a in sys.argv[8:] if not a.startswith('color=')]; col = next((a[6:] for a in sys.argv[8:] if a.startswith('color=')), None)
+        symbols(sys.argv[2], sys.argv[3], *sys.argv[4:8], int(opt[0]) if opt else 0, float(opt[1]) if len(opt) > 1 else 0.15, col)
     elif len(sys.argv) >= 3 and sys.argv[1] == 'layers': layers(sys.argv[2])
     elif len(sys.argv) >= 3 and sys.argv[1] == 'hide': hide(sys.argv[2], sys.argv[3:])
     elif len(sys.argv) >= 3 and sys.argv[1] == 'blobs': blobs(sys.argv[2])
