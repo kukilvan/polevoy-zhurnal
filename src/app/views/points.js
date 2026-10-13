@@ -1,7 +1,7 @@
 // Точки: форма точки, генератор пачкой, карточка точки с историей, вкладка «Точки».
 import { h, formModal, openModal, confirmDialog, toast, qtyList } from '../ui.js';
 import { state, getRepo, pointsSorted, infoOf, currentProject } from '../store.js';
-import { generateLabels, parseSuffixes, comparePoints, usesConfig, remaining, REMAIN_STAGES, hasDeviceId, normalizeMac, findDuplicate } from '../../domain/index.js';
+import { floorOf, spotKey, pointSpot, generateLabels, parseSuffixes, comparePoints, usesConfig, remaining, REMAIN_STAGES, hasDeviceId, normalizeMac, findDuplicate } from '../../domain/index.js';
 import { scanDevice } from '../scan.js';
 import { statusClass } from './project.js';
 import { hint } from './guide.js';
@@ -125,8 +125,8 @@ export function pointForm(point, { onDone } = {}) {
     } }] : [],
     onSubmit: (v) => {
       const label = v.label;
-      const dup = [...state.ctx.points.values()].find((p) => p.label === label && p.id !== point?.id);
-      if (dup) { toast('Точка с таким обозначением уже есть'); return false; }
+      const dup = [...state.ctx.points.values()].find((p) => p.label === label && floorOf(p) === String(v.floor ?? '').trim() && p.id !== point?.id);
+      if (dup) { toast(floorOf(dup) ? `Точка ${label} уже есть на этаже ${floorOf(dup)}` : 'Точка с таким обозначением уже есть'); return false; }
       const idOn = hasIdType(v.typeId);
       const mac = idOn && v.mac ? (normalizeMac(v.mac) || v.mac) : undefined; const serial = idOn ? v.serial : undefined;
       const pts = state.ctx.points.values();
@@ -164,8 +164,8 @@ export function generatorForm() {
     onSubmit: async (v) => {
       const labels = labelsOf(v);
       if (!labels.length) { toast('Нечего создавать: проверьте «от», «до» и шаг'); return false; }
-      const have = new Set([...state.ctx.points.values()].map((p) => p.label));
-      const fresh = labels.filter((l) => !have.has(l));
+      const have = new Set([...state.ctx.points.values()].map(pointSpot));
+      const fresh = labels.filter((l) => !have.has(spotKey(l, v.floor)));
       if (!fresh.length) { toast('Все такие точки уже есть'); return false; }
       if (fresh.length > 100 && !(await confirmDialog(`Создать ${fresh.length} точек?`, { yes: 'Создать' }))) return false;
       repo.save(pid, fresh.map((label) => ({ coll: 'points', data: {
@@ -320,14 +320,18 @@ function bulkEditForm(ids, done) {
   });
 }
 
-let searchText = ''; let fCab = ''; let fType = '';
+let searchText = ''; let fCab = ''; let fType = ''; let fFloor = '';
 export function meterView(ui) {
   const list = h('div', { class: 'card', style: { padding: 0 } });
   const total = pointsSorted();
   const withLen = total.filter((p) => p.length !== undefined && p.length !== null && p.length !== '').length;
   const bar = h('div', { class: 'card selbar', style: { position: 'sticky', top: '53px', zIndex: 6, margin: '8px 0 0' } });
+  const floors = [...new Set(total.map(floorOf))].sort((a, b) => a.localeCompare(b, 'ru', { numeric: true }));
+  const multi = floors.length > 1;
+  if (!floors.includes(fFloor) && fFloor !== '__none') fFloor = '';
+  const okFloor = (p) => !fFloor || (fFloor === '__none' ? !floorOf(p) : floorOf(p) === fFloor);
   const shown = () => pointsSorted().filter((p) => { const q = searchText.trim().toLowerCase();
-    return (!q || `${p.label} ${p.planName ?? ''}`.toLowerCase().includes(q)) && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && (!fType || p.typeId === fType); });
+    return (!q || `${p.label} ${p.planName ?? ''}`.toLowerCase().includes(q)) && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && (!fType || p.typeId === fType) && okFloor(p); });
   function updateBar() {
     for (const id of [...selected]) if (!state.ctx.points.has(id)) selected.delete(id);
     bar.style.display = selMode ? '' : 'none';
@@ -348,14 +352,13 @@ export function meterView(ui) {
   function fill() {
     updateBar();
     const q = searchText.trim().toLowerCase();
-    const pts = pointsSorted().filter((p) => (!q || `${p.label} ${p.planName ?? ''}`.toLowerCase().includes(q))
-      && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && (!fType || p.typeId === fType));
+    void q; const pts = shown();
     list.replaceChildren();
     if (!pts.length) { list.append(total.length ? h('div', { class: 'empty' }, 'Ничего не найдено') : hint(ui, 'Точек пока нет. Добавьте их пачкой («Точки пачкой») или по одной. Нажмите точку: откроется её карточка с историей работ, там же кнопка «📏 Длина».', 'meter', '📖 Как вносить метраж')); return; }
     let lastKey = null;
     pts.forEach((p) => {
-      const key = `${p.cabinet || ''}\u0000${p.typeId}`;
-      if (key !== lastKey) { list.append(h('div', { class: 'group', style: { padding: '10px 12px 6px' } }, `${p.cabinet ? `Шкаф ${p.cabinet}` : 'Без шкафа'} · ${p.typeId}`)); lastKey = key; }
+      const key = `${floorOf(p)}\u0000${p.cabinet || ''}\u0000${p.typeId}`;
+      if (key !== lastKey) { list.append(h('div', { class: 'group', style: { padding: '10px 12px 6px' } }, `${multi ? `Этаж ${floorOf(p) || '—'} · ` : ''}${p.cabinet ? `Шкаф ${p.cabinet}` : 'Без шкафа'} · ${p.typeId}`)); lastKey = key; }
       const info = infoOf(p);
       const cb = selMode ? h('input', { type: 'checkbox', checked: selected.has(p.id), style: { width: '22px', height: '22px', flex: 'none' } }) : null;
       list.append(h('div', { class: 'item', onclick: () => {
@@ -377,7 +380,8 @@ export function meterView(ui) {
     h('option', { value: '' }, all), ...opts.map(([v, t]) => h('option', { value: v, selected: v === cur }, t)));
   const filters = h('div', { style: { display: 'flex', gap: '8px', marginTop: '8px' } },
     sel('Все шкафы', cabs.map((c) => (c ? [c, `Шкаф ${c}`] : ['__none', 'Без шкафа'])), fCab, (v) => { fCab = v; }),
-    sel('Все типы', types.map((t) => [t, t]), fType, (v) => { fType = v; }));
+    sel('Все типы', types.map((t) => [t, t]), fType, (v) => { fType = v; }),
+    multi ? sel('Все этажи', floors.map((f) => (f ? [f, `Этаж ${f}`] : ['__none', 'Без этажа'])), fFloor, (v) => { fFloor = v; }) : null);
   fill();
   return h('div', {},
     h('div', { class: 'btns', style: { marginTop: 0 } },

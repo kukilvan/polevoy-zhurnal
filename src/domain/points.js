@@ -27,9 +27,15 @@ export function pointKey(label) {
 }
 
 // Сравнение точек: шкаф → тип → ключ точки → обозначение (как в таблице руководителя).
+// Точка однозначно задаётся этажом + обозначением: на разных этажах одного проекта обозначения могут повторяться (GD1/D-09.1 на «Мисрадим» и на «Галерия»)
+export const floorOf = (p) => String(p?.floor ?? '').trim();
+export const spotKey = (label, floor) => `${String(floor ?? '').trim()}\u0001${String(label ?? '').trim()}`;
+export const pointSpot = (p) => spotKey(p.label, p.floor);
+export const withFloor = (p) => (floorOf(p) ? `${p.label} (этаж ${floorOf(p)})` : p.label);
+
 export function comparePoints(a, b) {
   const c = (x, y) => (x < y ? -1 : x > y ? 1 : 0);
-  return c(a.cabinet ?? '', b.cabinet ?? '') || c(a.typeId ?? '', b.typeId ?? '')
+  return floorOf(a).localeCompare(floorOf(b), 'ru', { numeric: true }) || c(a.cabinet ?? '', b.cabinet ?? '') || c(a.typeId ?? '', b.typeId ?? '')
     || c(pointKey(a.label), pointKey(b.label)) || c(a.label ?? '', b.label ?? '');
 }
 

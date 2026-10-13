@@ -23,7 +23,7 @@
 """
 import json, os, re, sys, math, collections
 
-VERSION = '2026-10-13'  # дата версии: python3 tohnit.py version
+VERSION = '2026-10-13b'  # дата версии: python3 tohnit.py version
 
 # ---------------------------------------------------------------- извлечение текста
 def _color_hex(c):
@@ -1227,8 +1227,9 @@ def merge(out, files):
     for f in files:
         d = json.load(open(f))
         for p in d['points']:
-            if p['label'] in seen: dup.append(f"{p['label']} ({seen[p['label']]} и {os.path.basename(f)})"); continue
-            seen[p['label']] = os.path.basename(f); allp.append(p)
+            k = (str(p.get('floor') or d.get('floor') or ''), p['label'])  # одно обозначение на разных этажах — разные точки
+            if k in seen: dup.append(f"{p['label']} ({seen[k]} и {os.path.basename(f)})"); continue
+            p.setdefault('floor', d.get('floor', '')); seen[k] = os.path.basename(f); allp.append(p)
         for t in d.get('types', []): types[t['id']] = t
         for x in d.get('devices', []): devices[x['id']] = x
     res = dict(format='polevoy-points-1', source=' + '.join(os.path.basename(f) for f in files), points=allp)

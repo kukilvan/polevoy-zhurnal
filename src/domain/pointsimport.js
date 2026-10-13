@@ -2,8 +2,9 @@
 // { format: 'polevoy-points-1', source?, floor?, sheet?: { pdf, pages: [{ w, h }] },
 //   points: [{ label, typeId, planName?, cabinet?, floor?, note?, devices?, cables?, pos?: { page, x, y, w, h } }],
 //   types?: [{ id, nameHe, devices, cables, workIds }], devices?: [{ id, name, nameHe, cables, workIds }] }
-// Ничего не заменяет: существующие точки (то же обозначение) пропускаются; новые типы и устройства из файла создаются, если их нет.
+// Ничего не заменяет: существующие точки (то же обозначение на том же этаже) пропускаются; на другом этаже — это другая точка; новые типы и устройства из файла создаются, если их нет.
 import { addBundleOps } from './typelib.js';
+import { spotKey } from './points.js';
 export const POINTS_FORMAT = 'polevoy-points-1';
 const s = (v) => (v === undefined || v === null ? '' : String(v).trim());
 
@@ -33,7 +34,7 @@ export function labelProblems(label) {
 export function planPointsImport(ctx, data, pool = new Map()) {
   const fileTypes = new Map((data.types || []).map((t) => [s(t.id), t]));
   const fileDevices = new Map((data.devices || []).map((d) => [s(d.id), d]));
-  const have = new Map([...ctx.points.values()].map((p) => [p.label, p]));
+  const have = new Map([...ctx.points.values()].map((p) => [spotKey(p.label, p.floor), p])); // этаж + обозначение
   const seen = new Set();
   const add = []; const skipped = []; const errors = []; const warnings = [];
   const fromPool = new Map(); const blank = new Set();
@@ -45,9 +46,10 @@ export function planPointsImport(ctx, data, pool = new Map()) {
     if (!ctx.types.has(p.typeId) && !fileTypes.has(p.typeId)) {
       if (!fromPool.has(p.typeId) && !blank.has(p.typeId)) (pool.get(p.typeId) ? fromPool.set(p.typeId, pool.get(p.typeId)) : blank.add(p.typeId));
     }
-    if (seen.has(p.label)) { errors.push(`${where}: обозначение повторяется в файле`); return; }
-    seen.add(p.label);
-    if (have.has(p.label)) { skipped.push(p.label); return; }
+    const key = spotKey(p.label, p.floor);
+    if (seen.has(key)) { errors.push(`${where}: обозначение повторяется в файле${p.floor ? ` (этаж ${p.floor})` : ''}`); return; }
+    seen.add(key);
+    if (have.has(key)) { skipped.push(p.floor ? `${p.label} (этаж ${p.floor})` : p.label); return; }
     const bad = labelProblems(p.label); if (bad.length) warnings.push(`${p.label}: ${bad.join(', ')}`);
     (Array.isArray(p.devices) ? p.devices : []).forEach((d) => { if (!ctx.devices.has(d.deviceId) && !fileDevices.has(d.deviceId)) errors.push(`${where}: устройства «${d.deviceId}» нет`); });
     add.push(p);

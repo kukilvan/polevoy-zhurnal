@@ -8,7 +8,7 @@ export function pointsFromFile() {
   const input = h('input', { type: 'file', accept: '.json,application/json,text/plain', style: { display: 'none' } });
   const out = h('div', {});
   const close = openModal('Точки из файла', h('div', {},
-    h('div', { class: 'mut' }, 'Файл .json с точками (например, после разбора тохнита). Точки добавятся к проекту; уже существующие (то же обозначение) пропускаются. Перед добавлением — предпросмотр.'),
+    h('div', { class: 'mut' }, 'Файл .json с точками (например, после разбора тохнита). Точки добавятся к проекту; уже существующие (то же обозначение на том же этаже) пропускаются. Перед добавлением — предпросмотр.'),
     h('div', { class: 'btns' }, h('button', { onclick: () => input.click() }, '📂 Выбрать файл'), input), out));
   input.addEventListener('change', async () => {
     const file = input.files?.[0]; if (!file) return;
