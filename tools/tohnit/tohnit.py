@@ -848,10 +848,19 @@ def render_pdf(meta, final, out_pdf):
         first = ent[0]
         outline.append([1, f'{t} ({len(ent)})', first[0][1] + 1])
         for (l, pi), (cx, cy) in ent:
-            pt = fitz.Point(cx, cy) * doc[pi].derotation_matrix
-            outline.append([2, l, pi + 1, {'kind': fitz.LINK_GOTO, 'page': pi, 'to': fitz.Point(pt.x - 60, pt.y + 60), 'zoom': 4.0}])
+            outline.append([2, l, pi + 1, {'kind': fitz.LINK_GOTO, 'page': pi, 'to': fitz.Point(0, 0), 'zoom': 0, 'view': (cx, cy)}])
     outline.append([1, 'Легенда', len(doc)])
-    try: doc.set_toc(outline)
+    try:
+        doc.set_toc(outline)
+        # переход к точке: /FitR — показать прямоугольник вокруг значка (в координатах PDF без поворота, начало снизу слева);
+        # так одинаково работает в любом просмотрщике и на повёрнутых листах (XYZ на повёрнутом листе уводит в угол)
+        dests = [e for e in outline if len(e) > 3]
+        for e, item in zip(dests, [x for x in doc.get_toc(simple=False) if x[0] == 2]):
+            pi = e[3]['page']; pg = doc[pi]; c = fitz.Point(*e[3]['view']) * pg.derotation_matrix
+            H = pg.mediabox.height; R = 70
+            x0, y0, x1, y1 = c.x - R, H - c.y - R, c.x + R, H - c.y + R
+            if item[3].get('xref'):
+                doc.xref_set_key(item[3]['xref'], 'A', f'<</S/GoTo/D[{pg.xref} 0 R/FitR {x0:.1f} {y0:.1f} {x1:.1f} {y1:.1f}]>>')
     except Exception as e: print(f'оглавление не записалось: {e}')
     doc.save(out_pdf, garbage=3, deflate=True)
     print(f'PDF с номерами: {out_pdf} (слоёв убрано: {len(hidden)}, рамок надписей удалено: {removed_ann})')
