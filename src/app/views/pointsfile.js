@@ -2,7 +2,7 @@
 import { h, openModal, toast } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { newId } from '../repo.js';
-import { parsePointsFile, planPointsImport, pointsImportOps } from '../../domain/index.js';
+import { parsePointsFile, planPointsImport, pointsImportOps, typePool } from '../../domain/index.js';
 
 export function pointsFromFile() {
   const input = h('input', { type: 'file', accept: '.json,application/json,text/plain', style: { display: 'none' } });
@@ -14,7 +14,7 @@ export function pointsFromFile() {
     const file = input.files?.[0]; if (!file) return;
     let data;
     try { data = parsePointsFile(await file.text()); } catch (e) { out.replaceChildren(h('div', { class: 'err' }, e.message)); return; }
-    const plan = planPointsImport(state.ctx, data);
+    const plan = planPointsImport(state.ctx, data, typePool(getRepo().prefs?.typeLib));
     const warned = new Set(plan.warnings.map((w) => w.split(':')[0]));
     const off = new Set(); // снятые точки
     const list = (title, items, cls) => (items.length ? h('div', { style: { margin: '8px 0' } }, h('b', { class: cls }, `${title} (${items.length})`),
@@ -30,7 +30,9 @@ export function pointsFromFile() {
     out.replaceChildren(...[
       h('div', { class: 'card', style: { margin: '10px 0' } }, h('b', {}, `${file.name}`), data.source ? h('div', { class: 'mut' }, data.source) : null,
         h('div', { style: { marginTop: '6px', fontSize: '14px' } }, Object.entries(plan.byType).sort().map(([k, n]) => h('div', {}, `${k}: ${n}`)))),
-      plan.newTypes.length ? list('Будут созданы типы', plan.newTypes.map((t) => t.id)) : null,
+      plan.newTypes.length ? list('Будут созданы типы (из файла)', plan.newTypes.map((t) => t.id)) : null,
+      plan.poolTypes.length ? list('Будут добавлены типы из общего пула', plan.poolTypes.map((b) => `${b.type.id}${b.devices.length ? ` (${b.devices.map((d) => d.name).join(' + ')})` : ''}`)) : null,
+      plan.blankTypes.length ? list('⚠️ Будут созданы пустые типы (нет нигде) — состав настройте потом в «Типах точек»', plan.blankTypes, 'l-warn') : null,
       plan.newDevices.length ? list('Будут созданы устройства', plan.newDevices.map((d) => d.name || d.id)) : null,
       list('❌ Ошибки — эти строки не добавятся', plan.errors, 'l-error'),
       plan.warnings.length ? h('div', { style: { margin: '8px 0' } }, h('b', { class: 'l-warn' }, `⚠️ Подозрительные обозначения (${plan.warnings.length}) — снимите галочку, если это не точка`),

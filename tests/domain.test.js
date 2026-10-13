@@ -622,18 +622,42 @@ test('добавление точек из файла: дубли пропуск
     { label: '1A-INT1', typeId: 'Интерком', cabinet: '1A' }, { label: 'X1', typeId: 'Нет такого' }, { label: '1A-C2', typeId: 'Камера' },
   ], types: [{ id: 'Интерком', nameHe: 'אינטרקום', devices: [] , cables: [{ cable: 'cat7', count: 1 }] }] }));
   const plan = planPointsImport(ctx, data);
-  assert.deepEqual(plan.add.map((p) => p.label), ['1A-C2', 'H240', '1A-INT1']);
+  assert.deepEqual(plan.add.map((p) => p.label), ['1A-C2', 'H240', '1A-INT1', 'X1']);
   assert.deepEqual(plan.skipped, ['1A-01']);
-  assert.equal(plan.errors.length, 2);
+  assert.equal(plan.errors.length, 1); // повтор 1A-C2; неизвестный тип теперь не ошибка
+  assert.deepEqual(plan.blankTypes, ['Нет такого']);
   assert.ok(plan.warnings.some((w) => w.startsWith('H240')));
   assert.deepEqual(plan.newTypes.map((t) => t.id), ['Интерком']);
   let n = 0; const ops = pointsImportOps(plan, () => `id${n++}`);
-  assert.deepEqual(ops.map((o) => o.coll), ['types', 'points', 'points', 'points']);
-  assert.equal(ops[1].data.floor, '1');
+  assert.deepEqual(ops.map((o) => o.coll), ['types', 'types', 'points', 'points', 'points', 'points']);
+  assert.equal(ops[2].data.floor, '1');
   // место на листе (pos) сохраняется вместе с размером листа и именем чертежа
   const d2 = parsePointsFile(JSON.stringify({ format: 'polevoy-points-1', sheet: { pdf: 'plan.pdf', pages: [{ w: 3969, h: 2594 }] },
     points: [{ label: 'C01', typeId: 'Камера', pos: { page: 0, x: 878, y: 2055.7, w: 8, h: 7 } }, { label: 'C02', typeId: 'Камера', pos: { x: 'плохо' } }] }));
   const ops2 = pointsImportOps(planPointsImport(make({}), d2), () => 'x', d2);
   assert.deepEqual(ops2[0].data.pos, { page: 0, x: 878, y: 2055.7, w: 8, h: 7, pw: 3969, ph: 2594, sheet: 'plan.pdf' });
   assert.equal(ops2[1].data.pos, undefined);
+});
+
+test('общий пул типов: тип из пула переносится в проект с устройствами, кабелями и работами; мой пул заменяет стандартный', async () => {
+  const { typePool, bundleFrom, libWith, addBundleOps, planPointsImport, pointsImportOps, parsePointsFile } = await import('../src/domain/index.js');
+  const pool = typePool([]);
+  assert.ok(pool.get('Лахцан птиха'), 'стандартный тип в пуле');
+  const ctx = make({});
+  assert.ok(!ctx.types.has('Лахцан птиха'));
+  const ops = addBundleOps(ctx, pool.get('Лахцан птиха'));
+  assert.ok(ops.some((o) => o.coll === 'types' && o.id === 'Лахцан птиха'));
+  assert.ok(ops.some((o) => o.coll === 'devices' && o.id === 'DV_LPTIHA'));
+  // мой пул: тип из проекта (с составом) заменяет стандартный
+  const ctx2 = make({ devices: [{ id: 'DV_X', name: 'Прибор X', cables: [{ cable: 'cat7', count: 2 }], workIds: [] }],
+    types: [...POINT_TYPES, { id: 'Камера', nameHe: 'מצלמה', devices: [{ deviceId: 'DV_X', count: 1 }], cables: [], workIds: [] }] });
+  const lib = libWith([], [bundleFrom(ctx2, 'Камера')]);
+  assert.equal(lib[0].devices[0].id, 'DV_X'); assert.equal(lib[0].cables[0].id, 'cat7');
+  assert.equal(typePool(lib).get('Камера').source, 'mine');
+  // файл точек с типом, которого нет в проекте, но он есть в пуле — тип добавляется сам
+  const data = parsePointsFile(JSON.stringify({ format: 'polevoy-points-1', points: [{ label: 'APA1', typeId: 'Лахцан птиха' }] }));
+  const plan = planPointsImport(ctx, data, pool);
+  assert.equal(plan.errors.length, 0); assert.deepEqual(plan.poolTypes.map((b) => b.type.id), ['Лахцан птиха']);
+  const o2 = pointsImportOps(plan, () => 'p1', data);
+  assert.ok(o2.some((o) => o.coll === 'types' && o.id === 'Лахцан птиха') && o2.some((o) => o.coll === 'devices') && o2.some((o) => o.coll === 'points'));
 });

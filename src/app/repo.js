@@ -278,7 +278,14 @@ export function createRepo(backend, user) {
       const add = (coll, items, idOf = (x) => x.id) => items.forEach((x) => seed.push({ coll, id: idOf(x), data: { ...x, projectId: pid, id: idOf(x), createdBy: by.uid, createdAt: now, updatedBy: by.uid, updatedAt: now } }));
       const inst = api.prefs?.installDefaults || {}; // личные привязки установки по умолчанию
       const types = composedTypes(POINT_TYPES.map((t) => (inst[t.id] ? { ...t, installMode: inst[t.id].mode, installWorkIds: inst[t.id].workIds || [] } : t)));
-      add('catalog', CATALOG); add('types', types); add('cables', CABLES); add('devices', DEVICES); add('configs', CONFIGS);
+      // мой общий пул типов (личные настройки): эти типы тоже стандартные для новых проектов — вместе с устройствами, кабелями, работами
+      const merged = { catalog: [...CATALOG], types: [...types], cables: [...CABLES], devices: [...DEVICES] };
+      (api.prefs?.typeLib || []).forEach((b) => {
+        if (!b?.type?.id) return;
+        merged.types = [...merged.types.filter((t) => t.id !== b.type.id), b.type];
+        [['catalog', b.catalog], ['cables', b.cables], ['devices', b.devices]].forEach(([c, list]) => (list || []).forEach((x) => { if (!merged[c].some((y) => y.id === x.id)) merged[c].push(x); }));
+      });
+      add('catalog', merged.catalog); add('types', merged.types); add('cables', merged.cables); add('devices', merged.devices); add('configs', CONFIGS);
       add('units', UNITS); add('culprits', CULPRITS); add('delayReasons', DELAY_REASONS);
       info(`Создаю проект «${data.name}», справочников: ${seed.length}`);
       backend.commit(pid, [{ coll: 'projects', id: pid, data: project }, ...seed.map((w) => ({ ...w, data: clean(w.data) }))])

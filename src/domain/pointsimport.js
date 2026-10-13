@@ -3,6 +3,7 @@
 //   points: [{ label, typeId, planName?, cabinet?, floor?, note?, devices?, cables?, pos?: { page, x, y, w, h } }],
 //   types?: [{ id, nameHe, devices, cables, workIds }], devices?: [{ id, name, nameHe, cables, workIds }] }
 // Ничего не заменяет: существующие точки (то же обозначение) пропускаются; новые типы и устройства из файла создаются, если их нет.
+import { addBundleOps } from './typelib.js';
 export const POINTS_FORMAT = 'polevoy-points-1';
 const s = (v) => (v === undefined || v === null ? '' : String(v).trim());
 
@@ -27,18 +28,23 @@ export function labelProblems(label) {
   return out;
 }
 
-export function planPointsImport(ctx, data) {
+// pool — общий пул типов (Map id → комплект): тип, которого нет ни в проекте, ни в файле, берётся оттуда;
+// нет и там — создаётся пустой тип с этим названием (состав потом настраивается в «Типах точек»)
+export function planPointsImport(ctx, data, pool = new Map()) {
   const fileTypes = new Map((data.types || []).map((t) => [s(t.id), t]));
   const fileDevices = new Map((data.devices || []).map((d) => [s(d.id), d]));
   const have = new Map([...ctx.points.values()].map((p) => [p.label, p]));
   const seen = new Set();
   const add = []; const skipped = []; const errors = []; const warnings = [];
+  const fromPool = new Map(); const blank = new Set();
   data.points.forEach((raw, i) => {
     const p = { ...raw, label: s(raw.label), typeId: s(raw.typeId), cabinet: s(raw.cabinet) || s(data.cabinet), floor: s(raw.floor) || s(data.floor), planName: s(raw.planName), note: s(raw.note) };
     const where = `строка ${i + 1}${p.label ? ` (${p.label})` : ''}`;
     if (!p.label) { errors.push(`${where}: нет обозначения`); return; }
     if (!p.typeId) { errors.push(`${where}: нет типа`); return; }
-    if (!ctx.types.has(p.typeId) && !fileTypes.has(p.typeId)) { errors.push(`${where}: типа «${p.typeId}» нет ни в проекте, ни в файле`); return; }
+    if (!ctx.types.has(p.typeId) && !fileTypes.has(p.typeId)) {
+      if (!fromPool.has(p.typeId) && !blank.has(p.typeId)) (pool.get(p.typeId) ? fromPool.set(p.typeId, pool.get(p.typeId)) : blank.add(p.typeId));
+    }
     if (seen.has(p.label)) { errors.push(`${where}: обозначение повторяется в файле`); return; }
     seen.add(p.label);
     if (have.has(p.label)) { skipped.push(p.label); return; }
@@ -50,7 +56,9 @@ export function planPointsImport(ctx, data) {
   const newDevices = [...fileDevices.values()].filter((d) => !ctx.devices.has(s(d.id)));
   newTypes.forEach((t) => (t.devices || []).forEach((d) => { if (!ctx.devices.has(d.deviceId) && !fileDevices.has(d.deviceId)) errors.push(`Тип «${t.id}»: устройства «${d.deviceId}» нет`); }));
   const byType = {}; add.forEach((p) => { const k = `${p.cabinet || 'без шкафа'} · ${p.typeId}`; byType[k] = (byType[k] || 0) + 1; });
-  return { add, skipped, errors, warnings, newTypes, newDevices, byType };
+  const poolTypes = [...fromPool.values()].filter((b) => add.some((p) => p.typeId === b.type.id));
+  const blankTypes = [...blank].filter((id) => add.some((p) => p.typeId === id));
+  return { add, skipped, errors, warnings, newTypes, newDevices, byType, poolTypes, blankTypes, ctx };
 }
 
 // Место точки на листе чертежа (для будущего плана в приложении): pt PDF от левого верхнего угла + размер листа и имя файла
@@ -70,6 +78,8 @@ export function pointsImportOps(plan, newId, data) {
   const ops = [];
   plan.newDevices.forEach((d) => ops.push({ coll: 'devices', id: s(d.id), data: { name: d.name || d.id, nameHe: d.nameHe || '', cables: d.cables || [], workIds: d.workIds || [] } }));
   plan.newTypes.forEach((t) => ops.push({ coll: 'types', id: s(t.id), data: { nameHe: t.nameHe || '', devices: t.devices || [], cables: t.cables || [], workIds: t.workIds || [] } }));
+  if (plan.ctx) (plan.poolTypes || []).forEach((b) => addBundleOps(plan.ctx, b, ops)); // тип из общего пула — вместе с устройствами, кабелями, работами
+  (plan.blankTypes || []).forEach((id) => ops.push({ coll: 'types', id, data: { nameHe: '', devices: [], cables: [], workIds: [] } }));
   plan.add.forEach((p) => ops.push({ coll: 'points', id: newId(), data: {
     label: p.label, typeId: p.typeId, cabinet: p.cabinet || undefined, floor: p.floor || undefined, planName: p.planName || undefined, note: p.note || undefined,
     ...(Array.isArray(p.devices) ? { devices: p.devices } : {}), ...(Array.isArray(p.cables) ? { cables: p.cables } : {}),

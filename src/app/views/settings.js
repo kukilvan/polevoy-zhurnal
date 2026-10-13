@@ -2,7 +2,7 @@
 import { h, formModal, confirmDialog, toast, qtyList, openModal } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { newId } from '../repo.js';
-import { installBinding, tablesOf, mainTable, hasDeviceId, libraryOps, migrateProject, auditRefs, buildContext } from '../../domain/index.js';
+import { installBinding, tablesOf, mainTable, hasDeviceId, libraryOps, migrateProject, auditRefs, buildContext, typePool, bundleFrom, libWith, addBundleOps } from '../../domain/index.js';
 import { installFields, describeBinding } from './install.js';
 import { projectForm } from './projects.js';
 import { themeLabel, setTheme, nextTheme } from '../theme.js';
@@ -172,7 +172,7 @@ function itemForm(key, existing) {
   formModal({
     title: existing ? (existing.name || existing.id) : `Новый пункт — ${def.title}`,
     fields, values: existing ? (def.toForm ? def.toForm(existing) : existing) : { ...def.defaults },
-    extra: existing ? [{ label: 'Удалить', kind: 'danger', onClick: async () => {
+    extra: existing ? [...(key === 'types' ? [{ label: '⭐ В общий пул', onClick: () => { saveToPool([existing.id]); return false; } }] : []), { label: 'Удалить', kind: 'danger', onClick: async () => {
       const n = def.usage?.(existing) || 0;
       const msg = n ? `«${existing.name || existing.id}» используется (${n}). Удалить из списка? Старые записи сохранятся, но выбрать пункт будет нельзя.` : `Удалить «${existing.name || existing.id}»?`;
       if (!(await confirmDialog(msg, { yes: 'Удалить', danger: true }))) return false;
@@ -217,6 +217,39 @@ export function auditModal() {
   openModal('Проверка справочников', h('div', {},
     h('div', { class: 'mut', style: { marginBottom: '8px' } }, '❌ — ссылка на то, чего нет (исправьте); ⚠️ — стоит посмотреть; ℹ️ — для сведения (не используется).'),
     auditBox(auditRefs(state.ctx))));
+}
+
+// ---- Общий пул типов: стандартные + мой пул (личные настройки, видны во всех моих проектах) ----
+const myLib = () => getRepo().prefs?.typeLib || [];
+function saveToPool(ids) {
+  const bundles = ids.map((id) => bundleFrom(state.ctx, id)).filter(Boolean);
+  getRepo().saveUserPrefs({ typeLib: libWith(myLib(), bundles) });
+  toast(bundles.length === 1 ? `«${bundles[0].type.id}» — в общем пуле` : `В общий пул сохранено типов: ${bundles.length}`);
+}
+export function poolModal(ui) {
+  const pool = typePool(myLib()); const ctx = state.ctx; const pid = currentProject().id;
+  const picked = new Set();
+  const rows = [...pool.values()].sort((a, b) => a.type.id.localeCompare(b.type.id, 'ru')).map((b) => {
+    const inProj = ctx.types.has(b.type.id);
+    const cb = h('input', { type: 'checkbox', disabled: inProj, onchange: () => { cb.checked ? picked.add(b.type.id) : picked.delete(b.type.id); go.textContent = `➕ Добавить в проект: ${picked.size}`; go.disabled = !picked.size; } });
+    const comp = (b.devices || []).map((d) => d.name).join(' + ') || (b.type.cables || []).map((c) => `${c.cable}×${c.count}`).join(' + ') || 'состав пуст';
+    const del = b.source === 'mine' ? h('button', { class: 'sec', style: { padding: '2px 8px' }, onclick: (e) => {
+      e.preventDefault(); getRepo().saveUserPrefs({ typeLib: myLib().filter((x) => x.type.id !== b.type.id) }); toast(`«${b.type.id}» убран из пула`); close(); poolModal(ui);
+    } }, '✖') : null;
+    return h('label', { class: 'pickrow' }, cb, h('span', { style: { flex: 1 } }, h('b', {}, b.type.id), ` · ${comp}`,
+      h('div', { class: 'sub mut' }, `${b.source === 'mine' ? 'мой пул' : 'стандартный'}${inProj ? ' · уже в проекте' : ''}`)), del);
+  });
+  const go = h('button', { disabled: true, onclick: () => {
+    const ops = [];
+    picked.forEach((id) => addBundleOps(ctx, pool.get(id), ops));
+    getRepo().save(pid, ops.map((o) => ({ ...o, data: { ...o.data, deleted: false } })));
+    toast(`Добавлено типов: ${picked.size}`); close(); ui?.render?.();
+  } }, '➕ Добавить в проект: 0');
+  const close = openModal('Общий пул типов точек', h('div', {},
+    h('div', { class: 'mut' }, 'Стандартные типы и ваш пул — типы, сохранённые из любого вашего проекта (кнопка «⭐ В общий пул»). Тип добавляется вместе с его устройствами, кабелями и работами; то, что в проекте уже есть, не меняется. Типы из пула получают и новые проекты. Убрать тип из этого проекта — «Удалить» в карточке типа (вернуть можно отсюда).'),
+    h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => { saveToPool([...ctx.types.keys()]); close(); poolModal(ui); } }, `⭐ Все типы проекта → в пул (${ctx.types.size})`)),
+    h('div', { class: 'picklist', style: { maxHeight: '50vh' } }, rows),
+    h('div', { class: 'btns' }, go)));
 }
 
 // Стандартная библиотека: добавить в проект недостающее (то, что вы удаляли, не возвращается)
@@ -271,6 +304,7 @@ export function refView() {
     h('div', { class: 'mut', style: { marginBottom: '10px' } }, def.hint),
     h('div', { class: 'btns', style: { marginTop: 0 } }, h('button', { onclick: () => itemForm(key, null) }, '➕ Добавить пункт'),
       ['devices', 'types', 'cables'].includes(key) ? h('button', { class: 'sec', onclick: addLibrary }, '📚 Добавить стандартные') : null,
+      key === 'types' ? h('button', { class: 'sec', onclick: () => poolModal({ render: () => {} }) }, '🗂 Общий пул типов') : null,
       key === 'types' && migrateProject(state.ctx, knownIds()).converted.length ? h('button', { class: 'wide', onclick: migrateTypes }, '🔄 Перевести старые типы на устройства') : null),
     h('div', { class: 'card', style: { padding: 0, marginTop: '12px' } }, rows.length ? rows : h('div', { class: 'empty' }, 'Список пуст.')));
 }
