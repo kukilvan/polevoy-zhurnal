@@ -1,5 +1,6 @@
 // Добавление точек из файла (например, после разбора тохнита). Формат:
-// { format: 'polevoy-points-1', source?, floor?, points: [{ label, typeId, planName?, cabinet?, floor?, note?, devices?, cables? }],
+// { format: 'polevoy-points-1', source?, floor?, sheet?: { pdf, pages: [{ w, h }] },
+//   points: [{ label, typeId, planName?, cabinet?, floor?, note?, devices?, cables?, pos?: { page, x, y, w, h } }],
 //   types?: [{ id, nameHe, devices, cables, workIds }], devices?: [{ id, name, nameHe, cables, workIds }] }
 // Ничего не заменяет: существующие точки (то же обозначение) пропускаются; новые типы и устройства из файла создаются, если их нет.
 export const POINTS_FORMAT = 'polevoy-points-1';
@@ -52,14 +53,27 @@ export function planPointsImport(ctx, data) {
   return { add, skipped, errors, warnings, newTypes, newDevices, byType };
 }
 
+// Место точки на листе чертежа (для будущего плана в приложении): pt PDF от левого верхнего угла + размер листа и имя файла
+export function posOf(p, data) {
+  const q = p.pos; const n = (v) => (typeof v === 'number' && Number.isFinite(v) ? v : null);
+  if (!q || n(q.x) === null || n(q.y) === null) return undefined;
+  const page = Number.isInteger(q.page) ? q.page : 0; const sz = data?.sheet?.pages?.[page] || {};
+  const out = { page, x: q.x, y: q.y };
+  if (n(q.w) !== null) out.w = q.w; if (n(q.h) !== null) out.h = q.h;
+  if (n(sz.w) !== null) out.pw = sz.w; if (n(sz.h) !== null) out.ph = sz.h;
+  if (data?.sheet?.pdf) out.sheet = String(data.sheet.pdf);
+  return out;
+}
+
 // Операции записи (после предпросмотра)
-export function pointsImportOps(plan, newId) {
+export function pointsImportOps(plan, newId, data) {
   const ops = [];
   plan.newDevices.forEach((d) => ops.push({ coll: 'devices', id: s(d.id), data: { name: d.name || d.id, nameHe: d.nameHe || '', cables: d.cables || [], workIds: d.workIds || [] } }));
   plan.newTypes.forEach((t) => ops.push({ coll: 'types', id: s(t.id), data: { nameHe: t.nameHe || '', devices: t.devices || [], cables: t.cables || [], workIds: t.workIds || [] } }));
   plan.add.forEach((p) => ops.push({ coll: 'points', id: newId(), data: {
     label: p.label, typeId: p.typeId, cabinet: p.cabinet || undefined, floor: p.floor || undefined, planName: p.planName || undefined, note: p.note || undefined,
     ...(Array.isArray(p.devices) ? { devices: p.devices } : {}), ...(Array.isArray(p.cables) ? { cables: p.cables } : {}),
+    ...(posOf(p, data) ? { pos: posOf(p, data) } : {}),
   } }));
   return ops;
 }

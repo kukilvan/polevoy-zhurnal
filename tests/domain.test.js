@@ -630,4 +630,10 @@ test('добавление точек из файла: дубли пропуск
   let n = 0; const ops = pointsImportOps(plan, () => `id${n++}`);
   assert.deepEqual(ops.map((o) => o.coll), ['types', 'points', 'points', 'points']);
   assert.equal(ops[1].data.floor, '1');
+  // место на листе (pos) сохраняется вместе с размером листа и именем чертежа
+  const d2 = parsePointsFile(JSON.stringify({ format: 'polevoy-points-1', sheet: { pdf: 'plan.pdf', pages: [{ w: 3969, h: 2594 }] },
+    points: [{ label: 'C01', typeId: 'Камера', pos: { page: 0, x: 878, y: 2055.7, w: 8, h: 7 } }, { label: 'C02', typeId: 'Камера', pos: { x: 'плохо' } }] }));
+  const ops2 = pointsImportOps(planPointsImport(make({}), d2), () => 'x', d2);
+  assert.deepEqual(ops2[0].data.pos, { page: 0, x: 878, y: 2055.7, w: 8, h: 7, pw: 3969, ph: 2594, sheet: 'plan.pdf' });
+  assert.equal(ops2[1].data.pos, undefined);
 });

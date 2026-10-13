@@ -22,7 +22,7 @@ export function pointsFromFile() {
     const goBtn = h('button', {});
     const label = () => { goBtn.textContent = `➕ Добавить точек: ${plan.add.length - off.size}`; goBtn.disabled = plan.add.length - off.size <= 0; };
     goBtn.onclick = () => {
-      const ops = pointsImportOps({ ...plan, add: plan.add.filter((p) => !off.has(p.label)) }, newId);
+      const ops = pointsImportOps({ ...plan, add: plan.add.filter((p) => !off.has(p.label)) }, newId, data);
       getRepo().save(currentProject().id, ops.map((o) => ({ ...o, data: { ...o.data, deleted: false } })));
       toast(`Добавлено точек: ${ops.filter((o) => o.coll === 'points').length}`); close();
     };

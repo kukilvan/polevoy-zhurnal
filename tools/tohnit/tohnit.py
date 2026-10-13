@@ -198,9 +198,14 @@ def scan(pdf, work):
                   'Это могут быть рукописные исправления, зачёркивания, облака изменений — посмотри их на overview.png; точки под ними build отметит в отчёте.']
     lay = layer_stats(pdf)
     if lay:
-        lines += ['', f'## Слои чертежа: {len(lay)} (полный список: python3 tohnit.py layers WORK/)',
-                  'Мешающие слои (рамки колонн, штриховки, сетка осей, размеры) можно скрыть на всех картинках: python3 tohnit.py hide WORK/ \'KOTERET|Hatch\'. Крупнейшие:']
-        lines += [f'- {n}: {c} шт., цвет {col}' for n, c, col in lay[:15]]
+        strong, maybe = clutter_layers(lay)
+        meta['suggest_hide'] = strong
+        json.dump(dict(meta=meta, clusters=clusters, spans=allspans), open(os.path.join(work, 'scan.json'), 'w'), ensure_ascii=False)
+        lines += ['', f'## Слои чертежа: {len(lay)} (полный список: python3 tohnit.py layers WORK/)']
+        if strong: lines += ['**Мусор (предлагаю скрыть — серые/штриховки/рамки колонн/оси):** ' + ', '.join(strong),
+                             'Скрыть: python3 tohnit.py hide WORK/ auto (можно добавить свои regex через пробел). Скрытые слои пропадут и из PDF с номерами.']
+        if maybe: lines += ['Можно скрыть по желанию (мебель, сантехника, размеры, отметки): ' + ', '.join(maybe)]
+        lines += ['Крупнейшие слои:'] + [f'- {n}: {c} шт., цвет {col}' for n, c, col in lay[:15]]
     lines += ['', f"overview.png: 1 пиксель = {meta['pages'][0]['w'] / 2400:.3f} pt PDF (для area: x_pt = x_px × это число). Вырезать место крупно: python3 tohnit.py crop PLAN.pdf x0 y0 x1 y1 out.png"]
     open(os.path.join(work, 'clusters.md'), 'w').write('\n'.join(lines))
     render_overview(pdf, work, clusters, allspans)
@@ -246,6 +251,50 @@ def render_page(pdf, page, zoom, clip=None):
     import pdfplumber
     with pdfplumber.open(pdf) as d:
         return d.pages[page].to_image(resolution=72 * zoom).original.convert('RGB')
+
+# Цвета типов: постоянные для стандартных, остальным — по порядку из запаса (все тёмные и насыщенные — читаются на белой подложке)
+TYPE_COLORS = {'Камера': '#E0007A', 'Дверь': '#0040FF', 'Точка': '#E65C00', 'Вайфай': '#00A040', 'Галай': '#008C9E',
+               'Бакар': '#7B1FA2', 'TV': '#C2185B', 'Оптика': '#00695C', 'Интерком': '#5D4BFF', 'Коре биометри': '#AD1457',
+               'Лахцан птиха': '#D32F2F', 'Тревожная кнопка': '#B71C1C', 'Магнит индикация': '#2E7D32', 'Рамколь': '#6A1B9A', 'Другое': '#455A64'}
+PALETTE = ['#1565C0', '#D81B60', '#00897B', '#F4511E', '#5E35B1', '#43A047', '#C62828', '#0277BD', '#8E24AA', '#EF6C00',
+           '#00838F', '#AD1457', '#283593', '#2E7D32', '#BF360C', '#6A1B9A', '#00796B', '#E91E63', '#3949AB', '#558B2F',
+           '#D84315', '#4527A0', '#0097A7', '#C2185B', '#1E88E5', '#7CB342', '#FF3D00', '#512DA8', '#009688', '#F50057']
+def natkey(l):
+    """Естественный порядок: 1D2 < 1D10 < 2D1, 9 < 10."""
+    return [(0, int(x), '') if x.isdigit() else (1, 0, x) for x in re.findall(r'\d+|\D+', l)]
+def _hex2rgb(h): h = h.lstrip('#'); return tuple(int(h[i:i + 2], 16) / 255 for i in (0, 2, 4))
+def type_colors(types, override=None):
+    """{тип: '#rrggbb'} — постоянные цвета стандартных типов + запас (30 шт.) для остальных; override из map.json (colors)."""
+    out = {}; used = set(); override = override or {}
+    for t in types:
+        c = override.get(t) or TYPE_COLORS.get(t)
+        if c: out[t] = c; used.add(c.upper())
+    free = [c for c in PALETTE if c.upper() not in used]
+    for t in types:
+        if t not in out: out[t] = free.pop(0) if free else PALETTE[len(out) % len(PALETTE)]
+    return out
+
+def place_labels(items, fs, measure):
+    """Подписи без наложений: items — [(ключ, текст, (x0,y0,x1,y1) значка)]; пробуем места вокруг значка (справа, слева,
+    сверху, снизу, по диагоналям), потом дальше. → {ключ: (рамка подписи, нужна ли выноска)}."""
+    placed = []; out = {}
+    boxes = [b for _, _, b in items]
+    def hit(r, lst): return sum(1 for q in lst if r[0] < q[2] and r[2] > q[0] and r[1] < q[3] and r[3] > q[1])
+    for key, text, b in items:
+        w = measure(text) + fs * 0.4; h = fs * 1.15; cx, cy = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
+        best = None
+        for ring in (0, 1, 2, 3, 4):
+            g = 1.5 + ring * fs * 1.3
+            cands = [(b[2] + g, cy - h / 2), (b[0] - g - w, cy - h / 2), (cx - w / 2, b[1] - g - h), (cx - w / 2, b[3] + g),
+                     (b[2] + g, b[1] - g - h), (b[2] + g, b[3] + g), (b[0] - g - w, b[1] - g - h), (b[0] - g - w, b[3] + g)]
+            for ci, (x, y) in enumerate(cands):
+                r = (x, y, x + w, y + h)
+                score = hit(r, placed) * 10 + hit(r, [q for q in boxes if q is not b])
+                if best is None or score < best[0]: best = (score, r, ring * 10 + ci)
+                if score == 0: break
+            if best[0] == 0: break
+        placed.append(best[1]); out[key] = (best[1], best[2] > 0)
+    return out
 
 def _font(px):
     from PIL import ImageFont
@@ -382,11 +431,80 @@ def _path(lst, start='left', entry=None):
         out += [L[i] for i in seq]
     return out
 
+def _load_prev(path, meta):
+    """Прошлый файл точек (ревизия чертежа): [{label, typeId, page, x, y}] — только точки с координатами."""
+    if not path: return None
+    try: d = json.load(open(path))
+    except Exception as e: print(f'previous не прочитан: {e}'); return []
+    out = []
+    old_pages = (d.get('sheet') or {}).get('pages') or meta['pages']
+    for q in d.get('points', []):
+        ps = q.get('pos')
+        if not ps: continue
+        pg = ps.get('page', 0); ow = old_pages[min(pg, len(old_pages) - 1)]; nw = meta['pages'][min(pg, len(meta['pages']) - 1)]
+        kx, ky = nw['w'] / ow['w'], nw['h'] / ow['h']  # лист другого размера — пересчёт
+        out.append(dict(label=q['label'], typeId=q['typeId'], page=pg, x=ps['x'] * kx, y=ps['y'] * ky, size=max(ps.get('w', 8), ps.get('h', 8))))
+    return out
+
+def _keep_numbers(lst, prefix, digits, prev, log):
+    """Номера придуманных точек: если есть прошлая версия — значок на том же месте получает свой прежний номер,
+    новые значки — следующие свободные номера. Без прошлой версии — просто 1, 2, 3… по порядку."""
+    if not prev: return [f"{prefix}{n:0{digits}d}" for n in range(1, len(lst) + 1)]
+    rx = re.compile('^' + re.escape(prefix) + r'(\d+)(?:\.\d+)?$')
+    olds = {}
+    for q in prev:
+        m = rx.match(q['label'])
+        if m: olds.setdefault(re.sub(r'\.\d+$', '', q['label']), q)
+    used = set(); out = [None] * len(lst)
+    ctr = lambda s: ((s['x0'] + s['x1']) / 2, (s['y0'] + s['y1']) / 2)
+    pairs = []
+    for i, (s, r) in enumerate(lst):
+        for base, q in olds.items():
+            if q['typeId'] != r['type'] or q['page'] != s['page']: continue
+            d = math.dist(ctr(s), (q['x'], q['y']))
+            tol = max(12.0, 2.5 * max(s['x1'] - s['x0'], s['y1'] - s['y0'], q['size']))
+            if d <= tol: pairs.append((d, i, base))
+    for d, i, base in sorted(pairs):
+        if out[i] is None and base not in used: out[i] = base; used.add(base)
+    nums = [int(rx.match(b).group(1)) for b in olds] or [0]
+    n = max(nums)
+    for i in range(len(lst)):
+        if out[i] is None: n += 1; out[i] = f"{prefix}{n:0{digits}d}"
+    kept = sum(1 for b in out if b in used)
+    log.append(f"- серия «{prefix or '(без букв)'}»: номер сохранён у {kept}, новых значков {len(lst) - kept}" + (f" (новые с {max(nums) + 1})" if len(lst) > kept else ''))
+    return out
+
+def _diff_prev(prev, final):
+    old = {q['label']: q for q in prev}; new = {p['label']: p for p in final if p.get('s')}
+    added = sorted(set(new) - set(old), key=lambda l: (sort_num(l), l)); gone = sorted(set(old) - set(new), key=lambda l: (sort_num(l), l))
+    moved = []
+    for l in set(old) & set(new):
+        s = new[l]['s']; q = old[l]
+        d = math.dist(((s['x0'] + s['x1']) / 2, (s['y0'] + s['y1']) / 2), (q['x'], q['y']))
+        if d > max(12.0, 2.5 * q['size']): moved.append(f'{l} ({d:.0f} pt)')
+    out = [f'- новые точки ({len(added)}): ' + (', '.join(added[:60]) or '—'),
+           f'- исчезли с чертежа ({len(gone)}): ' + (', '.join(gone[:60]) or '—'),
+           f'- сдвинулись ({len(moved)}): ' + (', '.join(sorted(moved)[:60]) or '—')]
+    return out
+
+def _sample_sheet(pdf, lst, path, title):
+    from PIL import Image, ImageDraw
+    ex = [lst[int(i * len(lst) / 6)] for i in range(min(6, len(lst)))]; crops = []
+    for q in ex:
+        pad = 30; cr = render_page(pdf, q['page'], 5.0, clip=(q['x0'] - pad, q['y0'] - pad, q['x1'] + pad, q['y1'] + pad))
+        ImageDraw.Draw(cr).rectangle([pad * 5 - 4, pad * 5 - 4, int((q['x1'] - q['x0'] + pad) * 5) + 4, int((q['y1'] - q['y0'] + pad) * 5) + 4], outline=(255, 0, 255), width=3)
+        cr.thumbnail((300, 300)); crops.append(cr)
+    W = sum(c.width for c in crops) + 10 * len(crops); H = max(c.height for c in crops) + 36
+    sh = Image.new('RGB', (W, H), 'white'); x = 0
+    for c in crops: sh.paste(c, (x, 36)); x += c.width + 10
+    ImageDraw.Draw(sh).text((6, 6), title, fill='black', font=_font(18)); sh.save(path)
+
 def build(work, mapfile, out):
     sc = json.load(open(os.path.join(work, 'scan.json'))); mp = json.load(open(mapfile))
     spans = sc['spans']; meta = sc['meta']
-    _set_hide(meta, mp.get('hide_layers', []))
+    _set_hide(meta, mp.get('hide_layers', [])); meta['colors'] = mp.get('colors', {})
     rules = mp.get('rules', [])
+    free = collections.defaultdict(list); taken = []  # что не взято ни одним правилом / взято (для проверки «пропущенных значков»)
     renames = [(re.compile(a), b) for a, b in mp.get('rename', [])]
     cab_re = re.compile(mp['cabinet_regex']) if mp.get('cabinet_regex') else None
     used_clusters = {c for r in rules for c in (r.get('clusters') or [])}
@@ -402,7 +520,9 @@ def build(work, mapfile, out):
             rule = r; break
         if rule is None:
             if s['c'] in used_clusters and labelish(t): unknown.append(s)
+            free[s['c']].append(s)
             continue
+        taken.append(s)
         if rule.get('skip'): skipped[rule.get('why', 'skip')] += 1; continue
         if rule.get('near'):
             nears.append((s, rule)); continue
@@ -440,6 +560,7 @@ def build(work, mapfile, out):
                 if near_pts: skipped[f"значок «{s0['t']}» уже подписан рядом"] += 1; continue
             keep.append((s0, r))
         icons[prefix] = keep
+    prev_pts = _load_prev(mp.get('previous'), meta); prev_log = []
     # значки без номеров: каждый вид (prefix) с 1, от края start (по умолчанию слева) к другому краю; соседние номера — рядом.
     # order: path (по умолчанию, цепочка по соседям) | snake (полосы туда-обратно) | rows (строками)
     for prefix, lst in icons.items():
@@ -447,10 +568,9 @@ def build(work, mapfile, out):
         order = r0.get('order', mp.get('order', 'path')); start = r0.get('start', mp.get('start', 'left'))
         digits = int(r0.get('digits', mp.get('digits', 2)))
         lst = _zoned(lst, mp, r0, start) if order == 'path' else _snake(lst, start, r0.get('strips', mp.get('strips'))) if order == 'snake' else sorted(lst, key=lambda x: (x[0]['page'], round(x[0]['y0'] / 60), x[0]['x0']))
-        n = 0
-        for s, r in lst:
+        bases = _keep_numbers(lst, prefix, digits, prev_pts, prev_log)
+        for (s, r), base in zip(lst, bases):
             per = int(r.get('per_icon', 1))
-            n += 1; base = f"{prefix}{n:0{digits}d}"
             for k in range(per):
                 pts.append(dict(label=base if per == 1 else f'{base}.{k + 1}', orig=s['t'], typeId=r['type'], s=s, rule=r, invented=True))
     # шкаф, этаж
@@ -525,8 +645,12 @@ def build(work, mapfile, out):
         elif p.get('orig') and p['orig'].replace(' ', '') != p['label']: d['planName'] = p['orig']
         if p.get('dup'): d['note'] = (d.get('note', '') + ' повтор обозначения на чертеже — проверить').strip()
         if p.get('note'): d['note'] = p['note']
+        if p.get('s'):  # место на листе (pt PDF, с учётом поворота; начало — левый верхний угол): для плана в приложении и сравнения ревизий
+            sp = p['s']; d['pos'] = dict(page=sp['page'], x=round((sp['x0'] + sp['x1']) / 2, 1), y=round((sp['y0'] + sp['y1']) / 2, 1),
+                                          w=round(sp['x1'] - sp['x0'], 1), h=round(sp['y1'] - sp['y0'], 1))
         pdata.append(d)
     res = dict(format='polevoy-points-1', source=f"{os.path.basename(meta['pdf'])}" + (f", этаж {floor}" if floor else ''), floor=floor, points=pdata)
+    res['sheet'] = dict(pdf=os.path.basename(meta['pdf']), pages=meta['pages'])
     if mp.get('types'): res['types'] = mp['types']
     if mp.get('devices'): res['devices'] = mp['devices']
     json.dump(res, open(out, 'w'), ensure_ascii=False, indent=1)
@@ -539,6 +663,30 @@ def build(work, mapfile, out):
     if gaps: rep += ['', '## Пропуски в сериях (на чертеже их нет — не добавлены)'] + [f'- {g}' for g in gaps]
     if probs: rep += ['', '## ⚠️ Странные обозначения'] + [f'- {x}' for x in probs]
     if near_log: rep += ['', '## Значки, привязанные к соседней точке (near) — проверить строки с ⚠️'] + [f'- {x}' for x in near_log]
+    # значки/коды, которых много, но ни одно правило их не взяло — возможно, пропущен целый вид точек
+    missed = []
+    cl = {c['id']: c for c in sc['clusters']}
+    tgrid = collections.defaultdict(list)
+    for q in taken:
+        for gx in range(int((q['x0'] - 3) // 40), int((q['x1'] + 3) // 40) + 1):
+            for gy in range(int((q['y0'] - 3) // 40), int((q['y1'] + 3) // 40) + 1): tgrid[(q['page'], gx, gy)].append(q)
+    def covered(x):  # на этом месте уже есть взятый (или осознанно отброшенный) текст/значок — тот же значок другим способом
+        cx, cy = (x['x0'] + x['x1']) / 2, (x['y0'] + x['y1']) / 2
+        return any(q['x0'] - 3 <= cx <= q['x1'] + 3 and q['y0'] - 3 <= cy <= q['y1'] + 3 for q in tgrid.get((x['page'], int(cx // 40), int(cy // 40)), []))
+    for c, lst in free.items():
+        c0 = cl.get(c, {})
+        if not (c.startswith(('b:', 'sym:')) or c0.get('bg')): continue  # значки и буквы в цветных рамках
+        lst = [x for x in lst if not covered(x)]
+        if len(lst) >= 3: missed.append((c, lst))
+    if missed:
+        rep += ['', '## ⚠️ Повторяющиеся значки/коды, которые ни одно правило не взяло — спросить Ивана или осознанно skip (картинки work/missed_*.png)']
+        for c, lst in sorted(missed, key=lambda e: -len(e[1])):
+            rep.append(f"- {c}: {len(lst)} шт., примеры: {' | '.join(dict.fromkeys(x['t'] for x in lst[:30]))[:80]}")
+            try: _sample_sheet(meta['pdf'], lst, os.path.join(work, f"missed_{c.replace(':', '_')}.png"), f'{c}: {len(lst)} шт. не взяты')
+            except Exception: pass
+    if prev_pts is not None:
+        rep += ['', '## Сравнение с прошлой версией (previous)'] + (prev_log or ['- нечего сравнивать'])
+        rep += _diff_prev(prev_pts, final)
     under = []
     for p in final:
         s0 = p.get('s')
@@ -566,12 +714,12 @@ def render_check(meta, work, final, unknown):
     for pi, pg in enumerate(meta['pages']):
         z = min(4.0, 4200 / pg['w'])
         img = render_page(meta['pdf'], pi, z); d = ImageDraw.Draw(img, 'RGBA'); f = _font(max(14, int(z * 5)))
+        tc = type_colors(list(dict.fromkeys(p['typeId'] for p in final)), meta.get('colors'))
         colors = {}; drawn = set()
-        pal = [(0, 170, 0), (0, 110, 255), (200, 0, 200), (255, 120, 0), (0, 160, 160), (120, 60, 0), (90, 90, 90)]
         for p in final:
             s = p.get('s')
             if not s or s['page'] != pi: continue
-            col = colors.setdefault(p['typeId'], pal[len(colors) % len(pal)])
+            col = colors.setdefault(p['typeId'], tuple(int(v * 255) for v in _hex2rgb(tc[p['typeId']])))
             x0, y0, x1, y1 = [v * z for v in (s['x0'], s['y0'], s['x1'], s['y1'])]
             d.rectangle([x0 - 4, y0 - 4, x1 + 4, y1 + 4], outline=col + (255,), width=3)
             if p.get('invented') or p.get('dup'):
@@ -620,42 +768,93 @@ def _strip_layers(doc, page, hidden_xrefs):
     return removed
 
 def render_pdf(meta, final, out_pdf):
-    """Копия чертежа PDF: мешающие слои убраны, у каждой точки — рамка цвета типа, у придуманных номеров — подпись.
-    Это обычный векторный PDF: масштабируется без потери, номера можно переносить на чертёж или печатать."""
+    """Копия чертежа PDF для Ивана: мешающие слои вырезаны, рамки-аннотации AutoCAD вокруг надписей удалены;
+    у каждой точки рамка цвета типа, у придуманных номеров — подпись (без наложений, далёкая — с выноской).
+    Каждый тип — свой слой (включается/выключается в просмотрщике), оглавление «тип → номер» (нажал — показало место),
+    в конце — лист-легенда: цвет, тип, количество, номера. Векторный: читается при любом увеличении."""
     fitz = _fitz()
     if not fitz: print('PDF с номерами: нужен PyMuPDF'); return
     doc = fitz.open(meta['pdf'])
     ocgs = doc.get_ocgs() if hasattr(doc, 'get_ocgs') else {}
     hidden = {x for x, v in ocgs.items() if _hidden(v['name'])}
     if hidden:
-        try: doc.set_layer(-1, off=list(hidden))  # и в настройках слоёв PDF выключены
+        try: doc.set_layer(-1, off=list(hidden))
         except Exception: pass
-    pal = [(0, 0.6, 0), (0, 0.4, 1), (0.8, 0, 0.8), (1, 0.45, 0), (0, 0.6, 0.6), (0.5, 0.25, 0), (0.35, 0.35, 0.35)]
-    colors = {}
+    types = list(dict.fromkeys(q['typeId'] for q in final))
+    tc = type_colors(types, meta.get('colors'))
+    layer = {}
+    for t in types:
+        try: layer[t] = doc.add_ocg(f'Номера: {t}', on=True)
+        except Exception: layer[t] = 0
+    toc = collections.defaultdict(list); removed_ann = 0
     for pi, p in enumerate(doc):
         if hidden: _strip_layers(doc, p, hidden)
-        dm = p.derotation_matrix; drawn = set()
+        for an in list(p.annots() or []):  # невидимые рамки AutoCAD вокруг каждой надписи (сам текст нарисован на чертеже)
+            if (an.info.get('title') or '').strip() == 'AutoCAD SHX Text': p.delete_annot(an); removed_ann += 1
+        dm = p.derotation_matrix
         pts = [q for q in final if q.get('s') and q['s']['page'] == pi]
         if not pts: continue
         hs = sorted(max(q['s']['x1'] - q['s']['x0'], q['s']['y1'] - q['s']['y0']) for q in pts)
-        fs = max(3.0, min(14.0, hs[len(hs) // 2] * 0.9))  # размер подписи — как значок
+        fs = max(3.5, min(14.0, hs[len(hs) // 2] * 1.0))  # размер подписи — как значок
+        lw = max(0.5, fs / 8)
+        items = []; seen = set(); sh = p.new_shape()  # всё рисуется одной вставкой (быстро на больших чертежах)
         for q in pts:
-            sp = q['s']; col = colors.setdefault(q['typeId'], pal[len(colors) % len(pal)])
+            sp = q['s']; col = _hex2rgb(tc[q['typeId']])
             r = fitz.Rect(sp['x0'] - 1, sp['y0'] - 1, sp['x1'] + 1, sp['y1'] + 1)
-            p.draw_rect(r * dm, color=col, width=max(0.4, fs / 10), overlay=True)
-            if not (q.get('invented') or q.get('dup')): continue
+            sh.draw_rect(r * dm); sh.finish(color=col, width=lw, oc=layer[q['typeId']])
             lab = re.sub(r'\.\d+$', '', q['label']) if q.get('invented') else q['label']
             key = (round(sp['x0']), round(sp['y0']), lab)
-            if key in drawn: continue
-            drawn.add(key)
-            w = fitz.get_text_length(lab, fontname='hebo', fontsize=fs)
-            x = sp['x1'] + 1.5; cy = (sp['y0'] + sp['y1']) / 2
-            box = fitz.Rect(x - 0.5, cy - fs * 0.62, x + w + 0.8, cy + fs * 0.5)
-            p.draw_rect(box * dm, color=None, fill=(1, 1, 1), fill_opacity=0.85, overlay=True)
-            p.insert_text(fitz.Point(x, cy + fs * 0.35) * dm, lab, fontsize=fs, fontname='hebo',
-                          color=(0.85, 0, 0) if q.get('dup') else col, rotate=p.rotation, overlay=True)
+            toc[q['typeId']].append((lab, pi, ((sp['x0'] + sp['x1']) / 2, (sp['y0'] + sp['y1']) / 2)))
+            if not (q.get('invented') or q.get('dup')) or key in seen: continue
+            seen.add(key); items.append((key, lab, (sp['x0'] - 1, sp['y0'] - 1, sp['x1'] + 1, sp['y1'] + 1), q))
+        pos = place_labels([(k, t, b) for k, t, b, _ in items], fs, lambda t: fitz.get_text_length(t, fontname='hebo', fontsize=fs))
+        for key, lab, b, q in items:
+            (x0, y0, x1, y1), far = pos[key]; col = _hex2rgb(tc[q['typeId']]); oc = layer[q['typeId']]
+            if far:  # выноска от значка к подписи
+                cx, cy = (b[0] + b[2]) / 2, (b[1] + b[3]) / 2
+                tx, ty = min(max(cx, x0), x1), min(max(cy, y0), y1)
+                sh.draw_line(fitz.Point(cx, cy) * dm, fitz.Point(tx, ty) * dm); sh.finish(color=col, width=lw * 0.8, oc=oc)
+            sh.draw_rect(fitz.Rect(x0, y0, x1, y1) * dm); sh.finish(color=col, fill=(1, 1, 1), width=lw * 0.7, fill_opacity=0.92, oc=oc)
+            sh.insert_text(fitz.Point(x0 + fs * 0.2, y1 - fs * 0.27) * dm, lab, fontsize=fs, fontname='hebo',
+                           color=(0.85, 0, 0) if q.get('dup') else col, rotate=p.rotation, oc=oc)
+        sh.commit(overlay=True)
+    # лист-легенда
+    lp_draw = doc.new_page(width=842, height=595); y = 96
+    fontfile = next((f for f in ['/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', '/usr/share/fonts/dejavu/DejaVuSans.ttf', 'C:/Windows/Fonts/arial.ttf', '/Library/Fonts/Arial.ttf'] if os.path.exists(f)), None)
+    fobj = fitz.Font(fontfile=fontfile) if fontfile else fitz.Font('helv')
+    def txt(page, xy, t, size, color=(0, 0, 0)):  # кириллица — через шрифт с кириллицей
+        if fontfile: page.insert_text(xy, t, fontsize=size, fontname='dv', fontfile=fontfile, color=color)
+        else: page.insert_text(xy, t, fontsize=size, fontname='helv', color=color)
+    txt(lp_draw, (40, 55), 'Легенда номеров — ' + os.path.basename(meta['pdf']), 16)
+    for t in types:
+        labs = list(dict.fromkeys(l for l, _, _ in sorted(toc[t], key=lambda e: natkey(e[0]))))
+        npts = sum(1 for q in final if q['typeId'] == t); col = _hex2rgb(tc[t])
+        if y > 540: lp_draw = doc.new_page(width=842, height=595); y = 50
+        lp_draw.draw_rect(fitz.Rect(40, y - 10, 60, y + 4), color=col, fill=col)
+        txt(lp_draw, (70, y + 2), f'{t}: {len(labs)}' + (f' значков, {npts} точек (кабелей)' if npts != len(labs) else ''), 12, col); y += 16
+        line = ''
+        for l in labs:
+            if fobj.text_length(line + l + ', ', fontsize=8) > 720:
+                txt(lp_draw, (70, y), line.rstrip(', '), 8, (0.2, 0.2, 0.2)); y += 11; line = ''
+                if y > 570: lp_draw = doc.new_page(width=842, height=595); y = 50
+            line += l + ', '
+        if line: txt(lp_draw, (70, y), line.rstrip(', '), 8, (0.2, 0.2, 0.2)); y += 11
+        y += 10
+    # оглавление: тип → номера (переход к месту)
+    outline = []
+    for t in types:
+        ent = sorted(dict(((l, pi), c) for l, pi, c in toc[t]).items(), key=lambda e: natkey(e[0][0]))
+        if not ent: continue
+        first = ent[0]
+        outline.append([1, f'{t} ({len(ent)})', first[0][1] + 1])
+        for (l, pi), (cx, cy) in ent:
+            pt = fitz.Point(cx, cy) * doc[pi].derotation_matrix
+            outline.append([2, l, pi + 1, {'kind': fitz.LINK_GOTO, 'page': pi, 'to': fitz.Point(pt.x - 60, pt.y + 60), 'zoom': 4.0}])
+    outline.append([1, 'Легенда', len(doc)])
+    try: doc.set_toc(outline)
+    except Exception as e: print(f'оглавление не записалось: {e}')
     doc.save(out_pdf, garbage=3, deflate=True)
-    print(f'PDF с номерами: {out_pdf}' + (f' (убраны слои: {len(hidden)})' if hidden else ''))
+    print(f'PDF с номерами: {out_pdf} (слоёв убрано: {len(hidden)}, рамок надписей удалено: {removed_ann})')
 
 def crop(pdf, x0, y0, x1, y1, out, page=0):
     """Вырезать область чертежа крупно (координаты PDF с учётом поворота, как в scan.json)."""
@@ -736,6 +935,19 @@ def layer_stats(pdf):
         return [(n, cnt[n], col[n].most_common(1)[0][0] if col[n] else '') for n in sorted(names | set(cnt), key=lambda n: -cnt[n])]
     except Exception: return []
 
+CLUTTER_STRONG = r'KOTERET|HATCH|GRID|AXIS|COLUMN|ZIRIM'
+CLUTTER_MAYBE = r'DIM|LEV|FURN|SANIT|MAAKE|TEXT_BEAM|STAIRS|MADREGOT|TRIBUNE|WINDOW'
+SYSTEM_LAYERS = r'CCTV|CTV|CAM|ACC|ACS|COMM|TEL|DATA|ALR|ALARM|INT|SEC|BITACHON|LOW|WIFI|AP\b|FIBER|TV'
+def clutter_layers(lay):
+    """Слои-мусор: серые (архитектура «в подложке»), штриховки, рамки колонн, сетка осей. Слои систем не предлагаются."""
+    strong, maybe = [], []
+    for n, c, col in lay:
+        if not c or re.search(SYSTEM_LAYERS, n, re.I): continue
+        h = col.lstrip('#'); gray = len(h) == 6 and h[0:2] == h[2:4] == h[4:6] and 0x60 <= int(h[0:2], 16) <= 0xF0
+        if gray or re.search(CLUTTER_STRONG, n, re.I): strong.append(n)
+        elif re.search(CLUTTER_MAYBE, n, re.I): maybe.append(n)
+    return strong, maybe
+
 def layers(work):
     sc = json.load(open(os.path.join(work, 'scan.json'))); hide = sc['meta'].get('hide', [])
     global _HIDE; _HIDE = hide
@@ -744,6 +956,8 @@ def layers(work):
 def hide(work, regs):
     """Скрыть слои на всех картинках (overview, c/, crop, check). Повторный вызов заменяет список; без regex — показать все."""
     path = os.path.join(work, 'scan.json'); sc = json.load(open(path))
+    if 'auto' in regs:  # предложенные scan слои-мусор (точные имена)
+        regs = [r for r in regs if r != 'auto'] + ['^' + re.escape(n) + '$' for n in sc['meta'].get('suggest_hide', [])]
     sc['meta']['hide'] = regs; json.dump(sc, open(path, 'w'), ensure_ascii=False); _set_hide(sc['meta'])
     off = [n for n, c, col in layer_stats(sc['meta']['pdf']) if _hidden(n)]
     print(f"Скрыто слоёв: {len(off)}: {', '.join(off) or '—'}")
