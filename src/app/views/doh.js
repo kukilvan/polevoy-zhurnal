@@ -83,7 +83,6 @@ export function pointsPicker({ typesOf, fits, onPick }) {
     const allowed = typesOf ? typesOf(vals) : null;
     const pts = pointsSorted().filter((pt) => (fits ? fits(pt, vals) : (!allowed || allowed.includes(pt.typeId))));
     const chosen = new Set(ids);
-    const multiFloor = new Set(pts.map((pt) => String(pt.floor ?? '').trim())).size > 1;
     let q = '';
     const list = h('div', { class: 'picklist' });
     const count = h('b', {});
@@ -92,8 +91,8 @@ export function pointsPicker({ typesOf, fits, onPick }) {
       const shown = pts.filter((pt) => !q || `${pt.label} ${pt.planName ?? ''}`.toLowerCase().includes(q));
       if (!shown.length) list.append(h('div', { class: 'empty' }, pts.length ? 'Ничего не найдено' : 'Подходящих точек нет'));
       shown.forEach((pt) => {
-        const key = `${pt.floor ?? ''}\u0000${pt.cabinet || ''}\u0000${pt.typeId}`;
-        if (key !== last) { list.append(h('div', { class: 'group', style: { padding: '8px 4px 4px' } }, `${multiFloor ? `Этаж ${String(pt.floor ?? '').trim() || '—'} · ` : ''}${pt.cabinet ? `Шкаф ${pt.cabinet}` : 'Без шкафа'} · ${pt.typeId}`)); last = key; }
+        const key = `${pt.cabinet || ''}\u0000${pt.typeId}`;
+        if (key !== last) { list.append(h('div', { class: 'group', style: { padding: '8px 4px 4px' } }, `${pt.cabinet ? `Шкаф ${pt.cabinet}` : 'Без шкафа'} · ${pt.typeId}`)); last = key; }
         const cb = h('input', { type: 'checkbox', checked: chosen.has(pt.id), onchange: () => { cb.checked ? chosen.add(pt.id) : chosen.delete(pt.id); count.textContent = `Выбрано: ${chosen.size}`; } });
         list.append(h('label', { class: 'pickrow' }, cb, h('span', {}, pt.label), h('small', {}, infoOf(pt).status)));
       });

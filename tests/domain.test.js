@@ -616,18 +616,14 @@ test('перевод старых типов на устройства: стат
 test('добавление точек из файла: дубли пропускаются, ошибки и подозрительные обозначения, новые типы', async () => {
   const { parsePointsFile, planPointsImport, pointsImportOps } = await import('../src/domain/index.js');
   assert.throws(() => parsePointsFile('{"format":"x"}'));
-  const ctx = make({ points: [{ ...cam, floor: '1' }] });
-  // та же метка на другом этаже — другая точка (этажи «Мисрадим» и «Галерия» с одинаковыми обозначениями)
-  const other = planPointsImport(ctx, parsePointsFile(JSON.stringify({ format: 'polevoy-points-1', points: [{ label: '1A-01', typeId: 'Камера', floor: 'Галерия' }, { label: '1A-01', typeId: 'Камера', floor: '1' }] })));
-  assert.deepEqual(other.add.map((p) => p.floor), ['Галерия']);
-  assert.deepEqual(other.skipped, ['1A-01 (этаж 1)']);
+  const ctx = make({ points: [cam] });
   const data = parsePointsFile(JSON.stringify({ format: 'polevoy-points-1', floor: '1', points: [
     { label: '1A-01', typeId: 'Камера' }, { label: '1A-C2', typeId: 'Камера', cabinet: '1A' }, { label: 'H240', typeId: 'Камера' },
     { label: '1A-INT1', typeId: 'Интерком', cabinet: '1A' }, { label: 'X1', typeId: 'Нет такого' }, { label: '1A-C2', typeId: 'Камера' },
   ], types: [{ id: 'Интерком', nameHe: 'אינטרקום', devices: [] , cables: [{ cable: 'cat7', count: 1 }] }] }));
   const plan = planPointsImport(ctx, data);
   assert.deepEqual(plan.add.map((p) => p.label), ['1A-C2', 'H240', '1A-INT1', 'X1']);
-  assert.deepEqual(plan.skipped, ['1A-01 (этаж 1)']);
+  assert.deepEqual(plan.skipped, ['1A-01']);
   assert.equal(plan.errors.length, 1); // повтор 1A-C2; неизвестный тип теперь не ошибка
   assert.deepEqual(plan.blankTypes, ['Нет такого']);
   assert.ok(plan.warnings.some((w) => w.startsWith('H240')));
