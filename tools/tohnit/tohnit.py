@@ -23,7 +23,7 @@
 """
 import json, os, re, sys, math, collections
 
-VERSION = '2026-10-13'  # дата версии: python3 tohnit.py version
+VERSION = '2026-10-16'  # дата версии: python3 tohnit.py version
 
 # ---------------------------------------------------------------- извлечение текста
 def _color_hex(c):
