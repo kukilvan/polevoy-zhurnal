@@ -22,25 +22,29 @@ export function createViewer({ wk, pages, height = '58vh', onTap, onRect, rectMo
     overlay?.(g, api);
     if (rectNow) { g.strokeStyle = '#ff453a'; g.setLineDash([6, 4]); g.lineWidth = 2; g.strokeRect(rectNow[0], rectNow[1], rectNow[2] - rectNow[0], rectNow[3] - rectNow[1]); g.setLineDash([]); }
   }
-  async function pngToImg(png) { const img = new Image(); img.src = URL.createObjectURL(new Blob([png], { type: 'image/png' })); await img.decode(); return img; }
-  function fit() { const r = wrap.getBoundingClientRect(); const pg = pages[page]; view.s = Math.min(r.width / pg.w, r.height / pg.h); view.ox = -(r.width / view.s - pg.w) / 2; view.oy = -(r.height / view.s - pg.h) / 2; tile = null; draw(); schedTile(); }
+  async function render(p, clip, zoom) { const r = await wk.call('crop', { page: p, clip, zoom, raw: true }); return createImageBitmap(new ImageData(r.data, r.w, r.h)); }
+  function fit() { const r = wrap.getBoundingClientRect(); const pg = pages[page]; view.s = Math.min(r.width / pg.w, r.height / pg.h); view.ox = -(r.width / view.s - pg.w) / 2; view.oy = -(r.height / view.s - pg.h) / 2; draw(); schedTile(); }
   async function load(p = page) {
     page = p; tile = null; base = null; msg.style.display = ''; draw();
     const pg = pages[page]; baseZ = Math.min(1, 2400 / Math.max(pg.w, pg.h));
-    base = await pngToImg(await wk.call('crop', { page, clip: [0, 0, pg.w, pg.h], zoom: baseZ })); msg.style.display = 'none'; fit();
+    base = await render(page, [0, 0, pg.w, pg.h], baseZ); msg.style.display = 'none'; fit();
   }
-  function schedTile() {
-    clearTimeout(tileTimer);
-    tileTimer = setTimeout(async () => {
-      const r = wrap.getBoundingClientRect(); const z = Math.min(8, view.s * dpr);
-      if (z <= baseZ * 1.2) { tile = null; draw(); return; }
-      const pg = pages[page]; const [x0, y0] = toPt(0, 0); const [x1, y1] = toPt(r.width, r.height);
-      const clip = [Math.max(0, x0), Math.max(0, y0), Math.min(pg.w, x1), Math.min(pg.h, y1)]; if (clip[2] <= clip[0] || clip[3] <= clip[1]) return;
-      const want = JSON.stringify([page, view.s, view.ox, view.oy]);
-      try { const img = await pngToImg(await wk.call('crop', { page, clip, zoom: z })); if (want === JSON.stringify([page, view.s, view.ox, view.oy])) { tile = { page, clip, img }; draw(); } } catch { /* не страшно */ }
-    }, 250);
+  // чёткая картинка видимой части: с запасом по краям (небольшой сдвиг не требует перерисовки); старая остаётся на месте, пока не готова новая
+  let busy = false; let again = false;
+  function schedTile() { clearTimeout(tileTimer); tileTimer = setTimeout(renderTile, 70); }
+  async function renderTile() {
+    if (busy) { again = true; return; }
+    const r = wrap.getBoundingClientRect(); const z = Math.min(8, view.s * dpr);
+    if (z <= baseZ * 1.2) { if (tile) { tile = null; draw(); } return; }
+    const pg = pages[page]; const [x0, y0] = toPt(0, 0); const [x1, y1] = toPt(r.width, r.height);
+    if (tile && tile.page === page && tile.z >= z * 0.9 && tile.z <= z * 1.6 && tile.clip[0] <= Math.max(0, x0) && tile.clip[1] <= Math.max(0, y0) && tile.clip[2] >= Math.min(pg.w, x1) && tile.clip[3] >= Math.min(pg.h, y1)) return;
+    const mx = (x1 - x0) * 0.25; const my = (y1 - y0) * 0.25;
+    const clip = [Math.max(0, x0 - mx), Math.max(0, y0 - my), Math.min(pg.w, x1 + mx), Math.min(pg.h, y1 + my)]; if (clip[2] <= clip[0] || clip[3] <= clip[1]) return;
+    busy = true;
+    try { const img = await render(page, clip, z); tile = { page, clip, img, z }; draw(); } catch { /* не страшно */ }
+    busy = false; if (again) { again = false; renderTile(); }
   }
-  function zoomAt(sx, sy, f) { const [px, py] = toPt(sx, sy); view.s = Math.min(20, Math.max(0.05, view.s * f)); view.ox = px - sx / view.s; view.oy = py - sy / view.s; tile = null; draw(); schedTile(); }
+  function zoomAt(sx, sy, f) { const [px, py] = toPt(sx, sy); view.s = Math.min(20, Math.max(0.05, view.s * f)); view.ox = px - sx / view.s; view.oy = py - sy / view.s; draw(); schedTile(); }
   const zoomBy = (f) => { const r = wrap.getBoundingClientRect(); zoomAt(r.width / 2, r.height / 2, f); };
   // показать место листа крупно (например, точку из карточки)
   async function focus(x, y, p = page, s = 2.5) {
@@ -57,10 +61,10 @@ export function createViewer({ wk, pages, height = '58vh', onTap, onRect, rectMo
     if (Math.hypot(cur[0] - downAt[0], cur[1] - downAt[1]) > 6) moved = true;
     if (ptrs.size === 2 && pinch) {
       const [a, b] = [...ptrs.values()]; const d = Math.hypot(a[0] - b[0], a[1] - b[1]); const mx = (a[0] + b[0]) / 2; const my = (a[1] + b[1]) / 2;
-      view.s = Math.min(20, Math.max(0.05, pinch.s * d / pinch.d)); view.ox = pinch.c[0] - mx / view.s; view.oy = pinch.c[1] - my / view.s; tile = null; draw(); return;
+      view.s = Math.min(20, Math.max(0.05, pinch.s * d / pinch.d)); view.ox = pinch.c[0] - mx / view.s; view.oy = pinch.c[1] - my / view.s; draw(); return;
     }
     if (rectMode()) { rectNow = [Math.min(downAt[0], cur[0]), Math.min(downAt[1], cur[1]), Math.max(downAt[0], cur[0]), Math.max(downAt[1], cur[1])]; draw(); return; }
-    view.ox -= (cur[0] - prev[0]) / view.s; view.oy -= (cur[1] - prev[1]) / view.s; tile = null; draw();
+    view.ox -= (cur[0] - prev[0]) / view.s; view.oy -= (cur[1] - prev[1]) / view.s; draw(); schedTile();
   });
   const up = (e) => {
     if (!ptrs.has(e.pointerId)) return; ptrs.delete(e.pointerId);

@@ -123,3 +123,21 @@ test('тохнит: PDF с номерами — пометки у точек и 
   assert.equal(doc.countPages(), 2); assert.equal(doc.loadPage(0).getAnnotations().length, 4);
   assert.ok(doc.loadPage(1).getAnnotations().some((a) => /Камера: 1/.test(a.getContents())));
 });
+
+test('тохнит: нумерация по областям — сначала одна кучка строками, потом следующая', async () => {
+  const { regionOrder } = await import('../src/tohnit/icons.js');
+  const it = (x, y) => ({ page: 0, x, y });
+  // левая кучка 2×2 и правая кучка 2×2 далеко
+  const items = [it(510, 10), it(10, 30), it(30, 10), it(530, 30), it(10, 10), it(30, 30), it(510, 30), it(530, 10)];
+  assert.deepEqual(regionOrder(items).map((i) => `${i.x},${i.y}`), ['10,10', '30,10', '10,30', '30,30', '510,10', '530,10', '510,30', '530,30']);
+});
+
+test('тохнит: подписи разного вида (Z7, M24, 30x20(h)) не запоминаются общим правилом', () => {
+  const span = (t, x) => ({ t, x0: x, y0: 0, x1: x + 20, y1: 8, color: 'ff0000', font: 'Arial', size: 7.8, page: 0 });
+  const pages = [{ w: 1000, h: 1000, fills: [], annots: [], paths: [], layers: {}, spans: ['Z7', 'M24', '30x20(h)', 'Z8', 'Z9'].map((t, i) => span(t, i * 100)) }];
+  const cat = { labels: [], skip: [], symbols: [] };
+  const q = autoParse({ pages }, cat, {}).questions[0];
+  if (!q) return;  // группа не похожа на обозначения — вопроса нет, запоминать нечего
+  const r = autoParse({ pages }, cat, { answers: { [q.cluster]: 'skip' } });
+  assert.equal(r.learned.length, 0);
+});

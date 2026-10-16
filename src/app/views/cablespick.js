@@ -31,6 +31,8 @@ export function cablesPicker({ typeId = '', cabinet = '', value = null, onChange
     // тип/шкаф поменялись: если кабели не трогали — показать кабели нового типа
     setType(t, c = cab) { if (t === tid && c === cab) return; tid = t; cab = c; if (!touched) q.set(def().map((x) => ({ value: x.cable, count: x.count }))); refresh(); },
     get: list, override: own, isOwn: () => !!own(),
+    // задать свои кабели (null — как у типа)
+    setList(l) { touched = Array.isArray(l); q.set((Array.isArray(l) ? l : def()).map((c) => ({ value: c.cable, count: c.count }))); refresh(); },
   };
 }
 

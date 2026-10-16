@@ -63,3 +63,39 @@ export function chainOrder(items, start = null) {
 
 /** Обозначения: буквы + номер с ведущими нулями (W01, W02…) */
 export const numberLabels = (prefix, n, { from = 1, digits = 2 } = {}) => Array.from({ length: n }, (_, i) => `${prefix}${String(from + i).padStart(digits, '0')}`);
+
+/**
+ * Нумерация по областям: значки, стоящие кучно, — одна область (связаны, если ближе 3 «обычных» расстояний между соседями).
+ * Области — по порядку чтения (сверху вниз полосами, в полосе слева направо); внутри области — строками слева направо, строки сверху вниз.
+ * start — значок, с области (и строки) которого начать.
+ */
+export function regionOrder(items, start = null) {
+  const out = [];
+  const pagesOf = [...new Set(items.map((it) => it.page || 0))].sort((a, b) => a - b);
+  for (const pg of pagesOf) {
+    const its = items.filter((it) => (it.page || 0) === pg); const n = its.length;
+    if (n <= 2) { out.push(...its.sort((a, b) => a.y - b.y || a.x - b.x)); continue; }
+    const d = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
+    const nn = its.map((a) => Math.min(...its.filter((b) => b !== a).map((b) => d(a, b)))).sort((a, b) => a - b);
+    const med = Math.max(1, nn[Math.floor(n / 2)]);
+    const par = its.map((_, i) => i); const f = (i) => { while (par[i] !== i) { par[i] = par[par[i]]; i = par[i]; } return i; };
+    for (let i = 0; i < n; i++) for (let j = i + 1; j < n; j++) if (d(its[i], its[j]) <= 3 * med) par[f(i)] = f(j);
+    const groups = new Map(); its.forEach((it, i) => { const r = f(i); if (!groups.has(r)) groups.set(r, []); groups.get(r).push(it); });
+    const rows = (list, tol) => {  // строки: близкие по высоте — одна строка, в строке слева направо
+      const s = [...list].sort((a, b) => a.y - b.y); const res = []; let cur = []; let y0 = null;
+      for (const it of s) { if (y0 === null || it.y - y0 <= tol) { cur.push(it); y0 ??= it.y; } else { res.push(cur); cur = [it]; y0 = it.y; } }
+      if (cur.length) res.push(cur);
+      return res.map((r) => r.sort((a, b) => a.x - b.x));
+    };
+    const regs = [...groups.values()].map((g) => ({ g, x: Math.min(...g.map((i) => i.x)), y: Math.min(...g.map((i) => i.y)), y1: Math.max(...g.map((i) => i.y)) }));
+    const bandTol = Math.max(3 * med, regs.map((r) => r.y1 - r.y).sort((a, b) => a - b)[Math.floor(regs.length / 2)] / 2);
+    let ordered = rows(regs.map((r) => ({ ...r, x: r.x, y: r.y })), bandTol).flat();
+    if (start && (start.page || 0) === pg) { const k = ordered.findIndex((r) => r.g.includes(start)); if (k > 0) ordered = [ordered[k], ...ordered.slice(0, k), ...ordered.slice(k + 1)]; }
+    for (const r of ordered) {
+      let rs = rows(r.g, med * 0.6);
+      if (start && r.g.includes(start)) { const k = rs.findIndex((row) => row.includes(start)); rs = [...rs.slice(k), ...rs.slice(0, k)]; const row = rs[0]; const i = row.indexOf(start); rs[0] = [...row.slice(i), ...row.slice(0, i)]; }
+      out.push(...rs.flat());
+    }
+  }
+  return out;
+}

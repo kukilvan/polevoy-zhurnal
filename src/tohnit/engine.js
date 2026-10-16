@@ -1,5 +1,6 @@
 // Разбор тохнита без ИИ — логика (порт tools/tohnit/tohnit.py: scan → правила каталога → точки + вопросы человеку).
 // На входе — результат extractPdf; на выходе — точки в формате polevoy-points-1 и вопросы по неизвестным группам.
+import { segment } from './pattern.js';
 
 const LABELISH = /^(?=.*\d)(?=.*[A-Za-z\-/])[A-Za-z0-9][A-Za-z0-9\-./_,()]{0,22}$/;
 export function labelish(t) {
@@ -334,7 +335,9 @@ export function autoParse(extracted, catalog, { floor = '', project = '', answer
   // что запомнить: ответы → записи каталога (шаблон по примерам группы)
   const learned = [];
   for (const [cid, ans] of Object.entries(answers)) {
-    const pat = generalize(freeOf(cid).map((s) => s.t)); if (!pat) continue;  // только незнакомые подписи — чтобы выученное не перебивало каталог
+    const texts = freeOf(cid).map((s) => s.t.trim());
+    if (!segment(texts).ok) continue;  // подписи разного вида (Z7, M24, 30x20(h)…) — общий шаблон был бы «сборной солянкой»: не запоминаем
+    const pat = generalize(texts); if (!pat) continue;  // только незнакомые подписи — чтобы выученное не перебивало каталог
     const a = typeof ans === 'object' ? ans : (ans === 'skip' ? { skip: true } : { type: ans });
     const e = { re: pat, learned: true, samples: [...new Set(freeOf(cid).map((s) => s.t.trim()))].slice(0, 8), ...(project ? { project } : {}) };
     if (a.skip) learned.push({ kind: 'skip', cluster: cid, ...e }); else learned.push({ kind: 'labels', cluster: cid, ...e, ...a });

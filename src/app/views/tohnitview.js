@@ -55,22 +55,40 @@ export function makeWorker() {
   return { call, stop: () => w.terminate() };
 }
 
-export function pointsFromDrawing() {
+// Уже отмеченные значки этого чертежа (точки проекта с пометкой «значок без номера») — группами по типу и буквам номера
+function iconGroupsOf(drawing) {
+  const pts = [...state.ctx.points.values()].filter((p) => p.pos && drawingFor(p)?.id === drawing.id && String(p.note || '').includes('значок без номера'));
+  const by = new Map();
+  for (const p of pts) { const k = `${p.typeId}|${p.label.replace(/\d+$/, '')}`; if (!by.has(k)) by.set(k, []); by.get(k).push(p); }
+  return [...by.values()].map((list) => ({ what: 'отмечено раньше', typeId: list[0].typeId,
+    points: list.sort((a, b) => a.label.localeCompare(b.label, 'ru', { numeric: true })).map((p) => ({ id: p.id, label: p.label, typeId: p.typeId, cabinet: p.cabinet || '', floor: p.floor || '', note: p.note, pos: { ...p.pos }, cableOverride: p.cableOverride ?? null })) }));
+}
+
+// drawing + buf — правка уже сохранённого чертежа (из «🗺 План» → «✏️ Редактировать»): без выбора файла; значки — уже отмеченные
+export function pointsFromDrawing({ drawing = null, buf: preBuf = null } = {}) {
   const input = h('input', { type: 'file', accept: '.pdf,application/pdf', style: { display: 'none' } });
   const floorIn = h('input', { placeholder: 'Этаж (например 0, -3.50)' });
   const status = h('div', { class: 'mut', style: { margin: '6px 0' } });
   const out = h('div', {});
   let wk = null; let fileName = ''; let theFile = null;
   const keepPdf = h('input', { type: 'checkbox', checked: true });
-  const close = openModal('Точки из чертежа (PDF)', h('div', {},
-    h('div', { class: 'mut' }, 'Тохнит в PDF (из AutoCAD, с текстом). Приложение само найдёт подписи точек по каталогу; что не знает — спросит. Чертёж никуда не отправляется. Первый раз загружается модуль чтения PDF (≈4 МБ).'),
+  const close = openModal(drawing ? `✏️ ${drawing.name}` : 'Точки из чертежа (PDF)', h('div', {},
+    h('div', { class: 'mut' }, drawing ? 'Чертёж разобран заново по каталогу: новые подписи можно добавить (существующие точки пропускаются); значки без номеров — поправить: добавить пропущенные, убрать лишние, номера пересчитаются.'
+      : 'Тохнит в PDF (из AutoCAD, с текстом). Приложение само найдёт подписи точек по каталогу; что не знает — спросит. Чертёж никуда не отправляется. Первый раз загружается модуль чтения PDF (≈4 МБ).'),
     h('label', { class: 'field' }, h('span', {}, 'Этаж'), floorIn),
-    h('div', { class: 'btns' }, h('button', { onclick: () => input.click() }, '📂 Выбрать PDF'), input),
+    drawing ? null : h('div', { class: 'btns' }, h('button', { onclick: () => input.click() }, '📂 Выбрать PDF'), input),
     status, out), { sticky: true, onClose: () => wk?.stop() });
 
   const answers = {}; const remember = new Set();
   let lastQuestions = []; let iconGroups = []; let lastR = null; let pagesInfo = [];  // значки без номеров (добавлены на плане)
-  const iconPts = () => iconGroups.flatMap((gr) => gr.points);
+  const iconPts = () => iconGroups.flatMap((gr) => gr.points).filter((p) => !p.id);  // новые значки (у существующих точек есть id)
+  const origIcons = drawing ? iconGroupsOf(drawing) : []; const origIds = new Set(origIcons.flatMap((g) => g.points.map((p) => p.id)));
+  // правка значков существующих точек: что поменять и что удалить
+  const iconDiff = () => {
+    const now = iconGroups.flatMap((gr) => gr.points).filter((p) => p.id); const ids = new Set(now.map((p) => p.id));
+    const upd = now.filter((p) => { const o = state.ctx.points.get(p.id); return o && (o.label !== p.label || o.typeId !== p.typeId || JSON.stringify(o.cableOverride ?? null) !== JSON.stringify(p.cableOverride ?? null) || Math.abs((o.pos?.x || 0) - p.pos.x) > 0.5 || Math.abs((o.pos?.y || 0) - p.pos.y) > 0.5); });
+    return { upd, del: [...origIds].filter((id) => !ids.has(id)) };
+  };
   async function parse() {
     status.textContent = 'Разбираю…';
     const project = currentProject()?.name || '';
@@ -102,7 +120,7 @@ export function pointsFromDrawing() {
         const cur = answers[q.cluster]; const ct = typeof cur === 'object' ? cur.type : cur; const t = ct === 'skip' ? '__skip' : ct === UNSORTED_TYPE ? '' : (ct || '');
         ruleEditor({ samples: q.samples, type: t, onSaved: () => { delete answers[q.cluster]; parse().catch((e) => { status.textContent = e.message; }); } });
       } }, '⚙️ Настроить шаблон');
-      const rem = h('input', { type: 'checkbox', checked: true, onchange: () => { rem.checked ? remember.add(q.cluster) : remember.delete(q.cluster); } }); remember.add(q.cluster);
+      const rem = h('input', { type: 'checkbox', checked: false, onchange: () => { rem.checked ? remember.add(q.cluster) : remember.delete(q.cluster); } });
       const imgs = h('div', { style: { display: 'grid', gap: '6px', margin: '6px 0' } });
       qBox.append(h('div', { class: 'card', style: { margin: '8px 0' } },
         h('b', {}, `Что это? ${q.n} шт.`), h('div', { class: 'mut' }, `Например: ${q.samples.slice(0, 6).join('  ·  ')}`), imgs,
@@ -111,11 +129,24 @@ export function pointsFromDrawing() {
       Promise.all(q.examples.slice(0, 3).map((ex) => cropImg(ex, r.scale))).then((els) => imgs.append(...els)).catch(() => {});
     }
     const again = h('button', { onclick: async () => { again.disabled = true; try { await parse(); } catch (e) { status.textContent = e.message; } } }, '🔄 Разобрать с ответами');
-    const next = h('button', { class: r.questions.length ? 'sec' : '', onclick: () => {
+    const next = h('button', { class: r.questions.length ? 'sec' : '', onclick: async () => {
+      if (drawing) {  // сначала правка уже существующих точек-значков (номера, место, тип), потом — добавление нового
+        const { upd, del } = iconDiff();
+        if (upd.length || del.length) {
+          if (!(await confirmDialog(`Значки этого чертежа: изменить точек — ${upd.length}${upd.length ? ` (${upd.slice(0, 4).map((p) => `${state.ctx.points.get(p.id)?.label}→${p.label}`).join(', ')}${upd.length > 4 ? '…' : ''})` : ''}, удалить — ${del.length}. История работ у точек сохраняется (номер меняется, точка та же).`, { yes: 'Применить' }))) return;
+          const repo = getRepo(); const pid = currentProject().id; const before = state.ctx;
+          if (upd.length) repo.save(pid, upd.map((p) => ({ coll: 'points', id: p.id, data: { label: p.label, typeId: p.typeId, cableOverride: p.cableOverride ?? null, pos: { ...state.ctx.points.get(p.id)?.pos, ...p.pos, sheet: drawing.name } } })));
+          del.forEach((id) => repo.remove(pid, 'points', id));
+          await new Promise((res) => { const t = setTimeout(res, 1500); const un = subscribe(() => { if (state.ctx !== before) { clearTimeout(t); un(); res(); } }); });
+          toast(`Изменено: ${upd.length}, удалено: ${del.length}`);
+        }
+        const have = new Set([...state.ctx.points.values()].map((x) => x.label));
+        if (!iconPts().length && r.data.points.every((p) => have.has(p.label))) { toast('Новых точек нет'); close(); return; }
+      }
       const keep = r.learned.filter((e) => remember.has(e.cluster) && e.type !== UNSORTED_TYPE).map(({ project: _p, ...e }) => e);  // запоминается для всех проектов
-      out.replaceChildren(importPreview({ ...r.data, points: pts }, fileName, async () => {
+      out.replaceChildren(importPreview({ ...r.data, points: [...r.data.points, ...iconPts()] }, fileName, async () => {
         try { const n = await saveLearned(keep); if (n) toast(`Запомнено правил: ${n}`); } catch { /* не страшно */ }
-        if (keepPdf.checked && theFile) {  // чертёж — в проект: план и «📍 На чертеже»
+        if (keepPdf.checked && theFile && !drawing) {  // чертёж — в проект: план и «📍 На чертеже»
           theFile.arrayBuffer().then((buf) => addDrawing(buf, { name: fileName, floor: floorIn.value.trim(), pages: pagesInfo }))
             .then((d) => toast(d?.fileId ? 'Чертёж сохранён в проект и на Диск' : 'Чертёж сохранён в проект (на Диск — кнопка «⬆ На Диск» в плане)'))
             .catch((e) => toast(`Чертёж сохранён на этом устройстве; на Диск — не получилось: ${e.message}`));
@@ -132,24 +163,27 @@ export function pointsFromDrawing() {
         h('div', { class: 'mut', style: { margin: '4px 0' } }, iconGroups.length ? `Добавлено: ${iconGroups.map((gr) => `${gr.typeId} ${gr.points.length}`).join(', ')}` : 'Если точки на чертеже — только значки (без подписей), отметьте их на плане: нажали на значок → нашлись такие же → номера по порядку.'),
         h('div', { class: 'btns' }, h('button', { class: pts.length ? 'sec' : '', onclick: () => iconsPicker({ wk, pages: pagesInfo, floor: floorIn.value.trim(), sheet: fileName, groups: iconGroups,
           onDone: (gs) => { iconGroups = gs; render(lastR); } }) }, iconGroups.length ? '✏️ Изменить значки' : '🔎 Отметить значки на плане'))),
-      h('label', { class: 'pickrow', style: { margin: '8px 0' } }, keepPdf, h('span', {}, '📌 Сохранить чертёж в проект — «🗺 План» и «📍 На чертеже» в карточке точки')),
+      drawing ? null : h('label', { class: 'pickrow', style: { margin: '8px 0' } }, keepPdf, h('span', {}, '📌 Сохранить чертёж в проект — «🗺 План» и «📍 На чертеже» в карточке точки')),
       h('div', { class: 'btns' }, next));
   }
 
-  input.addEventListener('change', async () => {
-    const file = input.files?.[0]; if (!file) return;
-    fileName = file.name; theFile = file; if (!floorIn.value.trim()) floorIn.value = (fileName.match(/(-?\d+(?:\.\d+)?)/) || [])[1] || '';
+  async function load(buf) {
     Object.keys(answers).forEach((k) => delete answers[k]); remember.clear();
     out.replaceChildren(); status.textContent = 'Читаю чертёж… (первый раз — дольше, загружается модуль)';
     try {
       wk?.stop(); wk = makeWorker();
-      const buf = await file.arrayBuffer();
       const o = await wk.call('open', { data: buf }, [buf]);
-      pagesInfo = o.pages; iconGroups = [];
+      pagesInfo = o.pages; iconGroups = drawing ? iconGroupsOf(drawing) : [];
       status.textContent = `Прочитано за ${(o.ms / 1000).toFixed(1)} с, листов: ${o.pages.length}`;
       await parse();
     } catch (e) { status.textContent = `Не получилось прочитать: ${e.message}`; }
+  }
+  input.addEventListener('change', async () => {
+    const file = input.files?.[0]; if (!file) return;
+    fileName = file.name; theFile = file; if (!floorIn.value.trim()) floorIn.value = (fileName.match(/(-?\d+(?:\.\d+)?)/) || [])[1] || '';
+    load(await file.arrayBuffer());
   });
+  if (drawing) { fileName = drawing.name; floorIn.value = drawing.floor || ''; load(preBuf.slice(0)); }
   void lastQuestions;
 }
 
