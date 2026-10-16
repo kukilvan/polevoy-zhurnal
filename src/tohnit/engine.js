@@ -295,31 +295,36 @@ export function autoParse(extracted, catalog, { floor = '', project = '', answer
       }
     });
   }
-  // правила: ответы человека (по группам этого чертежа) → мусор → подписи
-  const rules = [];
-  for (const [cid, ans] of Object.entries(answers)) {
-    const a = typeof ans === 'object' ? ans : (ans === 'skip' ? { skip: true, why: 'ответ: не точки' } : { type: ans });
-    rules.push({ ...a, clusters: [cid] });
-  }
-  for (const e of cat.skip.filter((x) => inScope(x, project))) rules.push({ match: e.re, skip: true, why: e.why || 'каталог: не точка', ...(e.style ? { style: e.style } : {}) });
+  // правила каталога: мусор → подписи
+  const catRules = [];
+  for (const e of cat.skip.filter((x) => inScope(x, project))) catRules.push({ match: e.re, skip: true, why: e.why || 'каталог: не точка', ...(e.style ? { style: e.style } : {}) });
   for (const e of cat.labels.filter((x) => inScope(x, project))) {
     const { re, project: _p, note: _n, learned: _l, ...r } = e;
     for (const kk of ['icon_dist', 'max_dist']) if (kk in r) r[kk] *= k;
     if (r.near_text) r.near_text = r.near_text.map((c) => ({ ...c, dist: (c.dist ?? 60) * k }));
-    rules.push({ ...r, match: re });
+    catRules.push({ ...r, match: re });
   }
-  const res = buildPoints(spans, rules, { floor, cabinetRegex: cat.cabinet_regex });
-  // вопросы: группы, где много «похожего на обозначения», а правила взяли меньше 80%
-  const ruleRx = rules.filter((r) => !r.clusters && r.match).map((r) => new RegExp(r.match));
+  // незнакомое в каждой группе (то, о чём спрашиваем; ответ относится только к этим подписям)
+  const ruleRx = catRules.filter((r) => r.match).map((r) => new RegExp(r.match));
   const known = (t) => ruleRx.some((r) => r.test(t.trim()));
   const bycl = new Map(); for (const s of spans) { if (!bycl.has(s.c)) bycl.set(s.c, []); bycl.get(s.c).push(s); }
+  const freeOf = (cid) => (bycl.get(cid) || []).filter((s) => labelish(s.t) && !known(s.t));
+  const rules = [];
+  for (const [cid, ans] of Object.entries(answers)) {
+    const texts = [...new Set(freeOf(cid).map((s) => s.t.trim()))]; if (!texts.length) continue;
+    const a = typeof ans === 'object' ? ans : (ans === 'skip' ? { skip: true, why: 'ответ: не точки' } : { type: ans });
+    rules.push({ ...a, clusters: [cid], match: `^(?:${texts.map((t) => esc(t)).join('|')})$` });
+  }
+  rules.push(...catRules);
+  const res = buildPoints(spans, rules, { floor, cabinetRegex: cat.cabinet_regex });
+  // вопросы: группы, где много «похожего на обозначения», а каталог узнал меньше 80%
   const questions = [];
   for (const c of clusters) {
     if (answers[c.id] != null) continue;
     const lst = bycl.get(c.id) || []; const lab = lst.filter((s) => labelish(s.t));
     if (lab.length < 3 || lab.length < 0.3 * lst.length) continue;
-    if (lab.filter((s) => known(s.t)).length >= 0.8 * lab.length) continue;
-    const free = lab.filter((s) => !known(s.t));
+    const free = freeOf(c.id);
+    if (lab.length - free.length >= 0.8 * lab.length) continue;
     questions.push({ cluster: c.id, n: free.length, samples: [...new Set(free.map((s) => s.t))].slice(0, 12), pattern: generalize(free.map((s) => s.t)),
       style: { color: c.color, size: c.size }, examples: free.slice(0, 6).map((s) => ({ page: s.page, x0: s.x0, y0: s.y0, x1: s.x1, y1: s.y1 })) });
   }
@@ -327,7 +332,7 @@ export function autoParse(extracted, catalog, { floor = '', project = '', answer
   // что запомнить: ответы → записи каталога (шаблон по примерам группы)
   const learned = [];
   for (const [cid, ans] of Object.entries(answers)) {
-    const pat = generalize((bycl.get(cid) || []).filter((s) => labelish(s.t)).map((s) => s.t)); if (!pat) continue;
+    const pat = generalize(freeOf(cid).map((s) => s.t)); if (!pat) continue;  // только незнакомые подписи — чтобы выученное не перебивало каталог
     const a = typeof ans === 'object' ? ans : (ans === 'skip' ? { skip: true } : { type: ans });
     const e = { re: pat, learned: true, ...(project ? { project } : {}) };
     if (a.skip) learned.push({ kind: 'skip', cluster: cid, ...e }); else learned.push({ kind: 'labels', cluster: cid, ...e, ...a });

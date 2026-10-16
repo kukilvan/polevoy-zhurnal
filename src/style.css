@@ -43,6 +43,7 @@ body.noscroll { overflow: hidden; }
 .sheet { width: 100%; max-width: 640px; max-height: 92vh; background: var(--card); border: 1px solid var(--line); border-radius: 16px 16px 0 0; display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom); }
 .sheet-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px 8px; }
 .sheet-head .x { background: transparent; border: 0; color: var(--mut); padding: 4px 10px; font-size: 18px; }
+.sheet-head .x:hover { color: var(--fg, inherit); background: var(--line); border-radius: 8px; }
 .sheet-body { padding: 4px 16px 16px; overflow: auto; }
 .field { display: block; margin-bottom: 12px; }
 .field > span { display: block; font-size: 13px; color: var(--mut); margin-bottom: 4px; }

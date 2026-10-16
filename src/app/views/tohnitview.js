@@ -37,7 +37,7 @@ export function pointsFromDrawing() {
     h('div', { class: 'mut' }, 'Тохнит в PDF (из AutoCAD, с текстом). Приложение само найдёт подписи точек по каталогу; что не знает — спросит. Чертёж никуда не отправляется. Первый раз загружается модуль чтения PDF (≈4 МБ).'),
     h('label', { class: 'field' }, h('span', {}, 'Этаж'), floorIn),
     h('div', { class: 'btns' }, h('button', { onclick: () => input.click() }, '📂 Выбрать PDF'), input),
-    status, out), { onClose: () => wk?.stop() });
+    status, out), { sticky: true, onClose: () => wk?.stop() });
 
   const answers = {}; const remember = new Set();
   let lastQuestions = [];

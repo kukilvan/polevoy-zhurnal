@@ -49,3 +49,16 @@ test('тохнит: вопросы по незнакомой группе, от�
   const { catalog, added } = learnInto(cat, r2.learned);
   assert.equal(added, 1); assert.equal(autoParse({ pages }, catalog, { floor: '1' }).questions.length, 0);
 });
+
+test('тохнит: ответ касается только незнакомых подписей группы; выученное даёт тот же результат', () => {
+  const span = (t, x) => ({ t, x0: x, y0: 0, x1: x + 20, y1: 8, color: 'ff0000', font: 'Arial', size: 7.8, page: 0 });
+  const pages = [{ w: 1000, h: 1000, fills: [], annots: [], paths: [], layers: {},
+    spans: [span('GA1/C-1', 0), span('TV140', 100), span('TV141', 200), span('MM1', 300), span('TV150', 400)] }];
+  const cat = { labels: [{ re: '^[A-Za-z]+\\d*/C-\\d+$', type: 'Камера' }], skip: [], symbols: [], cabinet_regex: '^([A-Za-z]+\\d*)/' };
+  const q = autoParse({ pages }, cat, {}).questions[0];
+  const r1 = autoParse({ pages }, cat, { answers: { [q.cluster]: 'TV' } });
+  const types = (r) => r.data.points.map((p) => `${p.label}=${p.typeId}`).sort().join(',');
+  assert.ok(types(r1).includes('GA1/C-1=Камера'));
+  const { catalog } = learnInto(cat, r1.learned);
+  assert.equal(types(autoParse({ pages }, catalog, {})), types(r1));
+});
