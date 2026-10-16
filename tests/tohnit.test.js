@@ -113,3 +113,13 @@ test('тохнит: значки без номеров — такие же по 
   assert.deepEqual(o.map((i) => [i.x, i.y]), [[3, 4], [13, 54], [103, 4]]);
   assert.deepEqual(numberLabels('W', 3), ['W01', 'W02', 'W03']);
 });
+
+test('тохнит: PDF с номерами — пометки у точек и страница-легенда', async () => {
+  const mupdf = await import('mupdf');
+  const src = new mupdf.PDFDocument(); src.insertPage(-1, src.addPage([0, 0, 400, 300], 0, src.addObject(src.newDictionary()), '')); const data = src.saveToBuffer('').asUint8Array();
+  const { numberedPdf } = await import('../src/tohnit/numbered.js');
+  const out = numberedPdf(mupdf, data, [{ label: 'W01', typeId: 'Вайфай', pos: { page: 0, x: 50, y: 50, w: 10, h: 10 } }, { label: 'C01', typeId: 'Камера', pos: { page: 0, x: 100, y: 80, w: 10, h: 10 } }]);
+  const doc = mupdf.Document.openDocument(out, 'application/pdf').asPDF();
+  assert.equal(doc.countPages(), 2); assert.equal(doc.loadPage(0).getAnnotations().length, 4);
+  assert.ok(doc.loadPage(1).getAnnotations().some((a) => /Камера: 1/.test(a.getContents())));
+});

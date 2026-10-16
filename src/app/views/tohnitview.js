@@ -9,6 +9,7 @@ import { itemForm } from './settings.js';
 import { ruleEditor } from './catalogview.js';
 import { cablesPicker } from './cablespick.js';
 import { iconsPicker } from './planpick.js';
+import { addDrawing, drawingFor } from '../drawings.js';
 
 // кабели рядом с выбором типа: видны, когда выбран настоящий тип
 export function cablesFor(onChange) {
@@ -46,7 +47,7 @@ export function typePicker({ extra = [], onChange }) {
 }
 
 // Обмен с фоновым разборщиком
-function makeWorker() {
+export function makeWorker() {
   const w = new Worker(new URL('../../tohnit/worker.js', import.meta.url), { type: 'module' });
   let seq = 0; const wait = new Map();
   w.onmessage = (e) => { const { id, ok, res, error } = e.data; const p = wait.get(id); wait.delete(id); ok ? p.resolve(res) : p.reject(new Error(error)); };
@@ -59,7 +60,8 @@ export function pointsFromDrawing() {
   const floorIn = h('input', { placeholder: 'Этаж (например 0, -3.50)' });
   const status = h('div', { class: 'mut', style: { margin: '6px 0' } });
   const out = h('div', {});
-  let wk = null; let fileName = '';
+  let wk = null; let fileName = ''; let theFile = null;
+  const keepPdf = h('input', { type: 'checkbox', checked: true });
   const close = openModal('Точки из чертежа (PDF)', h('div', {},
     h('div', { class: 'mut' }, 'Тохнит в PDF (из AutoCAD, с текстом). Приложение само найдёт подписи точек по каталогу; что не знает — спросит. Чертёж никуда не отправляется. Первый раз загружается модуль чтения PDF (≈4 МБ).'),
     h('label', { class: 'field' }, h('span', {}, 'Этаж'), floorIn),
@@ -113,6 +115,11 @@ export function pointsFromDrawing() {
       const keep = r.learned.filter((e) => remember.has(e.cluster) && e.type !== UNSORTED_TYPE).map(({ project: _p, ...e }) => e);  // запоминается для всех проектов
       out.replaceChildren(importPreview({ ...r.data, points: pts }, fileName, async () => {
         try { const n = await saveLearned(keep); if (n) toast(`Запомнено правил: ${n}`); } catch { /* не страшно */ }
+        if (keepPdf.checked && theFile) {  // чертёж — в проект: план и «📍 На чертеже»
+          theFile.arrayBuffer().then((buf) => addDrawing(buf, { name: fileName, floor: floorIn.value.trim(), pages: pagesInfo }))
+            .then((d) => toast(d?.fileId ? 'Чертёж сохранён в проект и на Диск' : 'Чертёж сохранён в проект (на Диск — кнопка «⬆ На Диск» в плане)'))
+            .catch((e) => toast(`Чертёж сохранён на этом устройстве; на Диск — не получилось: ${e.message}`));
+        }
         close();
       }));
     } }, `Дальше → проверить и добавить (${pts.length})`);
@@ -125,12 +132,13 @@ export function pointsFromDrawing() {
         h('div', { class: 'mut', style: { margin: '4px 0' } }, iconGroups.length ? `Добавлено: ${iconGroups.map((gr) => `${gr.typeId} ${gr.points.length}`).join(', ')}` : 'Если точки на чертеже — только значки (без подписей), отметьте их на плане: нажали на значок → нашлись такие же → номера по порядку.'),
         h('div', { class: 'btns' }, h('button', { class: pts.length ? 'sec' : '', onclick: () => iconsPicker({ wk, pages: pagesInfo, floor: floorIn.value.trim(), sheet: fileName, groups: iconGroups,
           onDone: (gs) => { iconGroups = gs; render(lastR); } }) }, iconGroups.length ? '✏️ Изменить значки' : '🔎 Отметить значки на плане'))),
+      h('label', { class: 'pickrow', style: { margin: '8px 0' } }, keepPdf, h('span', {}, '📌 Сохранить чертёж в проект — «🗺 План» и «📍 На чертеже» в карточке точки')),
       h('div', { class: 'btns' }, next));
   }
 
   input.addEventListener('change', async () => {
     const file = input.files?.[0]; if (!file) return;
-    fileName = file.name; if (!floorIn.value.trim()) floorIn.value = (fileName.match(/(-?\d+(?:\.\d+)?)/) || [])[1] || '';
+    fileName = file.name; theFile = file; if (!floorIn.value.trim()) floorIn.value = (fileName.match(/(-?\d+(?:\.\d+)?)/) || [])[1] || '';
     Object.keys(answers).forEach((k) => delete answers[k]); remember.clear();
     out.replaceChildren(); status.textContent = 'Читаю чертёж… (первый раз — дольше, загружается модуль)';
     try {
@@ -167,7 +175,8 @@ export function unsortedModal(ui) {
       const picker = typePicker({ extra: [['__skip', '🚫 Не точки (удалить)']], onChange: (v) => { choice = v; cab.set(v); label(); } });
       const rows = h('div', { class: 'picklist', style: { maxHeight: '220px', display: 'none' } }, list.map((p) => {
         const cb = h('input', { type: 'checkbox', checked: true, onchange: () => { cb.checked ? on.add(p.id) : on.delete(p.id); label(); } });
-        return h('label', { class: 'pickrow' }, cb, h('span', {}, p.label, p.cabinet ? h('small', {}, ` · шкаф ${p.cabinet}`) : null, p.pos?.sheet ? h('small', {}, ` · ${p.pos.sheet}`) : null));
+        const pin = p.pos && drawingFor(p) ? h('button', { type: 'button', class: 'sec', style: { padding: '2px 8px', marginLeft: 'auto' }, onclick: (e) => { e.preventDefault(); e.stopPropagation(); import('./planmodal.js').then((m) => m.planModal({ point: p })); } }, '📍') : null;
+        return h('label', { class: 'pickrow' }, cb, h('span', {}, p.label, p.cabinet ? h('small', {}, ` · шкаф ${p.cabinet}`) : null, p.pos?.sheet ? h('small', {}, ` · ${p.pos.sheet}`) : null), pin);
       }));
       const toggle = h('button', { type: 'button', class: 'sec', onclick: () => { open = !open; rows.style.display = open ? '' : 'none'; toggle.textContent = open ? '▲ Скрыть список' : `▼ По одной (${list.length})`; } }, `▼ По одной (${list.length})`);
       go.onclick = async () => {

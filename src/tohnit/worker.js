@@ -3,6 +3,7 @@
 import { extractPdf, loadMupdf } from './extract.js';
 import { autoParse, scanPages } from './engine.js';
 import { pickSimilar } from './icons.js';
+import { numberedPdf } from './numbered.js';
 
 let extracted = null; let doc = null; let hiddenSet = null; let scanned = null;
 
@@ -16,6 +17,9 @@ self.onmessage = async (e) => {
       extracted = await extractPdf(bytes.slice());
       doc = mupdf.Document.openDocument(bytes, 'application/pdf'); hiddenSet = null; scanned = null;
       res = { pages: extracted.pages.map((p) => ({ w: p.w, h: p.h })), ms: Date.now() - t0 };
+    } else if (cmd === 'openDoc') {  // только показать (план): без разбора текста
+      const mupdf = await loadMupdf(); doc = mupdf.Document.openDocument(new Uint8Array(a.data), 'application/pdf'); extracted = null; scanned = null; hiddenSet = null;
+      res = { pages: Array.from({ length: doc.countPages() }, (_, i) => { const b = doc.loadPage(i).getBounds(); return { w: b[2] - b[0], h: b[3] - b[1] }; }) };
     } else if (cmd === 'parse') {
       res = autoParse(extracted, a.catalog, a.opts);
       if (doc && JSON.stringify(res.hiddenLayers) !== JSON.stringify(hiddenSet)) {  // мусорные слои — скрыть и на картинках
@@ -27,6 +31,8 @@ self.onmessage = async (e) => {
       scanned ??= scanPages(extracted.pages).spans;
       const hs = new Set(hiddenSet || []);
       res = pickSimilar(scanned, extracted.pages, a.page, a.x, a.y, { hidden: (l) => hs.has(l), pad: a.pad ?? 3 });
+    } else if (cmd === 'numbered') {  // PDF с номерами
+      res = numberedPdf(await loadMupdf(), new Uint8Array(a.data), a.points, { title: a.title });
     } else if (cmd === 'crop') {
       const mupdf = await loadMupdf(); const page = doc.loadPage(a.page); const z = a.zoom || 4;
       const M = mupdf.Matrix.scale(z, z); const [x0, y0, x1, y1] = a.clip;

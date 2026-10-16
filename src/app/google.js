@@ -6,7 +6,7 @@ export const CLIENT_ID = '473054171494-sin5sm8i45hi24oi23udnk13iduqtbrs.apps.goo
 const SCOPES = ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets'];
 let cached = { token: '', exp: 0 };
 
-const useRedirect = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+export const useRedirect = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
   || window.navigator.standalone === true || window.matchMedia?.('(display-mode: standalone)').matches;
 // Вызывается при запуске: если вернулись с Google с токеном в адресе — сохраняем его и чистим адрес
 export function captureTokenFromUrl() {

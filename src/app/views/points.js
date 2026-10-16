@@ -11,6 +11,8 @@ import { whoIs } from './journal.js';
 import { pointsFromFile } from './pointsfile.js';
 import { pointsFromDrawing, unsortedModal } from './tohnitview.js';
 import { cablesField, cablesPicker } from './cablespick.js';
+import { drawingFor } from '../drawings.js';
+import { planModal } from './planmodal.js';
 
 const typeOptions = () => [...state.ctx.types.values()].filter((t) => !isSystemType(t)).map((t) => ({ value: t.id, label: t.id }));
 const hasIdType = (id) => hasDeviceId(state.ctx.types.get(id));
@@ -226,7 +228,7 @@ export function meterForm(startPoint) {
 }
 
 // Карточка точки: сведения, история работ (что, когда, кто) и действия
-export function pointCard(startPoint) {
+export function pointCard(startPoint, { fromPlan = false } = {}) {
   const proj = currentProject();
   let close = () => {};
   const body = h('div', {});
@@ -259,7 +261,8 @@ export function pointCard(startPoint) {
         h('button', { onclick: () => { close(); setTimeout(() => addWorkForPoint(p.id), 60); } }, '➕ Добавить работу на эту точку')),
       h('div', { class: 'btns' },
         h('button', { class: 'sec', onclick: () => { close(); setTimeout(() => meterForm(p), 60); } }, '📏 Длина'),
-        h('button', { class: 'sec', onclick: () => { close(); setTimeout(() => pointForm(p), 60); } }, '✏️ Изменить')),
+        h('button', { class: 'sec', onclick: () => { close(); setTimeout(() => pointForm(p), 60); } }, '✏️ Изменить'),
+        !fromPlan && p.pos && drawingFor(p) ? h('button', { class: 'sec', onclick: () => { close(); setTimeout(() => planModal({ point: p }), 60); } }, '📍 На чертеже') : null),
       h('div', { class: 'group', style: { padding: '12px 0 6px' } }, `История работ (${rows.length})`),
       rows.length ? h('div', {}, rows.map((r) => {
         const who = whoIs(proj, r.by);
@@ -395,6 +398,7 @@ export function meterView(ui) {
       h('button', { class: 'sec', onclick: () => pointForm(null) }, 'Новая точка'),
       h('button', { class: 'sec', onclick: () => pointsFromFile() }, '📥 Из файла'),
       h('button', { class: 'sec', onclick: () => pointsFromDrawing() }, '📐 Из чертежа'),
+      h('button', { class: 'sec', onclick: () => planModal() }, '🗺 План'),
       h('button', { class: 'wide sec', onclick: () => remainingModal() }, '🧾 Что осталось'),
       total.some((p) => p.typeId === UNSORTED_TYPE) ? h('button', { class: 'wide', onclick: () => unsortedModal(ui) }, `❓ Не разобрано: ${total.filter((p) => p.typeId === UNSORTED_TYPE).length} — разобрать`) : null),
     h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '10px 2px' } },
