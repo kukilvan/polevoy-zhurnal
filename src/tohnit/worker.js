@@ -1,9 +1,10 @@
 // Фоновый разбор чертежа (Web Worker): тяжёлое чтение PDF не тормозит экран. Команды:
-// open {data} → {pages, ms}; parse {catalog, opts} → результат autoParse; crop {page, clip, zoom} → PNG (Uint8Array)
+// open {data} → {pages, ms}; parse {catalog, opts} → результат autoParse; crop {page, clip, zoom} → PNG (Uint8Array); pick {page, x, y} → такие же значки
 import { extractPdf, loadMupdf } from './extract.js';
-import { autoParse } from './engine.js';
+import { autoParse, scanPages } from './engine.js';
+import { pickSimilar } from './icons.js';
 
-let extracted = null; let doc = null; let hiddenSet = null;
+let extracted = null; let doc = null; let hiddenSet = null; let scanned = null;
 
 self.onmessage = async (e) => {
   const { id, cmd, ...a } = e.data;
@@ -13,7 +14,7 @@ self.onmessage = async (e) => {
       const t0 = Date.now(); const mupdf = await loadMupdf();
       const bytes = new Uint8Array(a.data);
       extracted = await extractPdf(bytes.slice());
-      doc = mupdf.Document.openDocument(bytes, 'application/pdf'); hiddenSet = null;
+      doc = mupdf.Document.openDocument(bytes, 'application/pdf'); hiddenSet = null; scanned = null;
       res = { pages: extracted.pages.map((p) => ({ w: p.w, h: p.h })), ms: Date.now() - t0 };
     } else if (cmd === 'parse') {
       res = autoParse(extracted, a.catalog, a.opts);
@@ -22,6 +23,10 @@ self.onmessage = async (e) => {
         try { for (let i = 0; i < pdf.countLayers(); i++) pdf.setLayerVisible(i, !hs.has(pdf.getLayerName(i))); } catch { /* без слоёв */ }
       }
       delete res.report.taken; delete res.report.unknown;
+    } else if (cmd === 'pick') {  // что под пальцем и где ещё такое же
+      scanned ??= scanPages(extracted.pages).spans;
+      const hs = new Set(hiddenSet || []);
+      res = pickSimilar(scanned, extracted.pages, a.page, a.x, a.y, { hidden: (l) => hs.has(l), pad: a.pad ?? 3 });
     } else if (cmd === 'crop') {
       const mupdf = await loadMupdf(); const page = doc.loadPage(a.page); const z = a.zoom || 4;
       const M = mupdf.Matrix.scale(z, z); const [x0, y0, x1, y1] = a.clip;

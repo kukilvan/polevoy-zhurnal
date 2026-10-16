@@ -8,9 +8,10 @@ import { UNSORTED_TYPE, isSystemType } from '../../domain/index.js';
 import { itemForm } from './settings.js';
 import { ruleEditor } from './catalogview.js';
 import { cablesPicker } from './cablespick.js';
+import { iconsPicker } from './planpick.js';
 
 // кабели рядом с выбором типа: видны, когда выбран настоящий тип
-function cablesFor(onChange) {
+export function cablesFor(onChange) {
   const p = cablesPicker({ compact: true, onChange }); const box = h('div', { style: { display: 'none', margin: '4px 0 8px' } }, h('small', { class: 'mut' }, 'Кабели каждой такой точки'), p.el);
   return { box, p, set: (t) => { const real = !!t && !t.startsWith('__') && t !== 'skip' && t !== UNSORTED_TYPE; box.style.display = real ? '' : 'none'; if (real) p.setType(t); }, own: () => (box.style.display === 'none' ? null : p.override()) };
 }
@@ -66,13 +67,14 @@ export function pointsFromDrawing() {
     status, out), { sticky: true, onClose: () => wk?.stop() });
 
   const answers = {}; const remember = new Set();
-  let lastQuestions = [];
+  let lastQuestions = []; let iconGroups = []; let lastR = null; let pagesInfo = [];  // значки без номеров (добавлены на плане)
+  const iconPts = () => iconGroups.flatMap((gr) => gr.points);
   async function parse() {
     status.textContent = 'Разбираю…';
     const project = currentProject()?.name || '';
     const r = await wk.call('parse', { catalog: userCatalog(), opts: { floor: floorIn.value.trim(), project, answers: { ...answers }, sheet: fileName } });
     status.textContent = '';
-    lastQuestions = r.questions;
+    lastQuestions = r.questions; lastR = r;
     render(r);
   }
   async function cropImg(ex, scale) {  // кусок чертежа вокруг подписи; сама подпись — в розовой рамке
@@ -85,7 +87,7 @@ export function pointsFromDrawing() {
     return cv;
   }
   function render(r) {
-    const pts = r.data.points; const byType = {};
+    const pts = [...r.data.points, ...iconPts()]; const byType = {};
     pts.forEach((p) => { byType[p.typeId] = (byType[p.typeId] || 0) + 1; });
     const qBox = h('div', {});
     for (const q of r.questions) {
@@ -109,7 +111,7 @@ export function pointsFromDrawing() {
     const again = h('button', { onclick: async () => { again.disabled = true; try { await parse(); } catch (e) { status.textContent = e.message; } } }, '🔄 Разобрать с ответами');
     const next = h('button', { class: r.questions.length ? 'sec' : '', onclick: () => {
       const keep = r.learned.filter((e) => remember.has(e.cluster) && e.type !== UNSORTED_TYPE).map(({ project: _p, ...e }) => e);  // запоминается для всех проектов
-      out.replaceChildren(importPreview(r.data, fileName, async () => {
+      out.replaceChildren(importPreview({ ...r.data, points: pts }, fileName, async () => {
         try { const n = await saveLearned(keep); if (n) toast(`Запомнено правил: ${n}`); } catch { /* не страшно */ }
         close();
       }));
@@ -119,6 +121,10 @@ export function pointsFromDrawing() {
         h('div', { style: { fontSize: '14px', marginTop: '6px' } }, Object.entries(byType).sort((a, b) => b[1] - a[1]).map(([t, n]) => h('div', {}, `${t}: ${n}`))),
         r.hiddenLayers.length ? h('div', { class: 'mut', style: { marginTop: '6px' } }, `Скрыто слоёв-мусора: ${r.hiddenLayers.length}`) : null),
       r.questions.length ? h('div', {}, h('b', { class: 'l-warn' }, `Вопросы (${r.questions.length}) — ответьте и нажмите «Разобрать с ответами»`), qBox, h('div', { class: 'btns' }, again)) : null,
+      h('div', { class: 'card', style: { margin: '10px 0' } }, h('b', {}, '🔎 Значки без номеров'),
+        h('div', { class: 'mut', style: { margin: '4px 0' } }, iconGroups.length ? `Добавлено: ${iconGroups.map((gr) => `${gr.typeId} ${gr.points.length}`).join(', ')}` : 'Если точки на чертеже — только значки (без подписей), отметьте их на плане: нажали на значок → нашлись такие же → номера по порядку.'),
+        h('div', { class: 'btns' }, h('button', { class: pts.length ? 'sec' : '', onclick: () => iconsPicker({ wk, pages: pagesInfo, floor: floorIn.value.trim(), sheet: fileName, groups: iconGroups,
+          onDone: (gs) => { iconGroups = gs; render(lastR); } }) }, iconGroups.length ? '✏️ Изменить значки' : '🔎 Отметить значки на плане'))),
       h('div', { class: 'btns' }, next));
   }
 
@@ -131,6 +137,7 @@ export function pointsFromDrawing() {
       wk?.stop(); wk = makeWorker();
       const buf = await file.arrayBuffer();
       const o = await wk.call('open', { data: buf }, [buf]);
+      pagesInfo = o.pages; iconGroups = [];
       status.textContent = `Прочитано за ${(o.ms / 1000).toFixed(1)} с, листов: ${o.pages.length}`;
       await parse();
     } catch (e) { status.textContent = `Не получилось прочитать: ${e.message}`; }

@@ -102,3 +102,14 @@ test('тохнит: ответ с кабелями (RJ45 X2 → Точка, 2 к
   assert.ok(r.data.points.length >= 2 && r.data.points.every((p) => p.cableOverride?.[0]?.count === 2));
   assert.deepEqual(r.learned[0].cables, [{ cable: 'cat7', count: 2 }]);
 });
+
+test('тохнит: значки без номеров — такие же по надписи, нумерация цепочкой по соседям', async () => {
+  const { pickSimilar, chainOrder, numberLabels } = await import('../src/tohnit/icons.js');
+  const sp = (t, x, y, bg = 'ff0000') => ({ t, x0: x, y0: y, x1: x + 6, y1: y + 8, color: '', font: 'аннотация Square', size: 8, bg, page: 0 });
+  const spans = [sp('A', 0, 0), sp('A', 100, 0), sp('A', 10, 50), sp('A', 500, 500, ''), sp('B', 20, 20)];
+  const r = pickSimilar(spans, [{ paths: [] }], 0, 3, 4);
+  assert.equal(r.kind, 'text'); assert.equal(r.items.length, 3);  // «A» без фона — другой вид
+  const o = chainOrder(r.items);
+  assert.deepEqual(o.map((i) => [i.x, i.y]), [[3, 4], [13, 54], [103, 4]]);
+  assert.deepEqual(numberLabels('W', 3), ['W01', 'W02', 'W03']);
+});

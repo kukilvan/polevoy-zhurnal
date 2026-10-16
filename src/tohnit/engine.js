@@ -100,7 +100,7 @@ export function scanPages(pages) {
 }
 
 // ---------------------------------------------------------------- значки по форме (подпись формы не зависит от поворота и разбивки линий)
-function shapeSig(pts, step = 0.3) {
+export function shapeSig(pts, step = 0.3) {
   const cells = new Set(); const xs = []; const ys = [];
   for (const [x, y] of pts) { const k = `${Math.round(x / step)},${Math.round(y / step)}`; if (!cells.has(k)) { cells.add(k); xs.push(Math.round(x / step) * step); ys.push(Math.round(y / step) * step); } }
   const n = xs.length; if (n < 3) return null;

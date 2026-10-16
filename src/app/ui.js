@@ -24,8 +24,8 @@ function root() {
   if (!modalRoot) { modalRoot = h('div', { id: 'modal-root' }); document.body.appendChild(modalRoot); }
   return modalRoot;
 }
-export function openModal(title, content, { onClose, sticky = false } = {}) {  // sticky: клик мимо окна не закрывает (долгая работа внутри)
-  const sheet = h('div', { class: 'sheet', role: 'dialog' },
+export function openModal(title, content, { onClose, sticky = false, wide = false } = {}) {  // sticky: клик мимо окна не закрывает (долгая работа внутри)
+  const sheet = h('div', { class: 'sheet', role: 'dialog', style: wide ? { maxWidth: '1200px' } : {} },
     h('div', { class: 'sheet-head' }, h('b', {}, title), h('button', { class: 'x', type: 'button', onclick: () => close() }, '✕')),
     h('div', { class: 'sheet-body' }, content));
   const back = h('div', { class: 'backdrop', onclick: (e) => { if (e.target === back && !sticky) close(); } }, sheet);
