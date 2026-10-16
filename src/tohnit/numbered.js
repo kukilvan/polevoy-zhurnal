@@ -8,16 +8,26 @@ export function numberedPdf(mupdf, data, points, { title = '' } = {}) {
   const doc = mupdf.Document.openDocument(data, 'application/pdf').asPDF();
   const types = [...new Set(points.map((p) => p.typeId))].sort((a, b) => a.localeCompare(b, 'ru'));
   const colorOf = (t) => rgb(TYPE_COLORS[types.indexOf(t) % TYPE_COLORS.length]);
+  // слой на каждый тип «Номера: Камера» — в просмотрщике PDF можно оставить только нужные
+  const layerOf = new Map();
+  try {
+    const root = doc.getTrailer().get('Root'); let ocp = root.get('OCProperties'); if (ocp.isNull()) { ocp = doc.newDictionary(); root.put('OCProperties', ocp); }
+    let ocgs = ocp.get('OCGs'); if (ocgs.isNull()) { ocgs = doc.newArray(); ocp.put('OCGs', ocgs); }
+    let D = ocp.get('D'); if (D.isNull()) { D = doc.newDictionary(); ocp.put('D', D); }
+    let order = D.get('Order'); if (order.isNull()) { order = doc.newArray(); D.put('Order', order); }
+    for (const t of types) { const o = doc.newDictionary(); o.put('Type', doc.newName('OCG')); o.put('Name', doc.newString(`Номера: ${t}`)); const ref = doc.addObject(o); ocgs.push(ref); order.push(ref); layerOf.set(t, ref); }
+  } catch { /* без слоёв — просто пометки */ }
+  const inLayer = (annot, t) => { const ref = layerOf.get(t); if (ref) try { annot.getObject().put('OC', ref); } catch { /* ok */ } };
   const pages = new Map();
   for (const p of points) {
     if (!p.pos) continue; const pi = p.pos.page || 0; if (pi >= doc.countPages()) continue;
     if (!pages.has(pi)) pages.set(pi, doc.loadPage(pi));
     const page = pages.get(pi); const c = colorOf(p.typeId);
     const r = Math.max(5, Math.min(p.pos.h || 8, 12) * 0.8); const fs = Math.max(6, Math.min(14, (p.pos.h || 8)));
-    const ci = page.createAnnotation('Circle'); ci.setRect([p.pos.x - r, p.pos.y - r, p.pos.x + r, p.pos.y + r]); ci.setColor(c); ci.setBorderWidth(1.2); ci.setContents(`${p.label} — ${p.typeId}`); ci.update();
+    const ci = page.createAnnotation('Circle'); ci.setRect([p.pos.x - r, p.pos.y - r, p.pos.x + r, p.pos.y + r]); ci.setColor(c); ci.setBorderWidth(1.2); ci.setContents(`${p.label} — ${p.typeId}`); ci.update(); inLayer(ci, p.typeId);
     const tw = p.label.length * fs * 0.62 + 4;
     const ft = page.createAnnotation('FreeText'); ft.setRect([p.pos.x + r + 1, p.pos.y - fs * 0.7, p.pos.x + r + 1 + tw, p.pos.y + fs * 0.7]);
-    ft.setContents(p.label); ft.setDefaultAppearance('Helv', fs, c); ft.setBorderWidth(0); ft.update();
+    ft.setContents(p.label); ft.setDefaultAppearance('Helv', fs, c); ft.setBorderWidth(0); ft.update(); inLayer(ft, p.typeId);
   }
   // легенда
   const W = 842; const H = 595; const lines = [];

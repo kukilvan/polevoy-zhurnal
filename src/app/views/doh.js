@@ -255,6 +255,13 @@ function entryForm(day, entry, preset) {
 }
 
 // «Добавить работу на эту точку»: запись в сегодняшний день (день создаётся при сохранении)
+// работа сразу на несколько точек (например, выбранных на плане)
+export function addWorkForPoints(pointIds) {
+  const p = currentProject(); const today = todayIso();
+  const day = daysSorted().find((d) => d.date === today)
+    || { id: newId(), date: today, helper: p.helper, helperHe: p.helperHe, _new: true };
+  entryForm(day, null, { pointIds: [...pointIds] });
+}
 export function addWorkForPoint(pointId) {
   const p = currentProject(); const today = todayIso();
   const day = daysSorted().find((d) => d.date === today)

@@ -87,3 +87,11 @@ export function removeDrawing(entry) {
   const p = currentProject();
   getRepo().saveProject(p.id, { drawings: (p.drawings || []).filter((d) => d.id !== entry.id) });
 }
+
+/** Поменять запись чертежа в проекте (patch — объект или функция от старой записи) */
+export function updateDrawing(id, patch) {
+  const p = currentProject();
+  getRepo().saveProject(p.id, { drawings: (p.drawings || []).map((d) => (d.id === id ? { ...d, ...(typeof patch === 'function' ? patch(d) : patch) } : d)) });
+}
+// Подписи на чертеже, которые не связаны с точками проекта («Не размеченые») и скрытые человеком — хранятся в записи чертежа
+export const posKey = (pos) => `${pos.page || 0}|${Math.round(pos.x)}|${Math.round(pos.y)}`;

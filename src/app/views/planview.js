@@ -2,7 +2,7 @@
 // Рисует поверх свои отметки (overlay), сообщает о нажатиях (onTap) и рамке (onRect, когда rectMode() истина).
 import { h } from '../ui.js';
 
-export function createViewer({ wk, pages, height = '58vh', onTap, onRect, rectMode = () => false, overlay }) {
+export function createViewer({ wk, pages, height = '58vh', onTap, onRect, rectMode = () => false, overlay, dim = () => 1 }) {  // dim — яркость чертежа (0..1)
   const dpr = Math.min(2, window.devicePixelRatio || 1);
   let page = 0; let base = null; let baseZ = 1; let tile = null; let tileTimer = null; let rectNow = null;
   const view = { s: 1, ox: 0, oy: 0 };
@@ -17,8 +17,10 @@ export function createViewer({ wk, pages, height = '58vh', onTap, onRect, rectMo
   function draw() {
     if (!cv.width) size();
     g.setTransform(dpr, 0, 0, dpr, 0, 0); g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
+    g.globalAlpha = dim();
     if (base) g.drawImage(base, -view.ox * view.s, -view.oy * view.s, (base.width / baseZ) * view.s, (base.height / baseZ) * view.s);
     if (tile && tile.page === page) { const [x0, y0] = toScr(tile.clip[0], tile.clip[1]); g.drawImage(tile.img, x0, y0, (tile.clip[2] - tile.clip[0]) * view.s, (tile.clip[3] - tile.clip[1]) * view.s); }
+    g.globalAlpha = 1;
     overlay?.(g, api);
     if (rectNow) { g.strokeStyle = '#ff453a'; g.setLineDash([6, 4]); g.lineWidth = 2; g.strokeRect(rectNow[0], rectNow[1], rectNow[2] - rectNow[0], rectNow[3] - rectNow[1]); g.setLineDash([]); }
   }
@@ -82,7 +84,9 @@ export function createViewer({ wk, pages, height = '58vh', onTap, onRect, rectMo
     h('button', { type: 'button', class: 'sec', style: { padding: '6px 12px' }, onclick: () => zoomBy(1.5) }, '＋'),
     h('button', { type: 'button', class: 'sec', style: { padding: '6px 12px' }, onclick: () => zoomBy(1 / 1.5) }, '－'),
     h('button', { type: 'button', class: 'sec', style: { padding: '6px 10px' }, onclick: () => fit() }, '⤢ Весь лист')];
-  const api = { el: wrap, view, toScr, toPt, draw, fit, load, focus, zoomBy, zoomBtns, get page() { return page; }, start: () => new Promise((res) => requestAnimationFrame(() => { size(); res(load(page)); })) };
+  // перерисовать картинку листа, не меняя вида (например, после включения/выключения слоёв чертежа)
+  async function refreshImage() { const pg = pages[page]; base = await render(page, [0, 0, pg.w, pg.h], baseZ); tile = null; draw(); schedTile(); }
+  const api = { el: wrap, view, toScr, toPt, draw, fit, load, focus, zoomBy, zoomBtns, refreshImage, get page() { return page; }, start: () => new Promise((res) => requestAnimationFrame(() => { size(); res(load(page)); })) };
   return api;
 }
 

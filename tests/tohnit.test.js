@@ -141,3 +141,13 @@ test('тохнит: подписи разного вида (Z7, M24, 30x20(h)) �
   const r = autoParse({ pages }, cat, { answers: { [q.cluster]: 'skip' } });
   assert.equal(r.learned.length, 0);
 });
+
+test('план: связывание — точные, похожие (разделители, лишнее начало) и не размеченые', async () => {
+  const { matchLabels } = await import('../src/tohnit/linking.js');
+  const P = (id, label) => ({ id, label });
+  const f = (label) => ({ label, pos: { page: 0, x: 1, y: 1, w: 10, h: 5 } });
+  const r = matchLabels([P('a', 'GA1/C-57'), P('b', '1A-01-02'), P('c', 'Solar-B3-4'), P('d', 'X-1')], [f('GA1/C-57'), f('1A/01-02'), f('B/03-04'), f('Z9-9')]);
+  assert.deepEqual(r.exact.map((x) => x.p.id), ['a']);
+  assert.deepEqual(r.similar.map((x) => `${x.p.id}:${x.kind}`), ['b:same', 'c:tail']);
+  assert.deepEqual(r.unlinked.map((x) => x.label), ['Z9-9']);
+});

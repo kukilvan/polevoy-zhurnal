@@ -33,6 +33,13 @@ self.onmessage = async (e) => {
       scanned ??= scanPages(extracted.pages).spans;
       const hs = new Set(hiddenSet || []);
       res = pickSimilar(scanned, extracted.pages, a.page, a.x, a.y, { hidden: (l) => hs.has(l), pad: a.pad ?? 3 });
+    } else if (cmd === 'layers') {  // слои чертежа (AutoCAD): [{ name, on }]
+      const pdf = doc.asPDF?.() || doc; res = [];
+      try { for (let i = 0; i < pdf.countLayers(); i++) res.push({ name: pdf.getLayerName(i), on: pdf.isLayerVisible(i) }); } catch { /* без слоёв */ }
+    } else if (cmd === 'setLayers') {  // выключить слои по именам (остальные включить)
+      const pdf = doc.asPDF?.() || doc; const off = new Set(a.off || []);
+      try { for (let i = 0; i < pdf.countLayers(); i++) pdf.setLayerVisible(i, !off.has(pdf.getLayerName(i))); } catch { /* без слоёв */ }
+      lists = new Map(); res = true;
     } else if (cmd === 'numbered') {  // PDF с номерами
       res = numberedPdf(await loadMupdf(), new Uint8Array(a.data), a.points, { title: a.title });
     } else if (cmd === 'crop') {
