@@ -16,6 +16,9 @@
   python3 tohnit.py find WORK/ 'regex'                → где встречается текст (с координатами); list WORK/ c05 — вся группа
   python3 tohnit.py layers WORK/                      → слои чертежа (AutoCAD), сколько в каждом линий и какого цвета
   python3 tohnit.py hide WORK/ 'regex' …              → скрыть слои (рамки колонн, штриховки…) на всех картинках; без regex — показать все
+  python3 tohnit.py auto PLAN.pdf WORK/ catalog.json OUT.json [floor=..] [project=..] [answers=a.json] → разбор без ИИ по каталогу; WORK/questions.json — что спросить
+  python3 tohnit.py learn catalog.json WORK/learned.json → добавить ответы человека в каталог
+  python3 tohnit.py eval OUT.json TRUTH.json          → сравнить с эталоном (верно / не тот тип / пропущено / лишнее)
   python3 tohnit.py version                           → дата версии скрипта (свежее — новее)
   python3 tohnit.py blobs WORK/                       → сам найти все цветные значки без подписей и разложить по видам (b/…png)
 
@@ -23,7 +26,7 @@
 """
 import json, os, re, sys, math, collections
 
-VERSION = '2026-10-16'  # дата версии: python3 tohnit.py version
+VERSION = '2026-10-16b'  # дата версии: python3 tohnit.py version
 
 # ---------------------------------------------------------------- извлечение текста
 def _color_hex(c):
@@ -545,9 +548,10 @@ def build(work, mapfile, out):
             if r.get('match') and not re.search(r['match'], t): continue
             if r.get('page') is not None and s['page'] != r['page']: continue
             if r.get('area') and not (r['area'][0] <= (s['x0'] + s['x1']) / 2 <= r['area'][2] and r['area'][1] <= (s['y0'] + s['y1']) / 2 <= r['area'][3]): continue  # по центру текста
+            if r.get('style') and any(str(s.get(k, '')) != str(v) for k, v in r['style'].items()): continue  # стиль текста (цвет, размер, шрифт)
             return r
         return None
-    byicon = []; split_log = []
+    byicon = []; split_log = []; expand_log = []
     queue = list(spans)
     while queue:
         s = queue.pop(0)
@@ -571,6 +575,12 @@ def build(work, mapfile, out):
         for rx, rep in renames: label = rx.sub(rep, label)
         if rule.get('by_icon'):
             byicon.append(dict(label=label, orig=t, s=s, rule=rule)); continue
+        m = re.match(r'^(.*?[A-Za-z])(\d+)-(\d+)$', label) if rule.get('expand') else None
+        if m and int(m.group(2)) < int(m.group(3)) <= int(m.group(2)) + 99:  # диапазон в подписи: GD1/U01-04 → U01, U02, U03, U04
+            w = len(m.group(2)); expand_log.append(f"{label} → {int(m.group(3)) - int(m.group(2)) + 1} точек")
+            for n in range(int(m.group(2)), int(m.group(3)) + 1):
+                pts.append(dict(label=f'{m.group(1)}{n:0{w}d}', orig=t, typeId=rule['type'], s=s, rule=rule, note=f'из подписи {label} на чертеже'))
+            continue
         pts.append(dict(label=label, orig=t, typeId=rule['type'], s=s, rule=rule))
     # тип подписи — по значку рядом (by_icon: {"sym:tri": "Магнит индикация", "sym:hex": "Галай"}): каждый значок достаётся одной подписи, ближайшей
     icon_log = []
@@ -605,6 +615,16 @@ def build(work, mapfile, out):
                 if not typ: unknown.append(b['s']); continue
                 b['typeId'] = typ
             pts.append(b)
+    # тип по тексту рядом (near_text: [{"re": "אלקטרומגנט|טנגאורטקלא", "type": "Дверь ЭМ 3 кабеля", "dist": 60}]) — например, табличка двери
+    nt_log = []
+    for p in pts:
+        nt = p['rule'].get('near_text')
+        if not nt: continue
+        s0 = p['s']
+        for cond in nt:
+            rx = re.compile(cond['re']); dmax = float(cond.get('dist', 60))
+            hits = [x for x in spans if x['page'] == s0['page'] and rx.search(x['t']) and math.hypot(max(s0['x0'] - (x['x0'] + x['x1']) / 2, 0, (x['x0'] + x['x1']) / 2 - s0['x1']), max(s0['y0'] - (x['y0'] + x['y1']) / 2, 0, (x['y0'] + x['y1']) / 2 - s0['y1'])) <= dmax]
+            if hits: p['typeId'] = cond['type']; nt_log.append(f"{p['label']} → {cond['type']} (рядом «{hits[0]['t'][:30]}»)"); break
     # значок рядом с точкой другого типа (BRFC/APA/OB у двери): обозначение = обозначение ближайшей точки + суффикс
     ctr = lambda s: ((s['x0'] + s['x1']) / 2, (s['y0'] + s['y1']) / 2)
     used_lab = collections.Counter()
@@ -739,6 +759,8 @@ def build(work, mapfile, out):
     if near_log: rep += ['', '## Значки, привязанные к соседней точке (near) — проверить строки с ⚠️'] + [f'- {x}' for x in near_log]
     if icon_log: rep += ['', '## Тип по значку рядом (by_icon) — проверить'] + [f'- {x}' for x in icon_log]
     if split_log: rep += ['', '## Слипшиеся подписи разделены'] + [f'- {x}' for x in split_log]
+    if expand_log: rep += ['', '## Диапазоны развёрнуты в отдельные точки'] + [f'- {x}' for x in expand_log]
+    if nt_log: rep += ['', '## Тип по тексту рядом (near_text)'] + [f'- {x}' for x in nt_log[:80]]
     # значки/коды, которых много, но ни одно правило их не взяло — возможно, пропущен целый вид точек
     missed = []
     cl = {c['id']: c for c in sc['clusters']}
@@ -1010,14 +1032,7 @@ def symbols(work, name, x0, y0, x1, y1, page=0, tol=0.15, color=None):
     sc = json.load(open(os.path.join(work, 'scan.json'))); pdf = sc['meta']['pdf']; page = int(page)
     p = fitz.open(pdf)[page]; rm = p.rotation_matrix; _set_hide(sc['meta'])
     x0, y0, x1, y1 = map(float, (x0, y0, x1, y1)); size = max(x1 - x0, y1 - y0)
-    paths = []
-    for d in p.get_drawings():
-        if _hidden(d.get('layer')): continue
-        r = d['rect'] * rm
-        if r.width > size * 1.5 + 2 or r.height > size * 1.5 + 2: continue  # крупное (стены, рамки надписей) в значок не входит
-        c = d.get('color') if d.get('color') is not None else d.get('fill')
-        if c is None: continue
-        paths.append((_color_hex(c), r, d['items']))
+    paths = _page_paths(fitz, p, size)
     inside = [q for q in paths if q[1].x0 >= x0 - 1 and q[1].y0 >= y0 - 1 and q[1].x1 <= x1 + 1 and q[1].y1 <= y1 + 1]
     if not inside: print('В области нет векторных элементов — увеличь область (координаты как в scan.json / crop)'); return
     cols = collections.Counter()
@@ -1030,8 +1045,29 @@ def symbols(work, name, x0, y0, x1, y1, page=0, tol=0.15, color=None):
     tp = [pt for hx, r, it in inside if hx == main for pt in _pts(it, rm)]
     tsig = _shape_sig(tp)
     if not tsig: print(f'Цвета #{main} в области нет'); return
-    # все значки главного цвета: соседние (зазор ≤1.5 pt) мелкие пути склеиваются
-    L = [q for q in paths if q[0] == main]
+    tsig = dict(color=main, L=round(tsig['L'], 2), rg=round(tsig['rg'], 3), el=round(tsig['el'], 3), size=round(size, 1))
+    found, near_miss = _find_sig(paths, rm, tsig, tol)
+    _save_sym(work, sc, name, page, tsig, found)
+    print(f'Значков «{name}» найдено: {len(found)} (группа sym:{name}). Сверь число с легендой; примеры — work/sym_{name}.png.'
+          + (f' Похожих, но не прошедших допуск: {near_miss} — если найдено мало, повтори с tol побольше (последний аргумент, напр. 0.25).' if near_miss else '')
+          + ('' if found else ' Ничего не найдено — группа удалена; возьми область точнее (только сам значок) или другой экземпляр, либо задай цвет.'))
+    print('Образец для каталога (symbols): ' + json.dumps(dict(name=name, **tsig, tol=tol), ensure_ascii=False))
+
+def _page_paths(fitz, p, size):
+    """Мелкие видимые пути страницы: (цвет, рамка, items)."""
+    out = []; rm = p.rotation_matrix
+    for d in p.get_drawings():
+        if _hidden(d.get('layer')): continue
+        r = d['rect'] * rm
+        if r.width > size * 1.5 + 2 or r.height > size * 1.5 + 2: continue
+        c = d.get('color') if d.get('color') is not None else d.get('fill')
+        if c is None: continue
+        out.append((_color_hex(c), r, d['items']))
+    return out
+
+def _find_sig(paths, rm, tsig, tol=0.15):
+    """Все значки с формой tsig {color, L, rg, el, size}: соседние пути цвета color склеиваются, сравнение формы."""
+    L = [q for q in paths if q[0] == tsig['color']]; size = tsig['size']
     par = list(range(len(L)))
     def f(i):
         while par[i] != i: par[i] = par[par[i]]; i = par[i]
@@ -1054,16 +1090,16 @@ def symbols(work, name, x0, y0, x1, y1, page=0, tol=0.15, color=None):
         dL = abs(sg['L'] - tsig['L']) / tsig['L']; dR = abs(sg['rg'] - tsig['rg']) / max(0.5, tsig['rg']); dE = abs(sg['el'] - tsig['el'])
         if dL <= tol and dR <= tol and dE <= 0.15: found.append((sg['cx'], sg['cy']))
         elif dL <= tol * 2.5 and dR <= tol * 2.5: near_miss += 1
-    h = size / 2
+    return found, near_miss
+
+def _save_sym(work, sc, name, page, tsig, found, write=True):
+    h = tsig['size'] / 2
     sc['spans'] = [q for q in sc['spans'] if q.get('c') != f'sym:{name}']
-    for cx, cy in found: sc['spans'].append(dict(t=name, x0=cx - h, y0=cy - h, x1=cx + h, y1=cy + h, color=main, font='значок', size=0, page=page, c=f'sym:{name}'))
-    sc['clusters'] = [c for c in sc['clusters'] if c['id'] != f'sym:{name}'] + ([dict(id=f'sym:{name}', color=main, font='значок', size=0, bg='', n=len(found), labelish=0, shapes=[], samples=[name], short=len(found))] if found else [])
-    json.dump(sc, open(os.path.join(work, 'scan.json'), 'w'), ensure_ascii=False)
-    print(f'Значков «{name}» найдено: {len(found)} (группа sym:{name}). Сверь число с легендой; примеры — work/sym_{name}.png.'
-          + (f' Похожих, но не прошедших допуск: {near_miss} — если найдено мало, повтори с tol побольше (последний аргумент, напр. 0.25).' if near_miss else '')
-          + ('' if found else ' Ничего не найдено — группа удалена; возьми область точнее (только сам значок) или другой экземпляр, либо задай цвет.'))
+    for cx, cy in found: sc['spans'].append(dict(t=name, x0=cx - h, y0=cy - h, x1=cx + h, y1=cy + h, color=tsig['color'], font='значок', size=0, page=page, c=f'sym:{name}'))
+    sc['clusters'] = [c for c in sc['clusters'] if c['id'] != f'sym:{name}'] + ([dict(id=f'sym:{name}', color=tsig['color'], font='значок', size=0, bg='', n=len(found), labelish=0, shapes=[], samples=[name], short=len(found), sig=tsig)] if found else [])
+    if write: json.dump(sc, open(os.path.join(work, 'scan.json'), 'w'), ensure_ascii=False)
     if found:
-        try: _sample_sheet(pdf, [dict(page=page, x0=cx - h, y0=cy - h, x1=cx + h, y1=cy + h, t=name) for cx, cy in found], os.path.join(work, f'sym_{name}.png'), f'sym:{name}: {len(found)} шт.')
+        try: _sample_sheet(sc['meta']['pdf'], [dict(page=page, x0=cx - h, y0=cy - h, x1=cx + h, y1=cy + h, t=name) for cx, cy in found], os.path.join(work, f'sym_{name}.png'), f'sym:{name}: {len(found)} шт.')
         except Exception: pass
 
 def layer_stats(pdf):
@@ -1221,6 +1257,170 @@ def tiles(pdf, work, n=3):
                 part = img.crop(box); part.thumbnail((2400, 2400)); part.save(os.path.join(work, f'tile_p{pi + 1}_r{i + 1}c{j + 1}.png'))
     print(f'Части чертежа: {work}/tile_*.png (ряд r, столбец c; перекрытие 10%)')
 
+# ---------------------------------------------------------------- автономный режим (без ИИ): каталог подписей + вопросы человеку
+def generalize(samples):
+    """Шаблон (regex) по примерам подписей одной группы. Приставка шкафа до «/» (GA1/, GC/) → [A-Za-z]+\\d*/;
+    буквы после неё — как есть (C, D, In…; разные — через «|»), цифры → \\d+.  GA1/C-57, GC/C-15 → ^[A-Za-z]+\\d*/C-\\d+$"""
+    items = [x.replace(' ', '') for x in samples if x and x.strip()]
+    if not items: return None
+    from collections import Counter, defaultdict
+    def split(x):
+        m = re.match(r'^([A-Za-z]+\d*)/(.*)$', x)
+        return (True, m.group(2)) if m else (False, x)
+    shapes = defaultdict(list)
+    for x in items:
+        pre, tail = split(x)
+        toks = re.findall(r'[A-Za-z]+|\d+|[^A-Za-z\d]', tail)
+        shapes[(pre, tuple('A' if t[0].isalpha() else '9' if t[0].isdigit() else t for t in toks))].append(toks)
+    pats = []
+    for (pre, shape), grp in sorted(shapes.items(), key=lambda kv: -len(kv[1]))[:4]:
+        if len(grp) < max(1, 0.05 * len(items)): continue
+        parts = []
+        for i, k in enumerate(shape):
+            if k == 'A':
+                vals = sorted({t[i] for t in grp}, key=lambda v: (-len(v), v))
+                parts.append(re.escape(vals[0]) if len(vals) == 1 else '(?:' + '|'.join(map(re.escape, vals)) + ')' if len(vals) <= 4 else '[A-Za-z]+')
+            elif k == '9': parts.append('\\d+')
+            else: parts.append(re.escape(k))
+        pats.append(('[A-Za-z]+\\d*/' if pre else '') + ''.join(parts))
+    pats = list(dict.fromkeys(pats))
+    return '^' + (pats[0] if len(pats) == 1 else '(?:' + '|'.join(pats) + ')') + '$' if pats else None
+
+def load_catalog(path):
+    cat = json.load(open(path)) if path and os.path.exists(path) else {}
+    for k in ('labels', 'skip', 'symbols'): cat.setdefault(k, [])
+    return cat
+
+def auto(pdf, work, catpath, out, floor='', answers_path=None, project=None):
+    """Разбор без ИИ: скан → мусорные слои → значки из каталога → правила из каталога (+ ответы человека) → сборка.
+    Группы, которые каталог не знает, попадают в WORK/questions.json (с примерами и картинками) — на них отвечает человек
+    (answers.json: {"c05": "Камера", "c07": "skip"}), ответы можно сохранить в каталог (WORK/learned.json)."""
+    if not os.path.exists(os.path.join(work, 'scan.json')):
+        import io, contextlib
+        with contextlib.redirect_stdout(io.StringIO()): scan(pdf, work)
+    sc = json.load(open(os.path.join(work, 'scan.json')))
+    if not sc['meta'].get('hide'):
+        sc['meta']['hide'] = ['^' + re.escape(n) + '$' for n in sc['meta'].get('suggest_hide', [])]
+        json.dump(sc, open(os.path.join(work, 'scan.json'), 'w'), ensure_ascii=False)
+    _set_hide(sc['meta'])
+    cat = load_catalog(catpath)
+    scope = lambda e: not e.get('project') or (project and e['project'].lower() == project.lower())
+    # масштаб чертежа: размеры значков и расстояния в каталоге заданы для подписей высотой text_ref pt (по умолчанию 7.8);
+    # на этом листе — медиана высоты подписей, которые узнал каталог
+    lab_rx = [re.compile(e['re']) for e in cat['labels'] if scope(e) and '/' in e['re']] or [re.compile(e['re']) for e in cat['labels'] if scope(e)]
+    hs = sorted(min(x['x1'] - x['x0'], x['y1'] - x['y0']) for x in sc['spans'] if not x.get('c', '').startswith(('b:', 'sym:')) and any(r.search(x['t'].strip()) for r in lab_rx))
+    k = (hs[len(hs) // 2] / float(cat.get('text_ref', 7.8))) if len(hs) >= 5 else 1.0
+    if not 0.2 <= k <= 8: k = 1.0
+    sc_sym = lambda sym: dict(sym, L=sym['L'] * k, rg=sym['rg'] * k, size=sym['size'] * k)
+    # значки из каталога (по форме) — для by_icon / icon
+    fitz = _fitz()
+    if fitz and cat['symbols']:
+        doc = fitz.open(sc['meta']['pdf'])
+        for sym in [x for x in cat['symbols'] if scope(x)]:
+            for pi, p in enumerate(doc):
+                ss = sc_sym(sym)
+                found, _ = _find_sig(_page_paths(fitz, p, ss['size']), p.rotation_matrix, ss, sym.get('tol', 0.15))
+                if found: _save_sym(work, sc, sym['name'], pi, ss, found, write=False)
+        json.dump(sc, open(os.path.join(work, 'scan.json'), 'w'), ensure_ascii=False)
+    answers = json.load(open(answers_path)) if answers_path and os.path.exists(answers_path) else {}
+    rules = []
+    for cid, ans in answers.items():  # ответы человека по группам этого чертежа — главнее каталога
+        a = ans if isinstance(ans, dict) else ({'skip': True, 'why': 'ответ: не точки'} if ans in ('skip', 'нет', '-') else {'type': ans})
+        rules.append(dict(a, clusters=[cid]))
+    for e in [x for x in cat['skip'] if scope(x)]:
+        rules.append(dict(match=e['re'], skip=True, why=e.get('why', 'каталог: не точка'), **({'style': e['style']} if e.get('style') else {})))
+    for e in [x for x in cat['labels'] if scope(x)]:
+        r = {kk: v for kk, v in e.items() if kk not in ('re', 'project', 'note', 'learned')}
+        for kk in ('icon_dist', 'max_dist'):
+            if kk in r: r[kk] = r[kk] * k
+        if 'near_text' in r: r['near_text'] = [dict(c, dist=c.get('dist', 60) * k) for c in r['near_text']]
+        r['match'] = e['re']; rules.append(r)
+    mp = dict(floor=floor, rules=rules, cabinet_regex=cat.get('cabinet_regex', ''), ignore_missed=['^b:', '^sym:'])
+    for kk in ('zones', 'start', 'digits', 'order', 'colors'):
+        if kk in cat: mp[kk] = cat[kk]
+    mapfile = os.path.join(work, 'auto_map.json'); json.dump(mp, open(mapfile, 'w'), ensure_ascii=False, indent=1)
+    import io, contextlib
+    with contextlib.redirect_stdout(io.StringIO()): build(work, mapfile, out)
+    # вопросы: группы, где много «похожего на обозначения», но ни одно правило не взяло большинство
+    sc = json.load(open(os.path.join(work, 'scan.json')))
+    compiled = [(re.compile(r['match']) if r.get('match') else None, r) for r in rules if not r.get('clusters')]
+    bycl = collections.defaultdict(list)
+    for s in sc['spans']: bycl[s['c']].append(s)
+    qs = []
+    for c in sc['clusters']:
+        if c['id'] in answers or c['id'].startswith(('b:', 'sym:')): continue
+        lst = bycl[c['id']]; lab = [s for s in lst if labelish(s['t'])]
+        if len(lab) < 3 or len(lab) < 0.3 * len(lst): continue
+        hit = sum(1 for s in lab if any(rx and rx.search(s['t'].strip()) for rx, r in compiled))
+        if hit >= 0.8 * len(lab): continue
+        free = [s for s in lab if not any(rx and rx.search(s['t'].strip()) for rx, r in compiled)]
+        pat = generalize([s['t'] for s in free])
+        img = f"c/{c['id']}.png"
+        qs.append(dict(cluster=c['id'], n=len(free), samples=list(dict.fromkeys(s['t'] for s in free))[:12], pattern=pat, image=img,
+                       style=dict(color=c['color'], size=c['size'])))
+    qs.sort(key=lambda q: -q['n'])
+    json.dump(qs, open(os.path.join(work, 'questions.json'), 'w'), ensure_ascii=False, indent=1)
+    # что выучить: ответы → записи каталога (шаблон по примерам группы)
+    learned = []
+    for cid, ans in answers.items():
+        lst = [s['t'] for s in bycl.get(cid, []) if labelish(s['t'])]
+        pat = generalize(lst)
+        if not pat: continue
+        a = ans if isinstance(ans, dict) else ({'skip': True} if ans in ('skip', 'нет', '-') else {'type': ans})
+        e = dict(re=pat, learned=True, **({'project': project} if project else {}))
+        e.update({k: v for k, v in a.items() if k != 'skip'})
+        (learned.append(dict(e, kind='skip')) if a.get('skip') else learned.append(dict(e, kind='labels')))
+    json.dump(learned, open(os.path.join(work, 'learned.json'), 'w'), ensure_ascii=False, indent=1)
+    res = json.load(open(out)); cnt = collections.Counter(p['typeId'] for p in res['points'])
+    print(f'Масштаб листа: подписи {k:.2f}× от каталога')
+    print(f"Точек: {len(res['points'])} · " + ', '.join(f'{t} {n}' for t, n in cnt.most_common()))
+    print(f"Вопросов человеку: {len(qs)}" + ''.join(f"\n- {q['cluster']}: {q['n']} шт., напр. {' | '.join(q['samples'][:5])}  (шаблон {q['pattern']})" for q in qs[:15]))
+    print(f'Отчёт: {work}/report.md · вопросы: {work}/questions.json · выучить: {work}/learned.json')
+
+def learn(catpath, learned_path):
+    """Добавить выученное (WORK/learned.json после ответов) в каталог."""
+    cat = load_catalog(catpath); add = json.load(open(learned_path)); n = 0
+    for e in add:
+        kind = e.pop('kind', 'labels')
+        if any(x.get('re') == e['re'] and x.get('project') == e.get('project') for x in cat[kind]): continue
+        cat[kind].insert(0, e); n += 1
+    json.dump(cat, open(catpath, 'w'), ensure_ascii=False, indent=1); print(f'В каталог добавлено правил: {n}')
+
+def evaluate(out, truth_path, pos_tol=25.0):
+    """Сравнить результат с эталоном. Эталон: файл точек (с pos) или {"counts": {"тип": N}}.
+    Сопоставление: обозначение + тип; если есть координаты — ещё и место (±pos_tol pt)."""
+    res = json.load(open(out)); tr = json.load(open(truth_path))
+    got = res['points']
+    if 'counts' in tr:
+        cnt = collections.Counter(p['typeId'] for p in got); keys = sorted(set(cnt) | set(tr['counts']))
+        rows = [(k, tr['counts'].get(k, 0), cnt.get(k, 0)) for k in keys]
+        ok = sum(min(a, b) for _, a, b in rows); tot = sum(a for _, a, _ in rows)
+        print(f'По количествам: совпало {ok} из {tot} ({ok / max(1, tot):.1%})')
+        for k, a, b in rows:
+            if a != b: print(f'  {k}: эталон {a}, получено {b}')
+        return ok / max(1, tot)
+    T = tr['points']
+    def pos(p):
+        q = p.get('pos') or p
+        return (q.get('x'), q.get('y')) if q.get('x') is not None else None
+    norm = lambda l: re.sub(r'#\d+$', '', l)
+    used = set(); match = []; wrong_type = []; missing = []
+    by = collections.defaultdict(list)
+    for i, g in enumerate(got): by[norm(g['label'])].append(i)
+    for t in T:
+        cands = [i for i in by.get(norm(t['label']), []) if i not in used]
+        if pos(t): cands = sorted(cands, key=lambda i: math.dist(pos(got[i]), pos(t)) if pos(got[i]) else 1e9)
+        if not cands: missing.append(t); continue
+        i = cands[0]; used.add(i)
+        (match if got[i]['typeId'] == t['typeId'] else wrong_type).append((t, got[i]))
+    extra = [g for i, g in enumerate(got) if i not in used]
+    n = len(T)
+    print(f"Эталон {n}, получено {len(got)} · верно {len(match)} ({len(match) / max(1, n):.1%}) · не тот тип {len(wrong_type)} · пропущено {len(missing)} · лишних {len(extra)}")
+    for t, g in wrong_type[:15]: print(f"  тип: {t['label']}: эталон {t['typeId']}, получено {g['typeId']}")
+    for t in missing[:15]: print(f"  пропущено: {t['label']} ({t['typeId']})")
+    for g in extra[:15]: print(f"  лишнее: {g['label']} ({g['typeId']})")
+    return len(match) / max(1, n)
+
 def merge(out, files):
     """Несколько файлов точек (по этажам) → один. Повторы обозначений сообщаются."""
     allp = []; seen = {}; dup = []; types = {}; devices = {}
@@ -1245,6 +1445,11 @@ if __name__ == '__main__':
     elif len(sys.argv) >= 4 and sys.argv[1] == 'scan': scan(sys.argv[2], sys.argv[3])
     elif len(sys.argv) >= 5 and sys.argv[1] == 'build': build(sys.argv[2], sys.argv[3], sys.argv[4])
     elif len(sys.argv) >= 4 and sys.argv[1] == 'tiles': tiles(sys.argv[2], sys.argv[3], int(sys.argv[4]) if len(sys.argv) > 4 else 3)
+    elif len(sys.argv) >= 6 and sys.argv[1] == 'auto':
+        kv = dict(a.split('=', 1) for a in sys.argv[6:] if '=' in a)
+        auto(sys.argv[2], sys.argv[3], sys.argv[4], sys.argv[5], kv.get('floor', ''), kv.get('answers'), kv.get('project'))
+    elif len(sys.argv) >= 4 and sys.argv[1] == 'learn': learn(sys.argv[2], sys.argv[3])
+    elif len(sys.argv) >= 4 and sys.argv[1] == 'eval': evaluate(sys.argv[2], sys.argv[3])
     elif len(sys.argv) >= 4 and sys.argv[1] == 'merge': merge(sys.argv[2], sys.argv[3:])
     elif len(sys.argv) >= 4 and sys.argv[1] == 'find': find(sys.argv[2], sys.argv[3])
     elif len(sys.argv) >= 4 and sys.argv[1] == 'list': find(sys.argv[2], '', group=sys.argv[3])

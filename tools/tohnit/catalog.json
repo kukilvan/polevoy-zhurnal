@@ -1,0 +1,39 @@
+{
+ "version": 1,
+ "text_ref": 7.8,
+ "note": "Каталог подписей для разбора тохнитов без ИИ. labels — подпись → тип (первое совпадение); skip — не точки; symbols — значки по форме (для by_icon). project — правило только для этого проекта.",
+ "cabinet_regex": "^([A-Za-z]+\\d*)/",
+ "labels": [
+  {"re": "^[A-Za-z]+\\d*/D-\\d+\\.\\d$", "type": "Дверь МХ 3 кабеля", "near_text": [{"re": "טנגאורטקלא|אלקטרומגנט|אלקטרואגנט", "type": "Дверь ЭМ 3 кабеля", "dist": 45}], "project": "Mega Or"},
+  {"re": "^[A-Za-z]+\\d*/\\d+\\.In-\\d+$", "type": "Магнит индикация", "by_icon": {"sym:tri": "Магнит индикация", "sym:hex": "Галай"}, "icon_dist": 60, "project": "Mega Or"},
+  {"re": "^[A-Za-z]+\\d*/\\d+\\.O-\\d+$", "type": "Цофар - сирена", "project": "Mega Or"},
+  {"re": "^[A-Za-z]+\\d*/(?:U|S|B)\\d+-\\d+$", "type": "Точка", "expand": true, "project": "Mega Or"},
+  {"re": "^[A-Za-z]+\\d*/TV\\d+-\\d+$", "type": "TV", "expand": true, "project": "Mega Or"},
+  {"re": "^APA$", "near": "Интерком", "suffix": "-APA", "type": "Тревожная кнопка", "max_dist": 80, "prefix": "APA", "project": "Mega Or"},
+
+  {"re": "^[A-Za-z]+\\d*/C-\\d+$", "type": "Камера"},
+  {"re": "^[A-Za-z]+\\d*/D-\\d+(?:\\.\\d)?$", "type": "Дверь"},
+  {"re": "^[A-Za-z]+\\d*/AP-\\d+$", "type": "Вайфай"},
+  {"re": "^[A-Za-z]+\\d*/R\\d+$", "type": "Коре биометри"},
+  {"re": "^[A-Za-z]+\\d*/IN-\\d+$", "type": "Интерком"},
+  {"re": "^[A-Za-z]+\\d*/\\d+-\\d+$", "type": "Бакар"},
+  {"re": "^\\d[A-Z]-C\\d+$", "type": "Камера"},
+  {"re": "^\\d[A-Z]-Z\\d+$", "type": "Галай"},
+  {"re": "^\\d[A-Z]-AP-\\d+$", "type": "Вайфай"},
+  {"re": "^\\d[A-Z]-\\d+\\.\\d$", "type": "Дверь"},
+  {"re": "^\\d[A-Z]/\\d+-\\d+$", "type": "Бакар"}
+ ],
+ "skip": [
+  {"re": "^H\\s*=?\\s*\\d", "why": "высота установки"},
+  {"re": "^[+-]?\\d+\\.\\d+$", "why": "отметка уровня / размер"},
+  {"re": "m²|м²", "why": "площадь"},
+  {"re": "^(?:SS|FC|FA|FB|FD|FG|YS|YN|OF|DH|RD|GA|GB|GC|GD)-\\s?\\d+", "why": "номер помещения", "project": "Mega Or"},
+  {"re": "^(?:AC door|door number|ISEO|EL|EL 560|CR|BRFC|OB|BB|WIFI|[A-C]0\\d)$", "why": "часть двери / значок", "project": "Mega Or"},
+  {"re": "^ACEP-", "why": "чужая система", "project": "Mega Or"},
+  {"re": "^(?:ACP|CH-)", "why": "чужая система"}
+ ],
+ "symbols": [
+  {"name": "tri", "color": "0000ff", "L": 70.2, "rg": 5.57, "el": 0.293, "size": 19.0, "tol": 0.25, "note": "синий треугольник — магнит двери", "project": "Mega Or"},
+  {"name": "hex", "color": "9f7fff", "L": 45.9, "rg": 2.996, "el": 0.946, "size": 17.0, "tol": 0.15, "note": "фиолетовый шестиугольник — галай 360", "project": "Mega Or"}
+ ]
+}
