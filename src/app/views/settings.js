@@ -328,6 +328,12 @@ export function settingsView(ui) {
   return h('div', {},
     h('div', { class: 'card', style: { padding: 0 } },
       row('📖', 'Как пользоваться', 'Шаги работы, что такое дох, словарик', () => ui.open('guide')),
+      row('🔄', 'Обновить приложение', `Версия (сборка): ${typeof __BUILD__ !== 'undefined' ? __BUILD__ : 'dev'} UTC. Нажмите, если новые функции не появились`, async () => {
+        toast('Обновляю…');
+        try { const regs = await navigator.serviceWorker?.getRegistrations?.() || []; await Promise.all(regs.map((r) => r.update().catch(() => {}))); await Promise.all(regs.map((r) => r.unregister())); } catch { /* ok */ }
+        try { const keys = await caches.keys(); await Promise.all(keys.filter((k) => !/mupdf/.test(k)).map((k) => caches.delete(k))); } catch { /* ok */ }
+        location.reload();
+      }),
       row('🎨', `Тема: ${themeLabel()}`, 'Нажмите, чтобы переключить: тёмная → светлая → как в телефоне (только на этом устройстве)', () => { setTheme(nextTheme()); ui.render(); })),
     h('div', { class: 'card', style: { padding: 0 } },
       h('div', { class: 'group', style: { padding: '10px 14px 4px' } }, 'Выпадающие списки (справочники)'),
