@@ -5,6 +5,9 @@
 // Ничего не заменяет: существующие точки (то же обозначение) пропускаются; новые типы и устройства из файла создаются, если их нет.
 import { addBundleOps } from './typelib.js';
 export const POINTS_FORMAT = 'polevoy-points-1';
+// Служебный тип для точек «разобрать потом»: не показывается в справочнике типов и не уходит в общий пул
+export const UNSORTED_TYPE = 'Не разобрано';
+export const isSystemType = (t) => !!t && (t.system === true || t.id === UNSORTED_TYPE);
 const s = (v) => (v === undefined || v === null ? '' : String(v).trim());
 
 export function parsePointsFile(text) {
@@ -79,7 +82,7 @@ export function pointsImportOps(plan, newId, data) {
   plan.newDevices.forEach((d) => ops.push({ coll: 'devices', id: s(d.id), data: { name: d.name || d.id, nameHe: d.nameHe || '', cables: d.cables || [], workIds: d.workIds || [] } }));
   plan.newTypes.forEach((t) => ops.push({ coll: 'types', id: s(t.id), data: { nameHe: t.nameHe || '', devices: t.devices || [], cables: t.cables || [], workIds: t.workIds || [] } }));
   if (plan.ctx) (plan.poolTypes || []).forEach((b) => addBundleOps(plan.ctx, b, ops)); // тип из общего пула — вместе с устройствами, кабелями, работами
-  (plan.blankTypes || []).forEach((id) => ops.push({ coll: 'types', id, data: { nameHe: '', devices: [], cables: [], workIds: [] } }));
+  (plan.blankTypes || []).forEach((id) => ops.push({ coll: 'types', id, data: { nameHe: '', devices: [], cables: [], workIds: [], ...(id === UNSORTED_TYPE ? { system: true } : {}) } }));
   plan.add.forEach((p) => ops.push({ coll: 'points', id: newId(), data: {
     label: p.label, typeId: p.typeId, cabinet: p.cabinet || undefined, floor: p.floor || undefined, planName: p.planName || undefined, note: p.note || undefined,
     ...(Array.isArray(p.devices) ? { devices: p.devices } : {}), ...(Array.isArray(p.cables) ? { cables: p.cables } : {}),

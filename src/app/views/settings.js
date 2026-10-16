@@ -2,7 +2,7 @@
 import { h, formModal, confirmDialog, toast, qtyList, openModal } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { newId } from '../repo.js';
-import { installBinding, tablesOf, mainTable, hasDeviceId, libraryOps, migrateProject, auditRefs, buildContext, typePool, bundleFrom, libWith, addBundleOps } from '../../domain/index.js';
+import { installBinding, tablesOf, mainTable, hasDeviceId, libraryOps, migrateProject, auditRefs, buildContext, typePool, bundleFrom, libWith, addBundleOps, isSystemType } from '../../domain/index.js';
 import { installFields, describeBinding } from './install.js';
 import { projectForm } from './projects.js';
 import { themeLabel, setTheme, nextTheme } from '../theme.js';
@@ -72,7 +72,7 @@ export const REFS = {
   types: {
     title: 'Типы точек', coll: 'types', hint: 'Камера, дверь, вайфай… Тип — это одна строка в таблице руководства. Состав типа — устройства (с их кабелями и работами) плюс работы на всю точку.',
     idMode: 'name', nameLabel: 'Название типа (русский)',
-    items: () => [...ctx().types.values()],
+    items: () => [...ctx().types.values()].filter((t) => !isSystemType(t)),
     line: (x) => [x.id, Array.isArray(x.devices) && x.devices.length
       || x.cables?.length ? `состав: ${[compText(x.devices), x.cables?.length ? `кабели точки ${x.cables.map((c) => `${c.cable}×${c.count}`).join(' + ')}` : ''].filter(Boolean).join(' + ')}${x.workIds?.length ? ` · на точку: ${x.workIds.map((w) => nameOf('catalog', w)).join(', ')}` : ''} · ${x.nameHe || '—'}`
       : `${x.nameHe || '—'} · ${x.defaultCable || 'без кабеля'} ×${x.defaultCables ?? '?'} · установка: ${describeBinding(installBinding(x), ctx())} · старая схема`],
@@ -163,7 +163,7 @@ export const REFS = {
   r.defaults = {}; r.prepare = (v) => ({ [r.heKey]: v[r.heKey] });
 });
 
-function itemForm(key, existing) {
+export function itemForm(key, existing, { onSaved } = {}) {  // onSaved(id) — для создания «на лету» из другого окна
   const def = REFS[key]; const repo = getRepo(); const pid = currentProject().id;
   const fields = [];
   if (!existing && def.idMode === 'name') fields.push({ key: '_name', label: def.nameLabel, required: true, hint: 'Название потом изменить нельзя — только удалить и создать заново.' });
@@ -190,7 +190,7 @@ function itemForm(key, existing) {
       const data = def.prepare ? def.prepare(v) : {};
       repo.save(pid, [{ coll: def.coll, id, data: { ...data, deleted: false } }]);
       def.after?.(v, id);
-      toast('Сохранено');
+      toast('Сохранено'); onSaved?.(id);
     },
   });
 }
@@ -247,7 +247,7 @@ export function poolModal(ui) {
   } }, '➕ Добавить в проект: 0');
   const close = openModal('Общий пул типов точек', h('div', {},
     h('div', { class: 'mut' }, 'Стандартные типы и ваш пул — типы, сохранённые из любого вашего проекта (кнопка «⭐ В общий пул»). Тип добавляется вместе с его устройствами, кабелями и работами; то, что в проекте уже есть, не меняется. Типы из пула получают и новые проекты. Убрать тип из этого проекта — «Удалить» в карточке типа (вернуть можно отсюда).'),
-    h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => { saveToPool([...ctx.types.keys()]); close(); poolModal(ui); } }, `⭐ Все типы проекта → в пул (${ctx.types.size})`)),
+    h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => { saveToPool([...ctx.types.values()].filter((t) => !isSystemType(t)).map((t) => t.id)); close(); poolModal(ui); } }, `⭐ Все типы проекта → в пул (${[...ctx.types.values()].filter((t) => !isSystemType(t)).length})`)),
     h('div', { class: 'picklist', style: { maxHeight: '50vh' } }, rows),
     h('div', { class: 'btns' }, go)));
 }

@@ -2,7 +2,7 @@
 import { h, openModal, toast } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { newId } from '../repo.js';
-import { parsePointsFile, planPointsImport, pointsImportOps, typePool } from '../../domain/index.js';
+import { parsePointsFile, planPointsImport, pointsImportOps, typePool, UNSORTED_TYPE } from '../../domain/index.js';
 
 export function pointsFromFile() {
   const input = h('input', { type: 'file', accept: '.json,application/json,text/plain', style: { display: 'none' } });
@@ -37,7 +37,8 @@ export function importPreview(data, title, close) {
       h('div', { style: { marginTop: '6px', fontSize: '14px' } }, Object.entries(plan.byType).sort().map(([k, n]) => h('div', {}, `${k}: ${n}`)))),
     plan.newTypes.length ? list('Будут созданы типы (из файла)', plan.newTypes.map((t) => t.id)) : null,
     plan.poolTypes.length ? list('Будут добавлены типы из общего пула', plan.poolTypes.map((b) => `${b.type.id}${b.devices.length ? ` (${b.devices.map((d) => d.name).join(' + ')})` : ''}`)) : null,
-    plan.blankTypes.length ? list('⚠️ Будут созданы пустые типы (нет нигде) — состав настройте потом в «Типах точек»', plan.blankTypes, 'l-warn') : null,
+    plan.blankTypes.filter((t) => t !== UNSORTED_TYPE).length ? list('⚠️ Будут созданы пустые типы (нет нигде) — состав настройте потом в «Типах точек»', plan.blankTypes.filter((t) => t !== UNSORTED_TYPE), 'l-warn') : null,
+    plan.add.some((p) => p.typeId === UNSORTED_TYPE) ? h('div', { class: 'mut', style: { margin: '8px 0' } }, `❓ Не разобрано: ${plan.add.filter((p) => p.typeId === UNSORTED_TYPE).length} — разберёте потом: «Точки» → «❓ Не разобрано»`) : null,
     plan.newDevices.length ? list('Будут созданы устройства', plan.newDevices.map((d) => d.name || d.id)) : null,
     list('❌ Ошибки — эти строки не добавятся', plan.errors, 'l-error'),
     plan.warnings.length ? h('div', { style: { margin: '8px 0' } }, h('b', { class: 'l-warn' }, `⚠️ Подозрительные обозначения (${plan.warnings.length}) — снимите галочку, если это не точка`),

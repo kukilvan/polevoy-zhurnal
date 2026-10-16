@@ -5,13 +5,13 @@ import { generateLabels, parseSuffixes, comparePoints, usesConfig, remaining, RE
 import { scanDevice } from '../scan.js';
 import { statusClass } from './project.js';
 import { hint } from './guide.js';
-import { dateText, cablesText, missingDetails, isComposedType } from '../../domain/index.js';
+import { dateText, cablesText, missingDetails, isComposedType, isSystemType, UNSORTED_TYPE } from '../../domain/index.js';
 import { addWorkForPoint } from './doh.js';
 import { whoIs } from './journal.js';
 import { pointsFromFile } from './pointsfile.js';
-import { pointsFromDrawing } from './tohnitview.js';
+import { pointsFromDrawing, unsortedModal } from './tohnitview.js';
 
-const typeOptions = () => [...state.ctx.types.values()].map((t) => ({ value: t.id, label: t.id }));
+const typeOptions = () => [...state.ctx.types.values()].filter((t) => !isSystemType(t)).map((t) => ({ value: t.id, label: t.id }));
 const hasIdType = (id) => hasDeviceId(state.ctx.types.get(id));
 const isDoorType = (id) => usesConfig(state.ctx.types.get(id));
 const configOptions = () => [...state.ctx.configs.values()].map((c) => ({ value: c.id, label: c.name }));
@@ -386,7 +386,8 @@ export function meterView(ui) {
       h('button', { class: 'sec', onclick: () => pointForm(null) }, 'Новая точка'),
       h('button', { class: 'sec', onclick: () => pointsFromFile() }, '📥 Из файла'),
       h('button', { class: 'sec', onclick: () => pointsFromDrawing() }, '📐 Из чертежа'),
-      h('button', { class: 'wide sec', onclick: () => remainingModal() }, '🧾 Что осталось')),
+      h('button', { class: 'wide sec', onclick: () => remainingModal() }, '🧾 Что осталось'),
+      total.some((p) => p.typeId === UNSORTED_TYPE) ? h('button', { class: 'wide', onclick: () => unsortedModal(ui) }, `❓ Не разобрано: ${total.filter((p) => p.typeId === UNSORTED_TYPE).length} — разобрать`) : null),
     h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '10px 2px' } },
       h('span', { class: 'mut' }, `Точек: ${total.length} · с длиной: ${withLen}`),
       selMode ? null : h('button', { class: 'sec', style: { padding: '6px 12px' }, onclick: () => { selMode = true; ui.render(); } }, '☑ Выбрать')),

@@ -9,7 +9,7 @@ const bare = (x) => { const c = { ...x }; META.forEach((k) => delete c[k]); retu
 // Комплект типа: { type, devices, cables, catalog } — из справочников (Map'ов) проекта или библиотеки
 export function bundleFrom(maps, typeId) {
   const type = maps.types.get(typeId);
-  if (!type) return null;
+  if (!type || type.system || typeId === 'Не разобрано') return null;  // служебный тип — не в пул
   const devices = []; const cables = []; const catalog = [];
   const addC = (id) => { const c = maps.cables.get(id); if (c && !cables.some((x) => x.id === id)) { cables.push(bare(c)); (c.workIds || []).forEach(addW); } };
   const addW = (id) => { const w = maps.catalog.get(id); if (w && !catalog.some((x) => x.id === id)) catalog.push(bare(w)); };
