@@ -153,7 +153,8 @@ export function toast(message) {
 
 // ---- список «вариант × количество» (кабели устройства, устройства в типе точки) ----
 // options: [{value,label}]; get() → [{ value, count }]; пустой список допустим
-export function qtyList(options, { addLabel = '➕ Добавить', empty = 'Пусто', onChange } = {}) {
+// onCreate(add): «🆕 Новое…» — открыть форму создания; add({value,label}) добавит вариант и строку ×1
+export function qtyList(options, { addLabel = '➕ Добавить', empty = 'Пусто', onChange, onCreate, createLabel = '🆕 Создать новое' } = {}) {
   let rows = [];
   const box = h('div', { class: 'qtylist' });
   const draw = () => {
@@ -165,7 +166,9 @@ export function qtyList(options, { addLabel = '➕ Добавить', empty = '�
         return h('div', { class: 'qtyrow' }, sel, h('span', { class: 'mut' }, '×'), cnt,
           h('button', { type: 'button', class: 'sec x', onclick: () => { rows.splice(i, 1); draw(); onChange?.(); } }, '✕'));
       }) : [h('div', { class: 'mut', style: { padding: '4px 2px' } }, empty)]),
-      options.length ? h('button', { type: 'button', class: 'sec', onclick: () => { rows.push({ value: options[0].value, count: 1 }); draw(); onChange?.(); } }, addLabel) : null);
+      h('div', { class: 'btns', style: { marginTop: '4px' } },
+        options.length ? h('button', { type: 'button', class: 'sec', onclick: () => { rows.push({ value: options[0].value, count: 1 }); draw(); onChange?.(); } }, addLabel) : null,
+        onCreate ? h('button', { type: 'button', class: 'sec', onclick: () => onCreate((o) => { if (!options.some((x) => x.value === o.value)) options.push(o); rows.push({ value: o.value, count: 1 }); draw(); onChange?.(); }) }, createLabel) : null));
   };
   draw();
   return {

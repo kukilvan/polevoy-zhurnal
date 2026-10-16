@@ -14,22 +14,27 @@ export const WORK_TYPES = ['Протяжка', 'Перетяжка', 'Перен
 const STAGES = ['Протяжка', 'Хивут', 'Установка', 'Проверка', 'Шилют'];
 
 // Список галочек: варианты {value,label}; get() возвращает выбранные значения в порядке списка
-function checkList(options, { empty = 'Список пуст' } = {}) {
-  const boxes = new Map();
-  const el = h('div', { class: 'picklist', style: { maxHeight: '220px' } },
-    options.length ? options.map((o) => { const cb = h('input', { type: 'checkbox' }); boxes.set(o.value, cb); return h('label', { class: 'pickrow' }, cb, h('span', {}, o.label)); })
-      : h('div', { class: 'empty' }, empty));
+function checkList(options, { empty = 'Список пуст', onCreate, createLabel = '🆕 Создать новое', onChange } = {}) {
+  const boxes = new Map(); options = [...options];
+  const row = (o) => { const cb = h('input', { type: 'checkbox', onchange: () => onChange?.() }); boxes.set(o.value, cb); return h('label', { class: 'pickrow' }, cb, h('span', {}, o.label)); };
+  const list = h('div', { class: 'picklist', style: { maxHeight: '220px' } }, options.length ? options.map(row) : h('div', { class: 'empty' }, empty));
+  // новый пункт: в начало списка и сразу отмечен
+  const add = (o) => { if (!options.length) list.replaceChildren(); if (!boxes.has(o.value)) { options.unshift(o); list.prepend(row(o)); } boxes.get(o.value).checked = true; onChange?.(); };
+  const el = onCreate ? h('div', {}, list, h('div', { class: 'btns', style: { marginTop: '4px' } }, h('button', { type: 'button', class: 'sec', onclick: () => onCreate(add) }, createLabel))) : list;
   return { el, get: () => options.filter((o) => boxes.get(o.value).checked).map((o) => o.value), set: (vals) => boxes.forEach((cb, v) => { cb.checked = (vals || []).includes(v); }) };
 }
 const custom = (key, label, options, extra = {}) => ({
-  key, label, type: 'custom', ...extra, build: (api) => { const c = checkList(options, extra); c.set(api.value); return c; },
+  key, label, type: 'custom', ...extra, build: (api) => { const c = checkList(options, { ...extra, onChange: api.changed }); c.set(api.value); return c; },
 });
+// «🆕 Новое …» внутри формы: открыть форму справочника поверх, после «Сохранить» вернуться и сразу добавить созданное
+const workLabel = (d) => `${d.name} · ${d.workType}`;
+const creator = (key, label, after) => ({ createLabel: label, onCreate: (add) => itemForm(key, null, { onSaved: (id, data) => { add({ value: id, label: key === 'catalog' ? workLabel(data) : (data.name || id) }); after?.(id, data); } }) });
 
 // Поле «вариант × количество»: хранится как [{ <key>: значение, count }]
 const qtyField = (key, label, options, itemKey, extra = {}) => ({
   key, label, type: 'custom', ...extra,
   build: (api) => {
-    const q = qtyList(options, { ...extra, onChange: () => api.changed() });
+    const q = qtyList([...options], { ...extra, onChange: () => api.changed() });
     q.set((api.value || []).map((x) => ({ value: x[itemKey], count: x.count })));
     return { el: q.el, get: () => q.get().map((x) => ({ [itemKey]: x.value, count: x.count })) };
   },
@@ -76,18 +81,21 @@ export const REFS = {
     line: (x) => [x.id, Array.isArray(x.devices) && x.devices.length
       || x.cables?.length ? `состав: ${[compText(x.devices), x.cables?.length ? `кабели точки ${x.cables.map((c) => `${c.cable}×${c.count}`).join(' + ')}` : ''].filter(Boolean).join(' + ')}${x.workIds?.length ? ` · на точку: ${x.workIds.map((w) => nameOf('catalog', w)).join(', ')}` : ''} · ${x.nameHe || '—'}`
       : `${x.nameHe || '—'} · ${x.defaultCable || 'без кабеля'} ×${x.defaultCables ?? '?'} · установка: ${describeBinding(installBinding(x), ctx())} · старая схема`],
-    fields: () => {
-      const legacy = (v) => !(v.devices?.length || v.cables?.length);
+    fields: ({ existing, created } = {}) => {
+      // поля старой схемы (кабель по умолчанию, установка) — только у старых типов без состава; новый тип можно сохранить пустым
+      const legacyType = !!existing && !Array.isArray(existing.devices) && !(existing.cables?.length);
+      const legacy = (v) => legacyType && !(v.devices?.length || v.cables?.length);
       const old = (f) => ({ ...f, visible: (v) => legacy(v) && (!f.visible || f.visible(v)) });
       return [
         { key: 'nameHe', label: 'Название (иврит)', required: true },
         qtyField('devices', 'Состав точки (устройства)', opts(ctx().devices, (d) => d.name), 'deviceId',
-          { addLabel: '➕ Добавить устройство', empty: 'Пусто — точка по старой схеме (кабель и установка ниже)',
+          { addLabel: '➕ Добавить устройство', empty: legacyType ? 'Пусто — точка по старой схеме (кабель и установка ниже)' : 'Пусто — состав можно дописать потом', ...creator('devices', '🆕 Новое устройство'),
             hint: 'Из каких устройств состоит точка этого типа по умолчанию. При добавлении точек состав можно поменять. Устройства — в «Настройки → Устройства».' }),
         qtyField('cables', 'Кабели точки (не от устройств)', opts(ctx().cables, (c) => c.id), 'cable',
-          { addLabel: '➕ Добавить кабель', empty: 'Нет — кабели только от устройств',
+          { addLabel: '➕ Добавить кабель', empty: 'Нет — кабели только от устройств', ...creator('cables', '🆕 Новый кабель'),
             hint: 'Когда несколько авизарим сидят на одном кабеле: например, дверь — 2×6005 на точку, а устройства без кабелей. Работы кабелей (хивут, проверка…) добавятся сами.' }),
-        { ...custom('pointWorks', 'Работы на всю точку', taskWorks(), { hint: 'Не по устройствам, а один раз на точку: например, проверка двери.', empty: 'Нет работ' }), visible: (v) => !legacy(v) },
+        { ...custom('pointWorks', 'Работы на всю точку', taskWorks(), { hint: 'Не по устройствам, а один раз на точку: например, проверка двери. Новая работа, созданная здесь, сама получит этот тип в «Для каких типов точек».', empty: 'Нет работ',
+          ...creator('catalog', '🆕 Новая работа', (id, data) => created?.set(id, data.forTypes || [])) }), visible: (v) => !legacy(v) },
         old({ key: 'defaultCable', label: 'Кабель по умолчанию', type: 'select', required: true, options: opts(ctx().cables, (c) => c.id), emptyLabel: 'Выберите' }),
         old({ key: 'defaultCables', label: 'Кабелей на точку', type: 'number', required: true }),
         { key: 'scanId', label: 'Серийный номер и MAC (со сканером)', type: 'checkbox', hint: 'Поля появятся в карточке точки этого типа. У камер и вайфая включено по умолчанию.' },
@@ -98,7 +106,7 @@ export const REFS = {
     },
     defaults: { defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Проверка'], mode: 'none' },
     toForm: (x) => ({ ...x, scanId: hasDeviceId(x), mode: installBinding(x).mode, workIds: installBinding(x).workIds, pointWorks: x.workIds || [], devices: Array.isArray(x.devices) ? x.devices : [], cables: Array.isArray(x.cables) ? x.cables : [] }),
-    prepare: (v) => (v.devices?.length || v.cables?.length ? { scanId: !!v.scanId, nameHe: v.nameHe, devices: v.devices || [], cables: v.cables || [], workIds: v.pointWorks || [] } : {
+    prepare: (v, { existing } = {}) => (v.devices?.length || v.cables?.length || !(existing && !Array.isArray(existing.devices)) ? { scanId: !!v.scanId, nameHe: v.nameHe, devices: v.devices || [], cables: v.cables || [], workIds: v.pointWorks || [] } : {
       scanId: !!v.scanId, nameHe: v.nameHe, defaultCable: v.defaultCable, defaultCables: v.defaultCables, stages: v.stages || [], devices: null, cables: [], workIds: [],
       installMode: v.mode, installWorkIds: v.mode === 'works' ? (v.workIds || []) : [], isDoor: v.mode === 'config' }),
     after: (v, id) => {
@@ -114,7 +122,7 @@ export const REFS = {
     fields: () => [
       { key: 'nameHe', label: 'Название в доху (иврит)', required: true, hint: 'Например: כבל CAT7' },
       { key: 'accounting', label: 'Как считать протяжку', type: 'select', required: true, options: [{ value: 'Точки', label: 'По точкам' }, { value: 'Метры', label: 'По кабелям и метрам' }], emptyLabel: 'Выберите' },
-      custom('workIds', 'Какие работы нужны каждому такому кабелю', taskWorks(), { hint: 'Например, cat7: хивут кистона, хивут в шкафу, проверка, шилют; 6005: хивут в шкафу. Протяжка учитывается всегда.', empty: 'Нет работ' }),
+      custom('workIds', 'Какие работы нужны каждому такому кабелю', taskWorks(), { hint: 'Например, cat7: хивут кистона, хивут в шкафу, проверка, шилют; 6005: хивут в шкафу. Протяжка учитывается всегда.', empty: 'Нет работ', ...creator('catalog', '🆕 Новая работа') }),
     ],
     defaults: {},
     prepare: (v) => ({ nameHe: v.nameHe, accounting: v.accounting, workIds: v.workIds || [] }),
@@ -128,8 +136,8 @@ export const REFS = {
     fields: () => [
       { key: 'name', label: 'Название (русский)', required: true },
       { key: 'nameHe', label: 'Название (иврит)', required: true },
-      qtyField('cables', 'Кабели', opts(ctx().cables, (c) => c.id), 'cable', { addLabel: '➕ Добавить кабель', empty: 'Без кабеля', hint: 'Работы самого кабеля (хивут, проверка, шилют) добавятся сами — они заданы в «Кабели».' }),
-      custom('workIds', 'Работы устройства', taskWorks(), { hint: 'Обычно установка авизара; можно и другие (кивун, доп. работа).', empty: 'Нет работ' }),
+      qtyField('cables', 'Кабели', opts(ctx().cables, (c) => c.id), 'cable', { addLabel: '➕ Добавить кабель', empty: 'Без кабеля', ...creator('cables', '🆕 Новый кабель'), hint: 'Работы самого кабеля (хивут, проверка, шилют) добавятся сами — они заданы в «Кабели».' }),
+      custom('workIds', 'Работы устройства', taskWorks(), { hint: 'Обычно установка авизара; можно и другие (кивун, доп. работа).', empty: 'Нет работ', ...creator('catalog', '🆕 Новая работа') }),
     ],
     defaults: {},
     prepare: (v) => ({ name: v.name, nameHe: v.nameHe, cables: v.cables || [], workIds: v.workIds || [] }),
@@ -165,9 +173,9 @@ export const REFS = {
 
 export function itemForm(key, existing, { onSaved } = {}) {  // onSaved(id) — для создания «на лету» из другого окна
   const def = REFS[key]; const repo = getRepo(); const pid = currentProject().id;
-  const fields = [];
+  const fields = []; const created = new Map(); // работы, созданные из этой формы (id → их «для каких типов»)
   if (!existing && def.idMode === 'name') fields.push({ key: '_name', label: def.nameLabel, required: true, hint: 'Название потом изменить нельзя — только удалить и создать заново.' });
-  fields.push(...def.fields());
+  fields.push(...def.fields({ existing, created }));
   const live = def.items();
   formModal({
     title: existing ? (existing.name || existing.id) : `Новый пункт — ${def.title}`,
@@ -187,10 +195,13 @@ export function itemForm(key, existing, { onSaved } = {}) {  // onSaved(id) — 
         } else id = `${def.prefix}${newId(6)}`;
       }
       const err = def.check?.(v); if (err) { toast(err); return false; }
-      const data = def.prepare ? def.prepare(v) : {};
-      repo.save(pid, [{ coll: def.coll, id, data: { ...data, deleted: false } }]);
+      const data = def.prepare ? def.prepare(v, { existing }) : {};
+      const ops = [{ coll: def.coll, id, data: { ...data, deleted: false } }];
+      // новые работы, созданные из формы типа, — отметить этот тип в «Для каких типов точек»
+      if (key === 'types') created.forEach((ft, wid) => { if (!ft.includes(id)) ops.push({ coll: 'catalog', id: wid, data: { forTypes: [...ft, id] } }); });
+      repo.save(pid, ops);
       def.after?.(v, id);
-      toast('Сохранено'); onSaved?.(id);
+      toast('Сохранено'); onSaved?.(id, data);
     },
   });
 }
