@@ -1,7 +1,7 @@
 // Статусы точек, установка, комплектность (разделы 3.1–3.3, Приложение А).
 import { cableOf, cablesCountOf, metrageOf, cableListOf } from './points.js';
 import { defaultInstallBinding } from './seed.js';
-import { compositionOf, composedInfo } from './compose.js';
+import { compositionOf, composedInfo, composedCables as composedCablesOf } from './compose.js';
 
 // Привязка установки типа точек: поля типа (installMode/installWorkIds), для старых данных — стандартная привязка по названию типа
 export function installBinding(type) {
@@ -10,6 +10,18 @@ export function installBinding(type) {
   return defaultInstallBinding(type.id) || { mode: type.isDoor ? 'config' : 'any', workIds: [] };
 }
 export const usesConfig = (type) => installBinding(type).mode === 'config';
+
+// Кабели точки целиком [{ cable, count }]: свои (cableOverride) или по типу/устройствам/настройке шкафа
+export function effectiveCablesOf(point, ctx) {
+  return compositionOf(point, ctx) ? composedCablesOf(point, ctx) : cableListOf(point, ctx);
+}
+// Кабели по умолчанию для типа (как будет у новой точки этого типа в этом шкафу)
+export const typeCablesOf = (ctx, typeId, cabinet = '', projectId) => effectiveCablesOf({ typeId, cabinet, projectId }, ctx);
+// Что записать в точку: null — как у типа, иначе свой список
+export function cableOverrideFor(list, ctx, typeId, cabinet, projectId) {
+  const norm = (l) => JSON.stringify((l || []).filter((c) => c.cable && c.count > 0).map((c) => [c.cable, Number(c.count)]));
+  return norm(list) === norm(typeCablesOf(ctx, typeId, cabinet, projectId)) ? null : (list || []).filter((c) => c.cable && c.count > 0).map((c) => ({ cable: c.cable, count: Number(c.count) }));
+}
 
 const maxDate = (rows) => rows.reduce((m, r) => (r.date && (!m || r.date > m) ? r.date : m), '');
 

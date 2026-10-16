@@ -4,6 +4,7 @@
 //   types?: [{ id, nameHe, devices, cables, workIds }], devices?: [{ id, name, nameHe, cables, workIds }] }
 // Ничего не заменяет: существующие точки (то же обозначение) пропускаются; новые типы и устройства из файла создаются, если их нет.
 import { addBundleOps } from './typelib.js';
+import { cableOverrideFor } from './status.js';
 export const POINTS_FORMAT = 'polevoy-points-1';
 // Служебный тип для точек «разобрать потом»: не показывается в справочнике типов и не уходит в общий пул
 export const UNSORTED_TYPE = 'Не разобрано';
@@ -87,6 +88,7 @@ export function pointsImportOps(plan, newId, data) {
     label: p.label, typeId: p.typeId, cabinet: p.cabinet || undefined, floor: p.floor || undefined, planName: p.planName || undefined, note: p.note || undefined,
     ...(Array.isArray(p.devices) ? { devices: p.devices } : {}), ...(Array.isArray(p.cables) ? { cables: p.cables } : {}),
     ...(posOf(p, data) ? { pos: posOf(p, data) } : {}),
+    ...(Array.isArray(p.cableOverride) && (!plan.ctx || cableOverrideFor(p.cableOverride, plan.ctx, p.typeId, p.cabinet)) ? { cableOverride: p.cableOverride } : {}),
   } }));
   return ops;
 }

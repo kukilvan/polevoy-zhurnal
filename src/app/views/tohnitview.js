@@ -7,6 +7,13 @@ import { learnInto, generalize } from '../../tohnit/engine.js';
 import { UNSORTED_TYPE, isSystemType } from '../../domain/index.js';
 import { itemForm } from './settings.js';
 import { ruleEditor } from './catalogview.js';
+import { cablesPicker } from './cablespick.js';
+
+// кабели рядом с выбором типа: видны, когда выбран настоящий тип
+function cablesFor(onChange) {
+  const p = cablesPicker({ compact: true, onChange }); const box = h('div', { style: { display: 'none', margin: '4px 0 8px' } }, h('small', { class: 'mut' }, 'Кабели каждой такой точки'), p.el);
+  return { box, p, set: (t) => { const real = !!t && !t.startsWith('__') && t !== 'skip' && t !== UNSORTED_TYPE; box.style.display = real ? '' : 'none'; if (real) p.setType(t); }, own: () => (box.style.display === 'none' ? null : p.override()) };
+}
 import DEFAULT_CATALOG from '../../../tools/tohnit/catalog.json';
 export { DEFAULT_CATALOG };
 
@@ -82,17 +89,20 @@ export function pointsFromDrawing() {
     pts.forEach((p) => { byType[p.typeId] = (byType[p.typeId] || 0) + 1; });
     const qBox = h('div', {});
     for (const q of r.questions) {
+      let tv = '';
+      const setAns = () => { if (!tv) { delete answers[q.cluster]; return; } const t = tv === '__skip' ? 'skip' : tv === '__later' ? UNSORTED_TYPE : tv; const own = cab.own(); answers[q.cluster] = own ? { type: t, cables: own } : t; };
+      const cab = cablesFor(() => setAns());
       const sel = typePicker({ extra: [['__skip', '🚫 Не точки'], ['__later', '⏳ Разобрать потом']],
-        onChange: (v) => { if (v) answers[q.cluster] = v === '__skip' ? 'skip' : v === '__later' ? UNSORTED_TYPE : v; else delete answers[q.cluster]; } });
+        onChange: (v) => { tv = v; cab.set(v); setAns(); } });
       const tune = h('button', { type: 'button', class: 'sec', onclick: () => {  // своё правило по частям подписи → в каталог → разобрать заново
-        const cur = answers[q.cluster]; const t = cur === 'skip' ? '__skip' : cur === UNSORTED_TYPE ? '' : (cur || '');
+        const cur = answers[q.cluster]; const ct = typeof cur === 'object' ? cur.type : cur; const t = ct === 'skip' ? '__skip' : ct === UNSORTED_TYPE ? '' : (ct || '');
         ruleEditor({ samples: q.samples, type: t, onSaved: () => { delete answers[q.cluster]; parse().catch((e) => { status.textContent = e.message; }); } });
       } }, '⚙️ Настроить шаблон');
       const rem = h('input', { type: 'checkbox', checked: true, onchange: () => { rem.checked ? remember.add(q.cluster) : remember.delete(q.cluster); } }); remember.add(q.cluster);
       const imgs = h('div', { style: { display: 'grid', gap: '6px', margin: '6px 0' } });
       qBox.append(h('div', { class: 'card', style: { margin: '8px 0' } },
         h('b', {}, `Что это? ${q.n} шт.`), h('div', { class: 'mut' }, `Например: ${q.samples.slice(0, 6).join('  ·  ')}`), imgs,
-        h('label', { class: 'field' }, h('span', {}, 'Это…'), sel), h('label', { class: 'pickrow' }, rem, h('span', {}, 'Запомнить для следующих чертежей')),
+        h('label', { class: 'field' }, h('span', {}, 'Это…'), sel), cab.box, h('label', { class: 'pickrow' }, rem, h('span', {}, 'Запомнить для следующих чертежей')),
         h('div', { class: 'btns' }, tune, h('small', { class: 'mut', style: { alignSelf: 'center' } }, 'что значит каждая часть подписи'))));
       Promise.all(q.examples.slice(0, 3).map((ex) => cropImg(ex, r.scale))).then((els) => imgs.append(...els)).catch(() => {});
     }
@@ -146,7 +156,8 @@ export function unsortedModal(ui) {
       const rem = h('input', { type: 'checkbox', checked: true });
       const go = h('button', { disabled: true });
       const label = () => { go.textContent = `✔ Применить (${on.size})`; go.disabled = !choice || !on.size; };
-      const picker = typePicker({ extra: [['__skip', '🚫 Не точки (удалить)']], onChange: (v) => { choice = v; label(); } });
+      const cab = cablesFor(() => {});
+      const picker = typePicker({ extra: [['__skip', '🚫 Не точки (удалить)']], onChange: (v) => { choice = v; cab.set(v); label(); } });
       const rows = h('div', { class: 'picklist', style: { maxHeight: '220px', display: 'none' } }, list.map((p) => {
         const cb = h('input', { type: 'checkbox', checked: true, onchange: () => { cb.checked ? on.add(p.id) : on.delete(p.id); label(); } });
         return h('label', { class: 'pickrow' }, cb, h('span', {}, p.label, p.cabinet ? h('small', {}, ` · шкаф ${p.cabinet}`) : null, p.pos?.sheet ? h('small', {}, ` · ${p.pos.sheet}`) : null));
@@ -157,18 +168,18 @@ export function unsortedModal(ui) {
         if (choice === '__skip') {
           if (!(await confirmDialog(`Удалить точек: ${chosen.length}? Вернуть можно из истории.`, { yes: 'Удалить', danger: true }))) return;
           redraw = state.ctx; chosen.forEach((p) => repo.remove(pid, 'points', p.id));
-        } else { redraw = state.ctx; repo.save(pid, chosen.map((p) => ({ coll: 'points', id: p.id, data: { typeId: choice } }))); }
+        } else { redraw = state.ctx; const own = cab.own(); repo.save(pid, chosen.map((p) => ({ coll: 'points', id: p.id, data: { typeId: choice, cableOverride: own } }))); }
         let n = 0;
         if (rem.checked) {
           const re = generalize([...new Set(chosen.map((p) => base(p.label)))]);
-          if (re) try { n = await saveLearned([choice === '__skip' ? { kind: 'skip', re, learned: true } : { kind: 'labels', re, type: choice, learned: true }]); } catch { /* не страшно */ }
+          if (re) try { n = await saveLearned([choice === '__skip' ? { kind: 'skip', re, learned: true } : { kind: 'labels', re, type: choice, learned: true, ...(cab.own() ? { cables: cab.own() } : {}) }]); } catch { /* не страшно */ }
         }
         toast(`${choice === '__skip' ? 'Удалено' : `Тип «${choice}»`}: ${chosen.length}${n ? ' · правило запомнено' : ''}`);
       };
       label();
       return h('div', { class: 'card', style: { margin: '8px 0' } },
         h('b', {}, `${uniq.length <= 3 ? uniq.join(', ') : k} — ${list.length} шт.`), uniq.length > 3 ? h('div', { class: 'mut' }, uniq.slice(0, 8).join('  ·  ')) : null,
-        h('label', { class: 'field' }, h('span', {}, 'Это…'), picker),
+        h('label', { class: 'field' }, h('span', {}, 'Это…'), picker), cab.box,
         h('label', { class: 'pickrow' }, rem, h('span', {}, 'Запомнить для следующих чертежей')),
         h('div', { class: 'btns' }, toggle, go), rows);
     }));

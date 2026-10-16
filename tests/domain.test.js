@@ -661,3 +661,23 @@ test('общий пул типов: тип из пула переносится 
   const o2 = pointsImportOps(plan, () => 'p1', data);
   assert.ok(o2.some((o) => o.coll === 'types' && o.id === 'Лахцан птиха') && o2.some((o) => o.coll === 'devices') && o2.some((o) => o.coll === 'points'));
 });
+
+test('свои кабели точки (RJ45 X2 = 2 кабеля): и у типа из устройств, и у старого типа; по умолчанию — как у типа', async () => {
+  const { tasksOf, typeCablesOf, cableOverrideFor, effectiveCablesOf } = await import('../src/domain/index.js');
+  const cables = [{ id: 'cat7', accounting: 'Точки', workIds: ['HIV_KEY'] }];
+  const devices = [{ id: 'DV_AP', name: 'Точка', cables: [{ cable: 'cat7', count: 1 }], workIds: [] }];
+  const types = [...POINT_TYPES, { id: 'Точка', devices: [{ deviceId: 'DV_AP', count: 1 }] }];
+  const p = { id: 'a', projectId: 'P1', label: 'RJ45 X2', typeId: 'Точка', cableOverride: [{ cable: 'cat7', count: 2 }] };
+  const ctx = make({ cables: [...CABLES.filter((c) => c.id !== 'cat7'), ...cables], devices, types, points: [p, { ...cam, cableOverride: [{ cable: 'cat7', count: 3 }] }] });
+  assert.deepEqual(effectiveCablesOf(ctx.points.get('a'), ctx), [{ cable: 'cat7', count: 2 }]);
+  assert.equal(tasksOf(ctx.points.get('a'), ctx).find((t) => t.workId === 'HIV_KEY').qty, 2);
+  assert.equal(pointInfo(ctx.points.get('c1'), ctx).cables, 3);
+  assert.deepEqual(typeCablesOf(ctx, 'Точка'), [{ cable: 'cat7', count: 1 }]);
+  assert.equal(cableOverrideFor([{ cable: 'cat7', count: 1 }], ctx, 'Точка'), null);
+  assert.deepEqual(cableOverrideFor([{ cable: 'cat7', count: 2 }], ctx, 'Точка'), [{ cable: 'cat7', count: 2 }]);
+});
+
+test('сортировка точек: числа в любом месте обозначения — как числа', () => {
+  const pts = ['D2/10', 'D2/2', 'D2/1', 'D2/24', 'D2/3'].map((label) => ({ label, typeId: 'Дверь', cabinet: '' }));
+  assert.deepEqual(pts.sort(comparePoints).map((p) => p.label), ['D2/1', 'D2/2', 'D2/3', 'D2/10', 'D2/24']);
+});

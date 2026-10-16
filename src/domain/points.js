@@ -26,29 +26,35 @@ export function pointKey(label) {
   return `${prefix}|${lead}|${pad(whole, 5)}|${pad(frac.slice(0, 3), 3)}`;
 }
 
-// Сравнение точек: шкаф → тип → ключ точки → обозначение (как в таблице руководителя).
+// Естественное сравнение обозначений: числа внутри сравниваются как числа в любом месте (D2/2 < D2/10, GA1/C-9 < GA1/C-10, 07.In-3 < 07.In-12)
+const natCollator = new Intl.Collator('ru', { numeric: true, sensitivity: 'base' });
+export const compareLabels = (x, y) => natCollator.compare(String(x ?? ''), String(y ?? '')) || (String(x ?? '') < String(y ?? '') ? -1 : String(x ?? '') > String(y ?? '') ? 1 : 0);
+
+// Сравнение точек: шкаф → тип → обозначение (естественно, по числам).
 export function comparePoints(a, b) {
-  const c = (x, y) => (x < y ? -1 : x > y ? 1 : 0);
-  return c(a.cabinet ?? '', b.cabinet ?? '') || c(a.typeId ?? '', b.typeId ?? '')
-    || c(pointKey(a.label), pointKey(b.label)) || c(a.label ?? '', b.label ?? '');
+  return compareLabels(a.cabinet ?? '', b.cabinet ?? '') || compareLabels(a.typeId ?? '', b.typeId ?? '') || compareLabels(a.label, b.label);
 }
 
 // Кабели точки. Основной кабель и их число: настройка шкафа (проект + шкаф + тип), иначе значения типа точки.
 // Дополнительные кабели других видов (extraCables: [{ cable, count }]) — например, интерком: 6005×1 + cat7×1.
 const settingOf = (point, ctx, pred) => ctx.cabinetSettings.find((x) => x.projectId === point.projectId && x.cabinet === point.cabinet
   && x.typeId === point.typeId && pred(x));
+const cleanList = (list) => (Array.isArray(list) ? list : [])
+  .filter((c) => c && !blank(c.cable) && Number(c.count) > 0).map((c) => ({ cable: String(c.cable), count: Number(c.count) }));
+const own = (point) => (Array.isArray(point?.cableOverride) ? cleanList(point.cableOverride) : null);  // свои кабели точки целиком
 export function cableOf(point, ctx) {
+  const o = own(point); if (o) return o[0]?.cable;
   const s = settingOf(point, ctx, (x) => !blank(x.cable));
   return s ? s.cable : ctx.types.get(point.typeId)?.defaultCable;
 }
 // Число кабелей основного вида
 export function mainCablesCountOf(point, ctx) {
+  const o = own(point); if (o) return o[0]?.count ?? 0;
   const s = settingOf(point, ctx, (x) => !blank(x.cables));
   return Number(s ? s.cables : ctx.types.get(point.typeId)?.defaultCables ?? 0);
 }
-const cleanList = (list) => (Array.isArray(list) ? list : [])
-  .filter((c) => c && !blank(c.cable) && Number(c.count) > 0).map((c) => ({ cable: String(c.cable), count: Number(c.count) }));
 export function extraCablesOf(point, ctx) {
+  const o = own(point); if (o) return o.slice(1);
   const s = settingOf(point, ctx, (x) => Array.isArray(x.extraCables));
   return cleanList(s ? s.extraCables : ctx.types.get(point.typeId)?.extraCables);
 }

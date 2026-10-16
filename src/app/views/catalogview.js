@@ -5,6 +5,7 @@ import { getRepo, currentProject } from '../store.js';
 import { matchLabel, prettyRule, learnInto } from '../../tohnit/engine.js';
 import { segment, defaultRoles, buildPattern, describeParts, ROLES } from '../../tohnit/pattern.js';
 import { userCatalog, typePicker, DEFAULT_CATALOG } from './tohnitview.js';
+import { cablesPicker } from './cablespick.js';
 
 const FORMAT = 'polevoy-tohnit-catalog-1';
 let cache = null;  // своё сохранённое — сразу (без сети запись дойдёт позже)
@@ -58,7 +59,7 @@ export function catalogModal() {
   });
 
   const ruleRow = (kind, e, editable) => h('div', { class: 'item', onclick: editable ? () => ruleForm(kind, e) : null },
-    h('div', { class: 'name' }, ruleText(e), h('div', { class: 'sub' }, `${what(kind === 'skip' ? 'skip' : 'label', e)}${e.project ? ` · только «${e.project}»` : ''}${e.expand ? ' · диапазон' : ''}${e.by_icon ? ' · по значку' : ''}${e.near_text ? ' · по тексту рядом' : ''}`)));
+    h('div', { class: 'name' }, ruleText(e), h('div', { class: 'sub' }, `${what(kind === 'skip' ? 'skip' : 'label', e)}${e.project ? ` · только «${e.project}»` : ''}${e.expand ? ' · диапазон' : ''}${e.by_icon ? ' · по значку' : ''}${e.near_text ? ' · по тексту рядом' : ''}${e.cables ? ` · кабели ${e.cables.map((c) => `${c.cable}×${c.count}`).join(' + ')}` : ''}`)));
 
   let showBuiltin = false;
   function draw() {
@@ -125,8 +126,12 @@ export function ruleEditor({ kind = 'labels', rule = null, samples = null, type 
     check();
   }
   ex.addEventListener('input', () => drawParts(true));
-  const pick = typePicker({ extra: [['__skip', '🚫 Не точки']], onChange: (v) => { choice = v; } });
+  const cp = cablesPicker({ compact: true, value: rule?.cables ?? null });
+  const cabBox = h('div', { style: { display: 'none', margin: '4px 0 8px' } }, h('small', { class: 'mut' }, 'Кабели каждой такой точки'), cp.el);
+  const showCab = (v) => { const real = !!v && v !== '__skip'; cabBox.style.display = real ? '' : 'none'; if (real) cp.setType(v); };
+  const pick = typePicker({ extra: [['__skip', '🚫 Не точки']], onChange: (v) => { choice = v; showCab(v); } });
   if (choice) { const sel = pick.querySelector('select'); if (![...sel.options].some((o) => o.value === choice)) sel.append(h('option', { value: choice }, choice)); sel.value = choice; }
+  showCab(choice);
   const save = async () => {
     const { re, cab, parts } = current();
     if (!re || !validRe(re)) { err.textContent = 'Нет шаблона — впишите примеры'; return; }
@@ -137,7 +142,8 @@ export function ruleEditor({ kind = 'labels', rule = null, samples = null, type 
     const m = mine();
     if (rule) { m.labels = m.labels.filter((x) => !same(rule)(x)); m.skip = m.skip.filter((x) => !same(rule)(x)); }
     if ((skip ? m.skip : m.labels).some(same(e))) { err.textContent = 'Такое правило уже есть'; return; }
-    (skip ? m.skip : m.labels).unshift(skip ? e : { ...e, type: choice });
+    const own = skip ? null : cp.override();
+    (skip ? m.skip : m.labels).unshift(skip ? e : { ...e, type: choice, ...(own ? { cables: own } : {}) });
     await saveMine(m); toast(rule ? 'Сохранено' : 'Правило добавлено'); c(); onSaved?.();
   };
   const del = rule ? h('button', { class: 'danger', onclick: async () => {
@@ -149,7 +155,7 @@ export function ruleEditor({ kind = 'labels', rule = null, samples = null, type 
     h('label', { class: 'field' }, h('span', {}, 'Примеры подписей'), ex, h('small', {}, 'Подпись делится на части: буквы, цифры, знаки. Под каждой частью выберите, что она значит.')),
     partsBox, summary,
     h('div', { style: { display: 'flex', alignItems: 'center' } }, testIn, testOut),
-    h('label', { class: 'field' }, h('span', {}, 'Это…'), pick),
+    h('label', { class: 'field' }, h('span', {}, 'Это…'), pick), cabBox,
     h('label', { class: 'field' }, h('span', {}, 'Только для проекта (часть названия)'), projIn),
     h('details', { style: { margin: '8px 0' } }, h('summary', { class: 'mut' }, 'Шаблон для специалиста'), reIn, h('small', { class: 'mut' }, 'Если поменять здесь вручную, настройка по частям не используется.')),
     err,

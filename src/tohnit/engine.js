@@ -263,6 +263,7 @@ export function buildPoints(spans, rules, opts = {}) {
   const floor = opts.floor || '';
   const points = final.map((p) => {
     const d = { label: p.label, typeId: p.typeId, cabinet: p.cabinet, floor };
+    if (Array.isArray(p.rule.cables) && p.typeId === p.rule.type) d.cableOverride = p.rule.cables;  // свои кабели из правила (например «X2» — 2 кабеля)
     if (p.orig && p.orig.replace(/ /g, '') !== p.label && !p.note) d.planName = p.orig;
     const notes = [p.note, p.dup && 'повтор обозначения на чертеже — проверить', p.check && 'тип по умолчанию (значка рядом нет) — проверить'].filter(Boolean);
     if (notes.length) d.note = notes.join('; ');

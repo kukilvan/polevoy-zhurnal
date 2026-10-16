@@ -25,14 +25,16 @@ export function pointCablesOf(point, ctx) {
   return cleanList(Array.isArray(point.cables) ? point.cables : type?.cables);
 }
 // Устройства точки как список [{ deviceId, count, dev }] + «кабели точки» как устройство '#'
+// point.cableOverride: [{ cable, count }] — свои кабели точки целиком (вместо кабелей устройств и типа), например «RJ45 X2» = 2 кабеля
+const hasOverride = (point) => Array.isArray(point?.cableOverride);
 function partsOf(point, ctx, comp) {
   // у точки устройство может быть изменено: свои кабели (cables) и/или работы (workIds) вместо заданных в «Устройствах»
   const parts = (comp || []).map((e) => {
     const base = ctx.devices?.get(e.deviceId);
     const dev = base && { ...base, cables: Array.isArray(e.cables) ? e.cables : base.cables, workIds: Array.isArray(e.workIds) ? e.workIds : base.workIds };
-    return { deviceId: e.deviceId, count: Number(e.count) || 0, dev };
+    return { deviceId: e.deviceId, count: Number(e.count) || 0, dev: dev && hasOverride(point) ? { ...dev, cables: [] } : dev };
   }).filter((x) => x.dev && x.count > 0);
-  const pc = pointCablesOf(point, ctx);
+  const pc = hasOverride(point) ? cleanList(point.cableOverride) : pointCablesOf(point, ctx);
   if (pc.length) parts.push({ deviceId: POINT_CABLES, count: 1, dev: { name: 'Кабели точки', cables: pc, workIds: [] } });
   return parts;
 }

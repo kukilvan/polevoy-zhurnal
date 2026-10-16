@@ -5,11 +5,12 @@ import { generateLabels, parseSuffixes, comparePoints, usesConfig, remaining, RE
 import { scanDevice } from '../scan.js';
 import { statusClass } from './project.js';
 import { hint } from './guide.js';
-import { dateText, cablesText, missingDetails, isComposedType, isSystemType, UNSORTED_TYPE } from '../../domain/index.js';
+import { dateText, cablesText, missingDetails, isComposedType, isSystemType, UNSORTED_TYPE, cableOverrideFor } from '../../domain/index.js';
 import { addWorkForPoint } from './doh.js';
 import { whoIs } from './journal.js';
 import { pointsFromFile } from './pointsfile.js';
 import { pointsFromDrawing, unsortedModal } from './tohnitview.js';
+import { cablesField, cablesPicker } from './cablespick.js';
 
 const typeOptions = () => [...state.ctx.types.values()].filter((t) => !isSystemType(t)).map((t) => ({ value: t.id, label: t.id }));
 const hasIdType = (id) => hasDeviceId(state.ctx.types.get(id));
@@ -72,9 +73,9 @@ function compField(point) {
   };
   return {
     key: 'comp', label: 'Состав точки', type: 'custom', visible: (v) => composedType(v.typeId),
-    hint: 'Снимите галочку, если устройства на этой точке нет; количество можно поменять. Кабели точки — если авизарим сидят на общем кабеле.',
+    hint: 'Снимите галочку, если устройства на этой точке нет; количество можно поменять. Кабели — в поле «Кабели» ниже.',
     build: (api) => ({
-      el: h('div', {}, devBox, addSel, h('div', { class: 'mut', style: { margin: '8px 0 0' } }, 'Кабели точки'), cableQ.el),
+      el: h('div', {}, devBox, addSel, h('div', { style: { display: 'none' } }, cableQ.el)),  // кабели точки — в поле «Кабели» ниже (все кабели точки сразу)
       update: (v) => { if (v.typeId !== typeId) load(v.typeId, typeId === null && point && v.typeId === point.typeId); },
       get: () => ({ devices: rows.filter((r) => r.on && r.count > 0).map((r) => ({ deviceId: r.deviceId, count: r.count,
         ...(Array.isArray(r.cables) ? { cables: r.cables } : {}), ...(Array.isArray(r.workIds) ? { workIds: r.workIds } : {}) })),
@@ -110,6 +111,7 @@ export function pointForm(point, { onDone } = {}) {
     { key: 'cabinet', label: 'Шкаф' }, { key: 'floor', label: 'Этаж' },
     { key: 'typeId', label: 'Тип', type: 'select', required: true, options: typeOptions(), emptyLabel: 'Выберите тип' },
     compField(point),
+    cablesField(point),
     { key: 'length', label: 'Длина (м на 1 кабель)', type: 'number' },
     { key: 'configId', label: 'Конфигурация двери (если отличается от проекта)', type: 'select', options: configOptions(), visible: (v) => isDoorType(v.typeId) && !composedType(v.typeId) },
     { key: 'port', label: 'Порт' },
@@ -137,7 +139,7 @@ export function pointForm(point, { onDone } = {}) {
       repo.save(pid, [{ coll: 'points', id: point?.id, data: {
         label, planName: v.planName, cabinet: v.cabinet, floor: v.floor, typeId: v.typeId, length: v.length,
         configId: isDoorType(v.typeId) ? v.configId : undefined, port: v.port, serial, mac, delayReasonId: v.delayReasonId, note: v.note,
-        ...compData(v.typeId, v.comp),
+        ...compData(v.typeId, v.comp), cableOverride: v.cableOverride ?? null,
       } }]);
       toast(point ? 'Сохранено' : 'Точка добавлена'); onDone?.();
     },
@@ -155,6 +157,7 @@ export function generatorForm() {
     { key: 'pair', label: 'Пара номеров (вид 01-02)', type: 'checkbox' },
     { key: 'typeId', label: 'Тип', type: 'select', required: true, options: typeOptions(), emptyLabel: 'Выберите тип' },
     compField(null),
+    cablesField(null),
     { key: 'cabinet', label: 'Шкаф' }, { key: 'floor', label: 'Этаж' },
     { key: 'configId', label: 'Конфигурация двери', type: 'select', options: configOptions(), visible: (v) => isDoorType(v.typeId) && !composedType(v.typeId) },
   ];
@@ -171,7 +174,7 @@ export function generatorForm() {
       if (fresh.length > 100 && !(await confirmDialog(`Создать ${fresh.length} точек?`, { yes: 'Создать' }))) return false;
       repo.save(pid, fresh.map((label) => ({ coll: 'points', data: {
         label, cabinet: v.cabinet, floor: v.floor, typeId: v.typeId, configId: isDoorType(v.typeId) ? v.configId : undefined,
-        ...compData(v.typeId, v.comp),
+        ...compData(v.typeId, v.comp), ...(v.cableOverride ? { cableOverride: v.cableOverride } : {}),
       } })));
       toast(`Создано точек: ${fresh.length}${labels.length > fresh.length ? `, уже были: ${labels.length - fresh.length}` : ''}`);
     },
@@ -236,7 +239,7 @@ export function pointCard(startPoint) {
     const hasLen = p.length !== undefined && p.length !== null && p.length !== '';
     const facts = [
       ['Шкаф / этаж', [p.cabinet && `шкаф ${p.cabinet}`, p.floor && `этаж ${p.floor}`].filter(Boolean).join(', ')],
-      ['Тип', p.typeId], ['Состав', compText(p)], ['Имя в плане', p.planName], ['Кабель', info.cableList.length > 1 ? cablesText(info.cableList) : info.cable],
+      ['Тип', p.typeId], ['Состав', compText(p)], ['Имя в плане', p.planName], ['Кабели', `${info.cableList?.length ? cablesText(info.cableList) : info.cable || ''}${Array.isArray(p.cableOverride) ? ' (свои у точки)' : ''}`],
       ['Длина', hasLen ? `${p.length} м на 1 кабель${info.metrage ? ` (всего ${Math.round(info.metrage * 100) / 100} м)` : ''}` : ''],
       ['Конфигурация', usesConfig(ctx.types.get(p.typeId)) ? cfg?.name : ''], ['Порт', p.port], ['Серийный номер', p.serial], ['MAC', p.mac], ['Причина задержки', p.delayReasonId], ['Примечание', p.note],
     ].filter(([, v]) => v);
@@ -306,14 +309,20 @@ function bulkEditForm(ids, done) {
     fields: [
       { key: 'cabinet', label: 'Шкаф', hint: 'Пусто — не менять' }, { key: 'floor', label: 'Этаж', hint: 'Пусто — не менять' },
       { key: 'typeId', label: 'Тип', type: 'select', options: typeOptions(), emptyLabel: 'Не менять' },
+      { key: 'setCables', label: 'Изменить кабели', type: 'checkbox', hint: 'Без галочки: при смене типа кабели станут как у нового типа, иначе не меняются.' },
+      { key: 'cables', label: 'Кабели каждой точки', type: 'custom', visible: (v) => !!v.setCables, build: () => {
+        const first = state.ctx.points.get(ids[0]); const p = cablesPicker({ typeId: first?.typeId || '', cabinet: first?.cabinet || '', compact: true });
+        return { el: p.el, update: (v) => { if (v.typeId) p.setType(v.typeId); }, get: () => p.get() };
+      } },
     ],
     onSubmit: (v) => {
-      if (!v.cabinet && !v.floor && !v.typeId) { toast('Ничего не выбрано для изменения'); return false; }
+      if (!v.cabinet && !v.floor && !v.typeId && !v.setCables) { toast('Ничего не выбрано для изменения'); return false; }
       const ops = ids.map((id) => {
         const data = {};
         if (v.cabinet) data.cabinet = v.cabinet;
         if (v.floor) data.floor = v.floor;
-        if (v.typeId) { data.typeId = v.typeId; data.devices = null; data.cables = null; if (!isDoorType(v.typeId)) data.configId = undefined; }
+        if (v.typeId) { data.typeId = v.typeId; data.devices = null; data.cables = null; data.cableOverride = null; if (!isDoorType(v.typeId)) data.configId = undefined; }
+        if (v.setCables) { const p = state.ctx.points.get(id); data.cableOverride = cableOverrideFor(v.cables, state.ctx, data.typeId || p?.typeId, data.cabinet || p?.cabinet, pid); }
         return { coll: 'points', id, data };
       });
       repo.save(pid, ops); toast(`Изменено точек: ${ids.length}`); done();

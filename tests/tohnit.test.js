@@ -92,3 +92,13 @@ test('тохнит: конструктор шаблона по частям по
   const { points } = buildPoints([sp], [{ match: re, type: 'Камера', cab }], { cabinetRegex: '^([A-Za-z]+\\d*)/' });
   assert.equal(points[0].cabinet, '');  // «C2» — не шкаф
 });
+
+test('тохнит: ответ с кабелями (RJ45 X2 → Точка, 2 кабеля) — у точек и в выученном правиле', () => {
+  const span = (t, x) => ({ t, x0: x, y0: 0, x1: x + 20, y1: 8, color: 'ff0000', font: 'Arial', size: 7.8, page: 0 });
+  const pages = [{ w: 1000, h: 1000, fills: [], annots: [], paths: [], layers: {}, spans: ['RJ45-1', 'RJ45-2', 'RJ45-3'].map((t, i) => span(t, i * 100)) }];
+  const cat = { labels: [], skip: [], symbols: [] };
+  const q = autoParse({ pages }, cat, {}).questions[0];
+  const r = autoParse({ pages }, cat, { answers: { [q.cluster]: { type: 'Точка', cables: [{ cable: 'cat7', count: 2 }] } } });
+  assert.ok(r.data.points.length >= 2 && r.data.points.every((p) => p.cableOverride?.[0]?.count === 2));
+  assert.deepEqual(r.learned[0].cables, [{ cable: 'cat7', count: 2 }]);
+});
