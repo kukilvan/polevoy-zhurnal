@@ -7,6 +7,7 @@ import { learnInto, generalize } from '../../tohnit/engine.js';
 import { UNSORTED_TYPE, isSystemType } from '../../domain/index.js';
 import { itemForm } from './settings.js';
 import DEFAULT_CATALOG from '../../../tools/tohnit/catalog.json';
+export { DEFAULT_CATALOG };
 
 // Каталог = выученное пользователем (впереди, главнее) + встроенный каталог приложения
 export function userCatalog() {
@@ -16,12 +17,12 @@ export function userCatalog() {
 export async function saveLearned(learned) {
   const mine = getRepo().prefs?.tohnitLearned || {};
   const { catalog, added } = learnInto({ labels: mine.labels || [], skip: mine.skip || [], symbols: mine.symbols || [] }, learned);
-  if (added) await getRepo().saveUserPrefs({ tohnitLearned: { labels: catalog.labels, skip: catalog.skip, symbols: catalog.symbols } });
+  if (added) getRepo().saveUserPrefs({ tohnitLearned: { labels: catalog.labels, skip: catalog.skip, symbols: catalog.symbols } }).catch(() => toast('Не удалось запомнить правила'));  // без ожидания: без сети запись дойдёт позже
   return added;
 }
 
 // Выбор типа: список типов проекта + «➕ Новый тип» (форма создания типа; после сохранения он сразу выбран)
-function typePicker({ extra = [], onChange }) {
+export function typePicker({ extra = [], onChange }) {
   const sel = h('select', { onchange: () => onChange(sel.value) });
   const fill = (pick) => {
     const types = [...state.ctx.types.values()].filter((t) => !isSystemType(t)).map((t) => t.id);

@@ -9,6 +9,7 @@ import { themeLabel, setTheme, nextTheme } from '../theme.js';
 import { updateManagerTable, backupNow } from './project.js';
 import { exportExcel } from '../excel.js';
 import { pointsFromFile } from './pointsfile.js';
+import { catalogModal } from './catalogview.js';
 
 export const WORK_TYPES = ['Протяжка', 'Перетяжка', 'Перенос', 'Хивут', 'Установка', 'Проверка', 'Шилют', 'Доп. работа', 'Время'];
 const STAGES = ['Протяжка', 'Хивут', 'Установка', 'Проверка', 'Шилют'];
@@ -331,6 +332,7 @@ export function settingsView(ui) {
     h('div', { class: 'card', style: { padding: 0 } },
       h('div', { class: 'group', style: { padding: '10px 14px 4px' } }, 'Выпадающие списки (справочники)'),
       ['types', 'devices', 'cables', 'catalog', 'configs', 'units', 'culprits', 'delayReasons'].map(ref),
+      row('🧩', 'Каталог подписей (разбор чертежей)', `Моих правил: ${(getRepo().prefs?.tohnitLearned?.labels || []).length + (getRepo().prefs?.tohnitLearned?.skip || []).length} · общий для всех проектов`, catalogModal),
       row('🩺', 'Проверка справочников', 'Ссылки на удалённое, неиспользуемые устройства и работы', auditModal)),
     h('div', { class: 'card', style: { padding: 0 } },
       h('div', { class: 'group', style: { padding: '10px 14px 4px' } }, `Проект «${p.name}»`),

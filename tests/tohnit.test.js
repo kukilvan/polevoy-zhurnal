@@ -62,3 +62,12 @@ test('тохнит: ответ касается только незнакомы�
   const { catalog } = learnInto(cat, r1.learned);
   assert.equal(types(autoParse({ pages }, catalog, {})), types(r1));
 });
+
+test('тохнит: проверка подписи по каталогу и шаблон по-человечески', async () => {
+  const { matchLabel, prettyRule } = await import('../src/tohnit/engine.js');
+  const cat = { skip: [{ re: '^H=\\d+$' }], labels: [{ re: '^[A-Za-z]+\\d*\\/C\\-\\d+$', type: 'Камера' }, { re: '^TV\\d+$', type: 'TV', project: 'Mega' }] };
+  assert.equal(matchLabel('GA1/C-57', cat).rule.type, 'Камера');
+  assert.equal(matchLabel('H=400', cat).kind, 'skip');
+  assert.equal(matchLabel('TV140', cat, 'Другой'), null); assert.equal(matchLabel('TV140', cat, 'Mega Or').rule.type, 'TV');
+  assert.equal(prettyRule('^[A-Za-z]+\\d*\\/C\\-\\d+$'), 'шкаф/C-№');
+});

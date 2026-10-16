@@ -347,8 +347,26 @@ export function learnInto(catalog, learned) {
   const cat = { labels: [], skip: [], symbols: [], ...JSON.parse(JSON.stringify(catalog)) };
   let n = 0;
   for (const { kind, cluster: _c, ...e } of learned) {
-    if (cat[kind].some((x) => x.re === e.re && x.project === e.project)) continue;
+    if (cat[kind].some((x) => (x.re ?? x.name) === (e.re ?? e.name) && x.project === e.project)) continue;
     cat[kind].unshift(e); n++;
   }
   return { catalog: cat, added: n };
+}
+
+/** Какое правило каталога сработает на подпись (порядок как в разборе: «не точки», потом подписи) → { kind: 'skip'|'label', rule, index } или null */
+export function matchLabel(text, catalog, project = '') {
+  const t = String(text || '').trim(); if (!t) return null;
+  const test = (e) => { try { return new RegExp(e.re).test(t); } catch { return false; } };
+  const si = (catalog.skip || []).findIndex((e) => inScope(e, project) && test(e));
+  if (si >= 0) return { kind: 'skip', rule: catalog.skip[si], index: si };
+  const li = (catalog.labels || []).findIndex((e) => inScope(e, project) && test(e));
+  if (li >= 0) return { kind: 'label', rule: catalog.labels[li], index: li };
+  return null;
+}
+
+/** Шаблон правила — по-человечески: ^[A-Za-z]+\d*\/C\-\d+$ → «шкаф/C-№» */
+export function prettyRule(re) {
+  return String(re || '').replace(/^\^/, '').replace(/\$$/, '')
+    .replace(/\[A-Za-z\]\+\\d\*\\?\//g, 'шкаф/').replace(/\[A-Za-z\]\+/g, 'буквы').replace(/\\d\+/g, '№').replace(/\\d/g, '#')
+    .replace(/\\s[*+]?/g, ' ').replace(/\(\?:/g, '(').replace(/\\(.)/g, '$1');
 }
