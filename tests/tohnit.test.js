@@ -71,3 +71,24 @@ test('тохнит: проверка подписи по каталогу и ш�
   assert.equal(matchLabel('TV140', cat, 'Другой'), null); assert.equal(matchLabel('TV140', cat, 'Mega Or').rule.type, 'TV');
   assert.equal(prettyRule('^[A-Za-z]+\\d*\\/C\\-\\d+$'), 'шкаф/C-№');
 });
+
+test('тохнит: конструктор шаблона по частям подписи (C2/04: камера, этаж не важен, номер 2 цифры)', async () => {
+  const { segment, defaultRoles, buildPattern, describeParts } = await import('../src/tohnit/pattern.js');
+  const sg = segment(['C2/04', 'C2/05', 'C2/12']);
+  assert.ok(sg.ok); assert.deepEqual(sg.segs.map((s) => s.kind), ['L', 'D', 'P', 'D']);
+  assert.deepEqual(defaultRoles(sg.segs), ['const', 'const', 'const', 'num']);
+  const { re, cab } = buildPattern(sg.segs, ['const', 'any', 'const', 'num']);
+  assert.equal(re, '^C\\d+\\/\\d{2}$'); assert.equal(cab, '');
+  const rx = new RegExp(re); assert.ok(rx.test('C3/77')); assert.ok(!rx.test('C2/123')); assert.ok(!rx.test('D2/04'));
+  assert.equal(describeParts(sg.segs, ['const', 'any', 'const', 'num']), 'C (любое) / №(2 цифры)');
+  const g = segment(['GA1/C-57', 'GB/C-1']); assert.ok(g.ok);  // у GB нет цифры — часть необязательная
+  const gb = buildPattern(g.segs, ['cab', 'cab', 'const', 'const', 'const', 'numAny']);
+  assert.equal('GB/C-1'.match(new RegExp(gb.cab))[1], 'GB'); assert.equal('GA1/C-57'.match(new RegExp(gb.cab))[1], 'GA1');
+  assert.equal(segment(['C2/04', 'TV140']).ok, false);
+  const s2 = segment(['GA1/C-57', 'GA2/C-1']); const b2 = buildPattern(s2.segs, ['cab', 'cab', 'const', 'const', 'const', 'numAny']);
+  assert.equal('GA2/C-1'.match(new RegExp(b2.cab))[1], 'GA2');
+  const { buildPoints } = await import('../src/tohnit/engine.js');
+  const sp = { t: 'C2/04', x0: 0, y0: 0, x1: 20, y1: 8, page: 0, c: 'c1' };
+  const { points } = buildPoints([sp], [{ match: re, type: 'Камера', cab }], { cabinetRegex: '^([A-Za-z]+\\d*)/' });
+  assert.equal(points[0].cabinet, '');  // «C2» — не шкаф
+});

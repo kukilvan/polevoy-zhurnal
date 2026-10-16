@@ -6,6 +6,7 @@ import { importPreview } from './pointsfile.js';
 import { learnInto, generalize } from '../../tohnit/engine.js';
 import { UNSORTED_TYPE, isSystemType } from '../../domain/index.js';
 import { itemForm } from './settings.js';
+import { ruleEditor } from './catalogview.js';
 import DEFAULT_CATALOG from '../../../tools/tohnit/catalog.json';
 export { DEFAULT_CATALOG };
 
@@ -83,11 +84,16 @@ export function pointsFromDrawing() {
     for (const q of r.questions) {
       const sel = typePicker({ extra: [['__skip', '🚫 Не точки'], ['__later', '⏳ Разобрать потом']],
         onChange: (v) => { if (v) answers[q.cluster] = v === '__skip' ? 'skip' : v === '__later' ? UNSORTED_TYPE : v; else delete answers[q.cluster]; } });
+      const tune = h('button', { type: 'button', class: 'sec', onclick: () => {  // своё правило по частям подписи → в каталог → разобрать заново
+        const cur = answers[q.cluster]; const t = cur === 'skip' ? '__skip' : cur === UNSORTED_TYPE ? '' : (cur || '');
+        ruleEditor({ samples: q.samples, type: t, onSaved: () => { delete answers[q.cluster]; parse().catch((e) => { status.textContent = e.message; }); } });
+      } }, '⚙️ Настроить шаблон');
       const rem = h('input', { type: 'checkbox', checked: true, onchange: () => { rem.checked ? remember.add(q.cluster) : remember.delete(q.cluster); } }); remember.add(q.cluster);
       const imgs = h('div', { style: { display: 'grid', gap: '6px', margin: '6px 0' } });
       qBox.append(h('div', { class: 'card', style: { margin: '8px 0' } },
         h('b', {}, `Что это? ${q.n} шт.`), h('div', { class: 'mut' }, `Например: ${q.samples.slice(0, 6).join('  ·  ')}`), imgs,
-        h('label', { class: 'field' }, h('span', {}, 'Это…'), sel), h('label', { class: 'pickrow' }, rem, h('span', {}, 'Запомнить для следующих чертежей'))));
+        h('label', { class: 'field' }, h('span', {}, 'Это…'), sel), h('label', { class: 'pickrow' }, rem, h('span', {}, 'Запомнить для следующих чертежей')),
+        h('div', { class: 'btns' }, tune, h('small', { class: 'mut', style: { alignSelf: 'center' } }, 'что значит каждая часть подписи'))));
       Promise.all(q.examples.slice(0, 3).map((ex) => cropImg(ex, r.scale))).then((els) => imgs.append(...els)).catch(() => {});
     }
     const again = h('button', { onclick: async () => { again.disabled = true; try { await parse(); } catch (e) { status.textContent = e.message; } } }, '🔄 Разобрать с ответами');

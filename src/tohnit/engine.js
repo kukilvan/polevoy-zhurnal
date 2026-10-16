@@ -243,6 +243,7 @@ export function buildPoints(spans, rules, opts = {}) {
   const cabRx = opts.cabinetRegex ? new RegExp(opts.cabinetRegex) : null;
   for (const p of pts) {
     if (p.rule.cabinet != null) { p.cabinet = p.rule.cabinet; continue; }
+    if (p.rule.cab != null) { let m = null; try { m = p.rule.cab ? (p.near || p.label).match(new RegExp(p.rule.cab)) : null; } catch { /* плохой шаблон */ } p.cabinet = m?.[1] || ''; continue; }  // шкаф по своему шаблону правила ('' — шкафа нет)
     let cab = '';
     const src = p.near || p.label; const m = cabRx && src.match(cabRx); if (m) cab = m[1];
     p.cabinet = cab;
@@ -299,7 +300,7 @@ export function autoParse(extracted, catalog, { floor = '', project = '', answer
   const catRules = [];
   for (const e of cat.skip.filter((x) => inScope(x, project))) catRules.push({ match: e.re, skip: true, why: e.why || 'каталог: не точка', ...(e.style ? { style: e.style } : {}) });
   for (const e of cat.labels.filter((x) => inScope(x, project))) {
-    const { re, project: _p, note: _n, learned: _l, ...r } = e;
+    const { re, project: _p, note: _n, learned: _l, samples: _s, parts: _pp, ...r } = e;
     for (const kk of ['icon_dist', 'max_dist']) if (kk in r) r[kk] *= k;
     if (r.near_text) r.near_text = r.near_text.map((c) => ({ ...c, dist: (c.dist ?? 60) * k }));
     catRules.push({ ...r, match: re });
@@ -334,7 +335,7 @@ export function autoParse(extracted, catalog, { floor = '', project = '', answer
   for (const [cid, ans] of Object.entries(answers)) {
     const pat = generalize(freeOf(cid).map((s) => s.t)); if (!pat) continue;  // только незнакомые подписи — чтобы выученное не перебивало каталог
     const a = typeof ans === 'object' ? ans : (ans === 'skip' ? { skip: true } : { type: ans });
-    const e = { re: pat, learned: true, ...(project ? { project } : {}) };
+    const e = { re: pat, learned: true, samples: [...new Set(freeOf(cid).map((s) => s.t.trim()))].slice(0, 8), ...(project ? { project } : {}) };
     if (a.skip) learned.push({ kind: 'skip', cluster: cid, ...e }); else learned.push({ kind: 'labels', cluster: cid, ...e, ...a });
   }
   const data = { format: 'polevoy-points-1', source: sheet ? `${sheet}${floor ? `, этаж ${floor}` : ''}` : '', floor, points: res.points,
@@ -367,6 +368,6 @@ export function matchLabel(text, catalog, project = '') {
 /** Шаблон правила — по-человечески: ^[A-Za-z]+\d*\/C\-\d+$ → «шкаф/C-№» */
 export function prettyRule(re) {
   return String(re || '').replace(/^\^/, '').replace(/\$$/, '')
-    .replace(/\[A-Za-z\]\+\\d\*\\?\//g, 'шкаф/').replace(/\[A-Za-z\]\+/g, 'буквы').replace(/\\d\+/g, '№').replace(/\\d/g, '#')
+    .replace(/\[A-Za-z\]\+\\d\*\\?\//g, 'шкаф/').replace(/\[A-Za-z\]\+/g, 'буквы').replace(/\\d\{(\d+)(?:,(\d+))?\}/g, (_, x, y) => `№(${y ? `${x}–${y}` : x})`).replace(/\\d\+/g, '№').replace(/\\d/g, '#')
     .replace(/\\s[*+]?/g, ' ').replace(/\(\?:/g, '(').replace(/\\(.)/g, '$1');
 }
