@@ -7,7 +7,8 @@ const BASE = '/polevoy-zhurnal/';
 export default defineConfig({
   base: BASE,
   define: { __BUILD__: JSON.stringify(new Date().toISOString().slice(0, 16).replace('T', ' ')) },
-  build: { target: 'es2020', sourcemap: false },
+  build: { target: 'es2022', sourcemap: false },
+  worker: { format: 'es' },  // разбор чертежа (mupdf) — в фоновом потоке
   plugins: [
     VitePWA({
       registerType: 'autoUpdate',
@@ -18,6 +19,8 @@ export default defineConfig({
         // запросы к Firebase/Google никогда не кэшируем service worker-ом
         navigateFallbackDenylist: [/^\/__\//, /^\/polevoy-zhurnal\/__\//],
         cleanupOutdatedCaches: true,
+        globIgnores: ['**/mupdf*'],  // модуль чтения PDF (≈10 МБ) — не при установке, а при первом разборе чертежа
+        runtimeCaching: [{ urlPattern: /mupdf.*\.(?:wasm|js)$/, handler: 'CacheFirst', options: { cacheName: 'mupdf', expiration: { maxEntries: 6 } } }],
       },
       manifest: {
         name: 'Полевой журнал',

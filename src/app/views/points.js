@@ -9,6 +9,7 @@ import { dateText, cablesText, missingDetails, isComposedType } from '../../doma
 import { addWorkForPoint } from './doh.js';
 import { whoIs } from './journal.js';
 import { pointsFromFile } from './pointsfile.js';
+import { pointsFromDrawing } from './tohnitview.js';
 
 const typeOptions = () => [...state.ctx.types.values()].map((t) => ({ value: t.id, label: t.id }));
 const hasIdType = (id) => hasDeviceId(state.ctx.types.get(id));
@@ -384,6 +385,7 @@ export function meterView(ui) {
       h('button', { onclick: () => generatorForm() }, '➕ Точки пачкой'),
       h('button', { class: 'sec', onclick: () => pointForm(null) }, 'Новая точка'),
       h('button', { class: 'sec', onclick: () => pointsFromFile() }, '📥 Из файла'),
+      h('button', { class: 'sec', onclick: () => pointsFromDrawing() }, '📐 Из чертежа'),
       h('button', { class: 'wide sec', onclick: () => remainingModal() }, '🧾 Что осталось')),
     h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '10px 2px' } },
       h('span', { class: 'mut' }, `Точек: ${total.length} · с длиной: ${withLen}`),
