@@ -1,4 +1,5 @@
 // Вкладка «Дохот»: дни работ, записи дня, текст доха RU/HE, копирование и ссылка на команду «Doh».
+import { typeMatch, typeFilterOptions } from '../typegroups.js';
 import { h, formModal, openModal, confirmDialog, toast } from '../ui.js';
 import { hint } from './guide.js';
 import { state, getRepo, currentProject, pointsSorted, infoOf } from '../store.js';
@@ -83,12 +84,13 @@ export function pointsPicker({ typesOf, fits, onPick }) {
     const allowed = typesOf ? typesOf(vals) : null;
     const pts = pointsSorted().filter((pt) => (fits ? fits(pt, vals) : (!allowed || allowed.includes(pt.typeId))));
     const chosen = new Set(ids);
-    let q = '';
+    let q = ''; let fCab = ''; let fType = '';
     const list = h('div', { class: 'picklist' });
     const count = h('b', {});
     const fill = () => {
       list.replaceChildren(); let last = null;
-      const shown = pts.filter((pt) => !q || `${pt.label} ${pt.planName ?? ''}`.toLowerCase().includes(q));
+      const shown = pts.filter((pt) => (!q || `${pt.label} ${pt.planName ?? ''}`.toLowerCase().includes(q))
+        && (!fCab || (fCab === '__none' ? !pt.cabinet : pt.cabinet === fCab)) && typeMatch(fType, pt.typeId));
       if (!shown.length) list.append(h('div', { class: 'empty' }, pts.length ? 'Ничего не найдено' : 'Подходящих точек нет'));
       shown.forEach((pt) => {
         const key = `${pt.cabinet || ''}\u0000${pt.typeId}`;
@@ -100,8 +102,12 @@ export function pointsPicker({ typesOf, fits, onPick }) {
       list._shown = shown;
     };
     const search = h('input', { type: 'search', placeholder: 'Поиск по обозначению', oninput: (e) => { q = e.target.value.trim().toLowerCase(); fill(); } });
+    // фильтры как на вкладке «Точки»: шкаф и тип (с общими группами — «▸ Все: Дверь»)
+    const cabs = [...new Set(pts.map((pt) => pt.cabinet || ''))].sort((a, b) => a.localeCompare(b, 'ru', { numeric: true }));
+    const cabSel = h('select', { onchange: (e) => { fCab = e.target.value; fill(); } }, h('option', { value: '' }, 'Все шкафы'), ...cabs.map((c) => (c ? h('option', { value: c }, `Шкаф ${c}`) : h('option', { value: '__none' }, 'Без шкафа'))));
+    const typeSel = h('select', { onchange: (e) => { fType = e.target.value; fill(); } }, h('option', { value: '' }, 'Все типы'), ...typeFilterOptions(pts.map((pt) => pt.typeId)).map(([v, t]) => h('option', { value: v }, t)));
     const close = openModal('Точки', h('div', {},
-      search, h('div', { class: 'row', style: { margin: '8px 0' } }, count,
+      search, h('div', { style: { display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' } }, cabs.length > 1 ? cabSel : null, typeSel), h('div', { class: 'row', style: { margin: '8px 0' } }, count,
         h('button', { type: 'button', class: 'sec', onclick: () => { (list._shown || []).forEach((pt) => chosen.add(pt.id)); fill(); } }, 'Все показанные'),
         h('button', { type: 'button', class: 'sec', onclick: () => { chosen.clear(); fill(); } }, 'Снять все')),
       list,
