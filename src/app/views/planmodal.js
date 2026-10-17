@@ -233,9 +233,15 @@ export function planModal({ point = null, placeFor = null } = {}) {
     if (tool === 'add') { const hit = nearest(all, (p) => p.pos, x, y, page); if (hit) { toast(`Здесь уже точка «${hit.label}»`); focusId = hit.id; viewer.draw(); openCard?.(hit); return; } }
     let sn = null; try { sn = await wk.call('snap', { page, x, y, r: 14 / viewer.view.s }); } catch { /* без привязки */ }
     if (sn?.kind === 'text' && !labelLike(sn.label)) sn = null;  // посторонняя надпись (иврит, длинный текст) — не номер точки
+    if (sn?.kind === 'shape' && Math.max(sn.w || 0, sn.h || 0) > 24) sn = null;  // крупное (стена, линия, штриховка) — не значок: ставим, где нажали
     const pg = pages[page] || {}; const ic = (t) => currentProject()?.typeIcons?.[t];
-    const at = (t) => (sn ? { page, x: sn.x, y: sn.y, w: sn.w, h: sn.h } : { page, x: +x.toFixed(1), y: +y.toFixed(1), w: ic(t)?.w || 10, h: ic(t)?.h || 10, icon: true });
-    const posFor = (t) => ({ ...at(t), pw: pg.w, ph: pg.h, sheet: d.name });
+    // icon — нарисовать значок типа (на чертеже значка нет): по умолчанию, если рядом ничего не нашлось
+    const at = (t, icon = !sn) => {
+      const tap = { page, x: +x.toFixed(1), y: +y.toFixed(1) };
+      const base = sn && !(icon && sn.kind === 'text') ? { page, x: sn.x, y: sn.y, w: sn.w, h: sn.h } : tap;
+      return icon ? { ...base, w: ic(t)?.w || base.w || 10, h: ic(t)?.h || base.h || 10, icon: true } : { ...base, w: base.w || 10, h: base.h || 10 };
+    };
+    const posFor = (t, icon) => ({ ...at(t, icon), pw: pg.w, ph: pg.h, sheet: d.name });
     temp = at(''); viewer.draw();
     const done = () => { temp = null; viewer?.draw(); };
     if (tool === 'icon') return iconTap(d, sn, page, x, y, done);
@@ -287,7 +293,11 @@ export function planModal({ point = null, placeFor = null } = {}) {
       const hint = h('small', { class: 'mut' });
       const cabSel = h('select', { onchange: () => { cab = cabSel.value; cp.setType(tid, cab); suggest(); } }, h('option', { value: '' }, '— без шкафа —'), ...cabs.map((x) => h('option', { value: x, selected: x === cab }, `Шкаф ${x}`)));
       const cp = cablesPicker({ compact: true });
-      const tp = typePicker({ onChange: (t) => { tid = t; cp.setType(t, cab); suggest(); } });
+      const iconCb = h('input', { type: 'checkbox', checked: sn?.kind !== 'text' });
+      const iconNote = h('small', { class: 'mut' });
+      const iconRow = h('label', { class: 'pickrow' }, iconCb, h('span', {}, '🖼 Нарисовать значок типа (на чертеже значка этой точки нет) ', iconNote));
+      const iconInfo = () => { iconNote.textContent = tid && !currentProject()?.typeIcons?.[tid] ? '— у этого типа значок не задан («📌 Значки типов»), пока будет кружок' : ''; };
+      const tp = typePicker({ onChange: (t) => { tid = t; cp.setType(t, cab); suggest(); iconInfo(); } });
       function suggest() {
         if (edited) return;
         if (sn?.kind === 'text') { name.value = sn.label; hint.textContent = 'Как надпись на чертеже'; return; }
@@ -296,12 +306,12 @@ export function planModal({ point = null, placeFor = null } = {}) {
       }
       area.replaceChildren(h('div', { class: 'form', style: { marginTop: '8px' } },
         h('label', {}, 'Шкаф'), cabSel, h('label', {}, 'Тип'), tp, h('label', {}, 'Название'), name, hint,
-        h('label', {}, 'Кабели'), cp.el,
+        h('label', {}, 'Кабели'), cp.el, iconRow,
         h('div', { class: 'btns' }, h('button', { onclick: () => {
           const label = name.value.trim();
           if (!tid) { toast('Выберите тип'); return; } if (!label) { toast('Впишите название'); return; }
           if (pts.some((p) => p.label === label)) { toast(`«${label}» уже есть в проекте`); return; }
-          const data = { label, typeId: tid, pos: posFor(tid), note: 'добавлено на плане' };
+          const data = { label, typeId: tid, pos: posFor(tid, iconCb.checked), note: 'добавлено на плане' };
           if (cab) data.cabinet = cab; if (d.floor) data.floor = d.floor; const ov = cp.override(); if (ov) data.cableOverride = ov;
           const id = newId(); getRepo().save(currentProject().id, [{ coll: 'points', id, data }]);
           toast(`Точка «${label}» добавлена${data.pos.icon && !currentProject()?.typeIcons?.[tid] ? ' — значок этого типа можно задать в «📌 Значки типов»' : ''}`); focusId = id; finish();

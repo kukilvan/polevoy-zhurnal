@@ -280,7 +280,14 @@ export function pointCard(startPoint, { fromPlan = false } = {}) {
         h('button', { class: 'sec', onclick: () => { close(); setTimeout(() => pointForm(p), 60); } }, '✏️ Изменить'),
         !fromPlan && p.pos && drawingFor(p) ? h('button', { class: 'sec', onclick: () => { close(); setTimeout(() => planModal({ point: p }), 60); } }, '📍 На чертеже') : null,
         !fromPlan && !(p.pos && drawingFor(p)) && drawingsOf().length ? h('button', { class: 'sec', onclick: () => { close(); setTimeout(() => planModal({ placeFor: p }), 60); } }, '📍 Отметить на плане') : null,
-        fromPlan && p.pos && String(p.note || '').includes('значок без номера') ? h('button', { class: 'sec', onclick: () => bindToPoint(p, close) }, '🔗 Привязать к точке') : null),
+        fromPlan && p.pos && String(p.note || '').includes('значок без номера') ? h('button', { class: 'sec', onclick: () => bindToPoint(p, close) }, '🔗 Привязать к точке') : null,
+        // значок типа на плане у точки, добавленной на объекте: показать / убрать
+        fromPlan && p.pos && (p.pos.icon || String(p.note || '').includes('добавлено на плане')) ? h('button', { class: 'sec', onclick: () => {
+          const ic = currentProject()?.typeIcons?.[p.typeId]; const on = !p.pos.icon;
+          const pos = on ? { ...p.pos, icon: true, w: ic?.w || p.pos.w || 10, h: ic?.h || p.pos.h || 10 } : { ...p.pos, icon: false };
+          getRepo().save(currentProject().id, [{ coll: 'points', id: p.id, data: { pos } }]);
+          toast(on ? (ic ? 'Значок типа нарисован' : 'Значок у типа не задан — задайте в плане «📌 Значки типов»') : 'Значок убран'); close();
+        } }, p.pos.icon ? '🖼 Убрать значок типа' : '🖼 Нарисовать значок типа') : null),
       h('div', { class: 'group', style: { padding: '12px 0 6px' } }, `История работ (${rows.length})`),
       rows.length ? h('div', {}, rows.map((r) => {
         const who = whoIs(proj, r.by);
