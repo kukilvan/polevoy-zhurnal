@@ -11,6 +11,7 @@ import { tablesOf, mainTable, withTable, readinessByCabinet } from '../../domain
 import { runBackup, BACKUP_FOLDER, backupName } from '../backup.js';
 import { liveProjects } from '../store.js';
 import { filesIn } from '../drivefolders.js';
+import { cacheGet, pushDrawing } from '../drawings.js';
 import { memberLabel, memberNameByUid } from './members.js';
 import { hint } from './guide.js';
 import { exportExcel } from '../excel.js';
@@ -51,8 +52,14 @@ export async function organizeDrive(retried = false) {
   if (syncing) return; syncing = true;
   try {
     toast('Раскладываю файлы на Диске по папкам проектов…');
-    const api = realApi(await getToken('folders')); let moved = 0;
+    const api = realApi(await getToken('folders')); let moved = 0; let uploaded = 0; const missing = [];
     for (const p of liveProjects()) {
+      // чертежи, которые есть только на устройстве (не ушли на Диск), — загрузить, если файл есть на этом устройстве
+      for (const d of (p.drawings || []).filter((x) => !x.fileId && !x.deleted)) {
+        const buf = await cacheGet(d.id);
+        if (!buf) { missing.push(d.title || d.name); continue; }
+        try { await pushDrawing(d, buf, p); uploaded++; } catch (e) { console.warn('push', e); missing.push(d.title || d.name); }
+      }
       for (const d of (p.drawings || []).filter((x) => x.fileId && !x.deleted)) if (await api.placeIn(d.fileId, p, 'drawings')) moved++;
       for (const t of (p.tables || []).filter((x) => x.fileId)) if (await api.placeIn(t.fileId, p)) moved++;
       const prefix = backupName(p, new Date()).replace(/ \d{4}-\d{2}-\d{2}\.json$/, ' ');
@@ -60,7 +67,7 @@ export async function organizeDrive(retried = false) {
       for (const f of olds) if (await api.placeIn(f.id, p, 'backups')) moved++;
       await api.projectFolder(p);  // папка есть у каждого проекта, даже без файлов
     }
-    toast(`Готово: переложено файлов — ${moved}. Всё в папке «Полевой журнал» на Диске. Старые пустые папки можно удалить вручную.`);
+    toast(`Готово: переложено файлов — ${moved}${uploaded ? `, загружено чертежей — ${uploaded}` : ''}. Всё в папке «Полевой журнал» на Диске.${missing.length ? ` Нет на этом устройстве (загрузите с того, где добавляли): ${missing.join(', ')}` : ''}`);
   } catch (e) {
     if (e.status === 401 && retried !== true) { clearToken(); syncing = false; return organizeDrive(true); }
     toast(`Не получилось: ${e.message || e}`); console.error('folders', e);

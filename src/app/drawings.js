@@ -35,8 +35,8 @@ async function drive(method, url, { body, headers = {}, raw = false } = {}, retr
 const D = 'https://www.googleapis.com/drive/v3/files';
 // Загрузка большого файла по частям не нужна: возобновляемая загрузка одним куском (до сотен МБ)
 const dreq = (method, url, body) => drive(method, url, body ? { body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } } : {});
-async function uploadPdf(name, buf) {
-  const parent = await projectFolder(dreq, currentProject(), 'drawings');
+async function uploadPdf(name, buf, p = currentProject()) {
+  const parent = await projectFolder(dreq, p, 'drawings');
   const init = await drive('POST', 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id', {
     body: JSON.stringify({ name, parents: [parent], mimeType: 'application/pdf' }), headers: { 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': 'application/pdf' }, raw: true });
   const loc = init.headers.get('Location'); if (!loc) throw new Error('Диск не дал адрес для загрузки');
@@ -66,12 +66,12 @@ export async function addDrawing(buf, { name, floor = '', pages = [], push = tru
   return entry;
 }
 /** Отправить на Диск чертёж, который пока только на этом устройстве */
-export async function pushDrawing(entry, buf = null) {
+export async function pushDrawing(entry, buf = null, proj = currentProject()) {
   if (mem()) return entry;
   const data = buf || await cacheGet(entry.id); if (!data) throw new Error('Файла чертежа нет на этом устройстве');
-  const fileId = await uploadPdf(entry.name, data);
-  await shareDrawing(fileId);
-  const p = currentProject();
+  const fileId = await uploadPdf(entry.name, data, proj);
+  await shareDrawing(fileId, proj);
+  const p = proj;
   getRepo().saveProject(p.id, { drawings: (p.drawings || []).map((d) => (d.id === entry.id ? { ...d, fileId } : d)) });
   return { ...entry, fileId };
 }
