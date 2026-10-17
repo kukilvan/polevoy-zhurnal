@@ -2,7 +2,7 @@
 import { makeWorker } from './tohnitview.js';
 import { toast } from '../ui.js';
 import { currentProject } from '../store.js';
-import { drawingTitle } from '../drawings.js';
+import { drawingTitle, putNumbered } from '../drawings.js';
 
 export async function exportNumberedPdf(drawing, buf, points) {
   if (!points.length) { toast('На этом чертеже нет точек'); return; }
@@ -14,5 +14,7 @@ export async function exportNumberedPdf(drawing, buf, points) {
     const a = document.createElement('a'); a.href = url; a.download = name; document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 60000);
     toast(`Готово: ${name}`);
+    // и на Диск — в папку проекта «Чертежи с номерами» (заменяет прошлую версию)
+    putNumbered(name, out).then((id) => { if (id) toast(`«${name}» обновлён на Google Диске (Чертежи с номерами)`); }).catch((e) => toast(`На Диск не получилось: ${e.message}`));
   } finally { wk.stop(); }
 }
