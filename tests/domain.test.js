@@ -731,3 +731,21 @@ test('повторы работ: нижний уровень главнее, в 
   assert.deepEqual(d.ops.find((o) => o.coll === 'types').data.workIds, ['W_CHK']);
   assert.deepEqual(d.ops.find((o) => o.coll === 'devices').data.workIds, ['W_INST']);
 });
+
+test('повторы работ не трогают количества: 2 магнита, несколько кабелей', async () => {
+  const { buildContext, tasksOf } = await import('../src/domain/index.js');
+  const ctx = buildContext({
+    catalog: [{ id: 'W_MAG', name: 'Установка магнита', workType: 'Установка' }, { id: 'W_HS', name: 'Хивут в шкафу', workType: 'Хивут' }, { id: 'W_HK', name: 'Хивут кистона', workType: 'Хивут' }, { id: 'W_CHK', name: 'Проверка двери', workType: 'Проверка' }],
+    cables: [{ id: '6005', workIds: ['W_HS'] }, { id: 'cat7', workIds: ['W_HK', 'W_HS'] }],
+    devices: [{ id: 'DV_MAG', name: 'Магнит индикация', cables: [{ cable: '6005', count: 1 }], workIds: ['W_MAG'] }, { id: 'DV_CR', name: 'Коре', cables: [{ cable: 'cat7', count: 2 }], workIds: ['W_HK'] }],
+    types: [{ id: 'Дверь', devices: [{ deviceId: 'DV_MAG', count: 2 }, { deviceId: 'DV_CR', count: 1 }], cables: [{ cable: '6005', count: 3 }], workIds: ['W_CHK'] }],
+    points: [{ id: 'p1', label: 'D-1', typeId: 'Дверь' }],
+  });
+  const t = tasksOf(ctx.points.get('p1'), ctx);
+  const q = (dev, w) => t.find((x) => x.deviceId === dev && x.workId === w)?.qty;
+  const pull = (dev, c) => t.find((x) => x.deviceId === dev && x.stage === 'Протяжка' && x.cable === c)?.qty;
+  assert.equal(pull('DV_MAG', '6005'), 2); assert.equal(q('DV_MAG', 'W_MAG'), 2); assert.equal(q('DV_MAG', 'W_HS'), 2);   // 2 магнита
+  assert.equal(pull('DV_CR', 'cat7'), 2); assert.equal(q('DV_CR', 'W_HK'), 2); assert.equal(q('DV_CR', 'W_HS'), 2);        // 2 кабеля cat7: кистон — 2, а не 2+1
+  assert.equal(t.filter((x) => x.stage === 'Протяжка' && x.cable === '6005').reduce((n, x) => n + x.qty, 0), 5);         // 2 от магнитов + 3 кабеля точки
+  assert.equal(t.filter((x) => x.workId === 'W_CHK').length, 1);
+});
