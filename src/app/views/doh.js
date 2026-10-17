@@ -202,8 +202,8 @@ function entryForm(day, entry, preset) {
       { key: 'note', label: 'Приписка', type: 'textarea', hint: 'Для «своей строки» — весь текст строки доха.', visible: (v) => !!v.workType },
     ],
     values: {
-      workType: entry?.workType, workId: entry?.workId, pointIds: entry?.pointIds ?? preset?.pointIds,
-      quantity: entry?.quantity, cableId: entry?.cableId, pullCount: entry?.workType === 'Протяжка' ? entry?.quantity : undefined,
+      workType: entry?.workType ?? preset?.workType, workId: entry?.workId ?? preset?.workId, pointIds: entry?.pointIds ?? preset?.pointIds,
+      quantity: entry?.quantity, cableId: entry?.cableId ?? preset?.cableId, pullCount: entry?.workType === 'Протяжка' ? entry?.quantity : undefined,
       meters: entry?.meters, minutes: entry?.minutes, culprit: entry?.culprit,
       result: entry?.result ?? 'Работает', note: entry?.note,
     },
@@ -262,11 +262,11 @@ function entryForm(day, entry, preset) {
 
 // «Добавить работу на эту точку»: запись в сегодняшний день (день создаётся при сохранении)
 // работа сразу на несколько точек (например, выбранных на плане)
-export function addWorkForPoints(pointIds) {
+export function addWorkForPoints(pointIds, preset = {}) {
   const p = currentProject(); const today = todayIso();
   const day = daysSorted().find((d) => d.date === today)
     || { id: newId(), date: today, helper: p.helper, helperHe: p.helperHe, _new: true };
-  entryForm(day, null, { pointIds: [...pointIds] });
+  entryForm(day, null, { ...preset, pointIds: [...pointIds] });
 }
 export function addWorkForPoint(pointId) {
   const p = currentProject(); const today = todayIso();
