@@ -113,6 +113,27 @@ export function readsResetAt() {
   const t = ptNow(); const left = 86400 - (Number(t.hour) * 3600 + Number(t.minute) * 60 + Number(t.second));
   return new Date(Date.now() + left * 1000);
 }
+// ---------- состояние чтения с сервера (значок «⬇» вверху) ----------
+// Каждый слушатель ждёт первый ответ сервера; пока не дождался — он «в очереди на чтение». Ошибка (например, лимит) — запоминаем.
+const readWait = new Map(); const readFail = new Map(); const readSubs = new Set();
+let readSeq = 0;
+const readEmit = () => readSubs.forEach((f) => { try { f(); } catch { /* */ } });
+export const onReadChange = (fn) => { readSubs.add(fn); return () => readSubs.delete(fn); };
+export const readStatus = () => {
+  const since = readWait.size ? Math.min(...readWait.values()) : 0;
+  return { waiting: readWait.size, since, failed: [...readFail.entries()].map(([label, code]) => ({ label, code })) };
+};
+// readTrack(label): wait() — ждём сервер; ok() — сервер ответил; fail(e) — ошибка; stop() — слушатель снят
+function readTrack(label) {
+  const id = ++readSeq; const key = `${label}#${id}`;
+  const t = {
+    wait() { if (!readWait.has(key)) { readWait.set(key, Date.now()); readEmit(); } },
+    ok() { const ch = readWait.delete(key) | readFail.delete(label); if (ch) readEmit(); },
+    fail(e) { readWait.delete(key); readFail.set(label, e?.code || 'error'); readEmit(); },
+    stop() { const ch = readWait.delete(key); if (ch) readEmit(); },
+  };
+  t.wait(); return t;
+}
 const addReads = (n) => {
   if (!n) return; serverReads += n;
   try { localStorage.setItem('pz.reads', JSON.stringify({ day: ptDay(), n: readsToday() + n })); } catch { /* без хранилища */ }
@@ -121,17 +142,20 @@ const addReads = (n) => {
 // Слушатель коллекции с экономией чтений: после первой полной загрузки — кэш + только изменённые документы.
 function deltaListen(col, key, shape, label, cb, retryDenied = false) {
   let unsub = () => {}; let stopped = false; let tries = 0; let timer = null;
+  const tr = readTrack(label);
   const onErr = (restart) => (e) => {
     if (stopped) return;
+    if (!(retryDenied && e.code === 'permission-denied' && tries < 15)) tr.fail(e);
     if (retryDenied && e.code === 'permission-denied' && tries < 15) { tries++; timer = setTimeout(() => { if (!stopped) restart(); }, 1500); return; }
     error(label, `${e.code || ''} ${e.message || e}`);
   };
   // как раньше: слушаем всю коллекцию (первый запуск, раз в неделю, при неполном кэше)
   const startFull = () => {
     let stamped = false; // отметка времени полной загрузки ставится один раз за запуск
-    unsub = onSnapshot(col, (snap) => {
+    unsub = onSnapshot(col, { includeMetadataChanges: true }, (snap) => {
       tries = 0;
       if (!snap.metadata.fromCache) {
+        tr.ok();
         addReads(snap.docChanges().length);
         const prev = metaGet(key) || {};
         const last = maxMillis([prev.last, ...snap.docs.map(srvMillis)]);
@@ -144,9 +168,9 @@ function deltaListen(col, key, shape, label, cb, retryDenied = false) {
   const startDelta = (meta) => {
     const map = new Map();
     const q = query(col, where('updatedAtServer', '>', Timestamp.fromMillis(meta.last - DELTA_MARGIN)));
-    unsub = onSnapshot(q, (snap) => {
+    unsub = onSnapshot(q, { includeMetadataChanges: true }, (snap) => {
       tries = 0;
-      if (!snap.metadata.fromCache) addReads(snap.docChanges().length);
+      if (!snap.metadata.fromCache) { tr.ok(); addReads(snap.docChanges().length); }
       snap.docChanges().forEach((ch) => { if (ch.type === 'removed') map.delete(ch.doc.id); else map.set(ch.doc.id, shape(ch.doc)); });
       const prev = metaGet(key) || meta;
       if (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites) {
@@ -170,7 +194,7 @@ function deltaListen(col, key, shape, label, cb, retryDenied = false) {
     } catch { if (!stopped) startFull(); }
   };
   start();
-  return () => { stopped = true; clearTimeout(timer); unsub(); };
+  return () => { stopped = true; clearTimeout(timer); tr.stop(); unsub(); };
 }
 
 // ---------- хранилище: Firestore ----------
@@ -178,9 +202,10 @@ export function createFirestoreBackend(db, uid) {
   return {
     kind: 'firestore',
     listenProjects(_uid, cb) {
-      const q = query(collection(db, 'projects'), where('memberUids', 'array-contains', uid));
-      return onSnapshot(q, (snap) => cb(snap.docs.map((d) => ({ ...d.data(), _pending: d.metadata.hasPendingWrites }))),
-        (e) => error('Чтение проектов', `${e.code || ''} ${e.message || e}`));
+      const q = query(collection(db, 'projects'), where('memberUids', 'array-contains', uid)); const tr = readTrack('Список проектов');
+      const un = onSnapshot(q, { includeMetadataChanges: true }, (snap) => { if (!snap.metadata.fromCache) tr.ok(); cb(snap.docs.map((d) => ({ ...d.data(), _pending: d.metadata.hasPendingWrites }))); },
+        (e) => { tr.fail(e); error('Чтение проектов', `${e.code || ''} ${e.message || e}`); });
+      return () => { tr.stop(); un(); };
     },
     async loadHistory(pid, since, max) {
       const q = query(collection(db, 'projects', pid, 'history'), where('at', '>=', since), orderBy('at', 'desc'), fbLimit(max));

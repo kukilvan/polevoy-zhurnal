@@ -8,7 +8,7 @@ import { settingsView, refView, REFS } from './views/settings.js';
 import { membersView } from './views/members.js';
 import { installView } from './views/install.js';
 import { PENDING } from './google.js';
-import { onPendingChange } from './repo.js';
+import { onPendingChange, onReadChange, readStatus, readsResetAt } from './repo.js';
 import { themeLabel, setTheme, nextTheme } from './theme.js';
 import { projectView, updateManagerTable, updateTable, backupNow, organizeDrive } from './views/project.js';
 import { meterView } from './views/points.js';
@@ -92,7 +92,7 @@ export function createShell({ user, onLogout, diag }) {
     if (!n) { pendingSince = 0; if (badge) badge.style.display = 'none'; return n; }
     if (!pendingSince) pendingSince = Date.now();
     if (badge) {
-      badge.style.display = ''; badge.textContent = `⏳ ${n} ждут отправки`;
+      badge.style.display = ''; badge.textContent = `⬆ ${n}`; badge.title = `Ждут отправки на сервер: ${n}`;
       badge.className = `pill ${state.online && Date.now() - pendingSince > 90000 ? 'err' : 'warn'}`;
     }
     return n;
@@ -105,8 +105,31 @@ export function createShell({ user, onLogout, diag }) {
     paintBadge();
     return badge;
   }
-  setInterval(paintBadge, 5000);
-  onPendingChange(paintBadge);
+  // «⬇ N»: сколько разделов ещё ждут ответа сервера (чтение). Красный — ошибка (например, лимит) или ждём дольше 30 секунд онлайн
+  let rbadge = null;
+  const LIMIT_CODES = ['resource-exhausted'];
+  const paintRead = () => {
+    if (!rbadge) return;
+    const r = readStatus(); const n = r.waiting + r.failed.length;
+    if (!n) { rbadge.style.display = 'none'; return; }
+    const slow = state.online && r.waiting && Date.now() - r.since > 30000;
+    const limit = r.failed.some((x) => LIMIT_CODES.includes(x.code));
+    rbadge.style.display = ''; rbadge.textContent = limit ? '⬇ лимит' : r.failed.length ? `⬇ ошибка` : `⬇ ${r.waiting}`;
+    rbadge.className = `pill ${r.failed.length || slow ? 'err' : 'warn'}`;
+  };
+  function readBadge() {
+    rbadge = h('span', { class: 'pill warn', style: { display: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }, onclick: () => {
+      const r = readStatus(); const hhmm = readsResetAt().toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+      if (r.failed.some((x) => LIMIT_CODES.includes(x.code))) { toast(`Исчерпан суточный лимит чтения базы. Новые данные с сервера не приходят до ${hhmm}; приложение работает на том, что уже есть на устройстве, записи копятся и уйдут позже`); return; }
+      if (r.failed.length) { toast(`Не удалось прочитать с сервера: ${r.failed.map((x) => `${x.label} (${x.code})`).join(', ')}`); return; }
+      if (!r.waiting) { toast('Всё получено с сервера'); return; }
+      toast(state.online ? `Ждём данные с сервера: ${r.waiting} разд. Пока показано то, что есть на устройстве. Если долго не уходит — слабая связь или лимит базы (сбросится в ${hhmm})` : `Ждём данные с сервера: ${r.waiting} разд. Придут, когда появится интернет`);
+    } });
+    paintRead();
+    return rbadge;
+  }
+  setInterval(() => { paintBadge(); paintRead(); }, 5000);
+  onPendingChange(paintBadge); onReadChange(paintRead);
 
   function render() {
     const p = currentProject();
@@ -115,6 +138,7 @@ export function createShell({ user, onLogout, diag }) {
       h('div', { class: 'topbar' },
         ui.screen ? h('button', { class: 'sec', onclick: () => ui.back() }, '←') : h('button', { class: 'sec', onclick: menu }, '☰'),
         h('div', { class: 'title' }, title),
+        readBadge(),
         pendingBadge(),
         h('span', { class: `pill ${state.online ? 'ok' : 'warn'}` }, state.online ? 'онлайн' : 'офлайн'),
         ui.screen ? null : h('button', { class: 'sec', onclick: menu }, '⋯')),
