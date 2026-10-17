@@ -18,18 +18,20 @@ const dir = path.join(root, stamp(now));
 fs.mkdirSync(dir, { recursive: true });
 
 // ошибки и итог — пометками GitHub (видны в сводке запуска без скачивания журнала)
-process.on('unhandledRejection', (e) => { console.log(`::error::Копия не сделана: ${String(e?.stack || e).replace(/\n/g, ' | ').slice(0, 900)}`); process.exit(1); });
-const refs = await db.collection('projects').listDocuments();
-if (!refs.length) { console.error('В базе нет проектов: копия не создана'); process.exit(1); }
-const done = [];
-for (const ref of refs) {
-  const p = await readProject(ref);
-  if (isDeleted(p.project)) { console.log(`Пропущен удалённый проект: ${p.project.name}`); continue; }
-  done.push(writeProjectBackup(dir, p, now));
-  // отметка в проекте, чтобы приложение показывало дату последней автокопии
-  await ref.set({ serverBackupAt: now.toISOString() }, { merge: true });
-}
-fs.writeFileSync(path.join(dir, 'ИТОГ.json'), JSON.stringify({ at: now.toISOString(), projects: done }, null, 2));
-const dropped = pruneOld(root, KEEP);
-console.log(`Скопировано проектов: ${done.length}. Удалено старых копий: ${dropped.length}.`);
-done.forEach((d) => console.log(`::notice::${d.name}: ${Object.entries(d.counts).map(([k, v]) => `${k} ${v}`).join(', ')}`));
+const fail = (e) => { console.log(`::error::Копия не сделана: ${String(e?.stack || e).replace(/\n/g, ' | ').slice(0, 900)}`); process.exit(1); };
+try {
+  const refs = await db.collection('projects').listDocuments();
+  if (!refs.length) { console.error('В базе нет проектов: копия не создана'); process.exit(1); }
+  const done = [];
+  for (const ref of refs) {
+    const p = await readProject(ref);
+    if (isDeleted(p.project)) { console.log(`Пропущен удалённый проект: ${p.project.name}`); continue; }
+    done.push(writeProjectBackup(dir, p, now));
+    // отметка в проекте, чтобы приложение показывало дату последней автокопии
+    await ref.set({ serverBackupAt: now.toISOString() }, { merge: true });
+  }
+  fs.writeFileSync(path.join(dir, 'ИТОГ.json'), JSON.stringify({ at: now.toISOString(), projects: done }, null, 2));
+  const dropped = pruneOld(root, KEEP);
+  console.log(`Скопировано проектов: ${done.length}. Удалено старых копий: ${dropped.length}.`);
+  done.forEach((d) => console.log(`::notice::${d.name}: ${Object.entries(d.counts).map(([k, v]) => `${k} ${v}`).join(', ')}`));
+} catch (e) { fail(e); }
