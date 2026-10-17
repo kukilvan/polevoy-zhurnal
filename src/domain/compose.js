@@ -51,14 +51,16 @@ export function tasksOf(point, ctx, comp = compositionOf(point, ctx)) {
       tasks.push({ key: `${deviceId}|pull|${c.cable}`, stage: 'Протяжка', deviceId, cable: c.cable, qty: n * c.count });
       (ctx.cables.get(c.cable)?.workIds || []).forEach((w) => addWork(w, n * c.count));
     });
-    (dev.workIds || []).forEach((w) => addWork(w, n));
+    // работа устройства, которая уже приходит от его кабеля, — не второй раз (нижний уровень главнее)
+    (dev.workIds || []).forEach((w) => { if (!workQty.has(w)) addWork(w, n); });
     workQty.forEach((qty, workId) => {
       const work = ctx.catalog.get(workId); if (!work) return;
       tasks.push({ key: `${deviceId}|${workId}`, stage: work.workType, deviceId, workId, qty });
     });
   });
+  const fromParts = new Set(tasks.map((t) => t.workId).filter(Boolean));
   (type?.workIds || []).forEach((workId) => {
-    const work = ctx.catalog.get(workId); if (!work) return;
+    const work = ctx.catalog.get(workId); if (!work || fromParts.has(workId)) return;  // уже есть у устройства/кабеля точки
     tasks.push({ key: `*|${workId}`, stage: work.workType, deviceId: null, workId, qty: 1 });
   });
   return tasks;
@@ -280,4 +282,47 @@ export function auditRefs(ctx) {
     if (['Хивут', 'Установка', 'Проверка', 'Шилют'].includes(w.workType) && w.active !== false && !usedWork.has(w.id)) info(`Работа «${W(w.id)}» (${w.workType}) не требуется ни одним кабелем, устройством или типом`);
   });
   return out;
+}
+
+// Работы, которые уже приходят с нижнего уровня (для серых галочек и для очистки повторов): Map workId → откуда
+export function inheritedFromCables(ctx, cables = []) {
+  const out = new Map();
+  (cables || []).forEach((c) => (ctx.cables.get(c.cable)?.workIds || []).forEach((w) => { if (!out.has(w)) out.set(w, `кабель «${c.cable}»`); }));
+  return out;
+}
+export function inheritedOfType(ctx, devices = [], cables = []) {
+  const out = new Map();
+  (devices || []).forEach((d) => {
+    const dev = ctx.devices.get(d.deviceId); if (!dev) return;
+    (dev.workIds || []).forEach((w) => { if (!out.has(w)) out.set(w, `устройство «${dev.name}»`); });
+    inheritedFromCables(ctx, dev.cables).forEach((v, w) => { if (!out.has(w)) out.set(w, `${v} устройства «${dev.name}»`); });
+  });
+  inheritedFromCables(ctx, cables).forEach((v, w) => { if (!out.has(w)) out.set(w, `${v} точки`); });
+  return out;
+}
+// Повторы в справочниках и точках: [{ coll, id, name, workId, from }] + ops (убрать лишнюю копию на верхнем уровне)
+export function duplicateWorks(ctx) {
+  const found = []; const ops = [];
+  const w = (id) => ctx.catalog.get(id)?.name || id;
+  ctx.devices.forEach((d) => {
+    const inh = inheritedFromCables(ctx, d.cables); const dup = (d.workIds || []).filter((x) => inh.has(x));
+    if (dup.length) { dup.forEach((x) => found.push({ what: `Устройство «${d.name}»`, work: w(x), from: inh.get(x) })); ops.push({ coll: 'devices', id: d.id, data: { workIds: d.workIds.filter((x) => !inh.has(x)) } }); }
+  });
+  ctx.types.forEach((t) => {
+    if (!Array.isArray(t.devices)) return;
+    const inh = inheritedOfType(ctx, t.devices, t.cables); const dup = (t.workIds || []).filter((x) => inh.has(x));
+    if (dup.length) { dup.forEach((x) => found.push({ what: `Тип «${t.id}»`, work: w(x), from: inh.get(x) })); ops.push({ coll: 'types', id: t.id, data: { workIds: t.workIds.filter((x) => !inh.has(x)) } }); }
+  });
+  ctx.points.forEach((p) => {
+    if (!Array.isArray(p.devices)) return; let changed = false;
+    const devices = p.devices.map((e) => {
+      if (!Array.isArray(e.workIds)) return e;
+      const base = ctx.devices.get(e.deviceId) || {}; const inh = inheritedFromCables(ctx, Array.isArray(e.cables) ? e.cables : base.cables);
+      const dup = e.workIds.filter((x) => inh.has(x)); if (!dup.length) return e;
+      changed = true; dup.forEach((x) => found.push({ what: `Точка ${p.label}, устройство «${base.name || e.deviceId}»`, work: w(x), from: inh.get(x) }));
+      return { ...e, workIds: e.workIds.filter((x) => !inh.has(x)) };
+    });
+    if (changed) ops.push({ coll: 'points', id: p.id, data: { devices } });
+  });
+  return { found, ops };
 }

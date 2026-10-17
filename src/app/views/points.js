@@ -1,7 +1,7 @@
 // Точки: форма точки, генератор пачкой, карточка точки с историей, вкладка «Точки».
 import { h, formModal, openModal, confirmDialog, toast, qtyList } from '../ui.js';
 import { state, getRepo, pointsSorted, infoOf, currentProject } from '../store.js';
-import { generateLabels, parseSuffixes, comparePoints, renameLabel, usesConfig, remaining, REMAIN_STAGES, hasDeviceId, normalizeMac, findDuplicate } from '../../domain/index.js';
+import { generateLabels, parseSuffixes, comparePoints, renameLabel, inheritedFromCables, usesConfig, remaining, REMAIN_STAGES, hasDeviceId, normalizeMac, findDuplicate } from '../../domain/index.js';
 import { scanDevice } from '../scan.js';
 import { statusClass } from './project.js';
 import { hint } from './guide.js';
@@ -36,13 +36,20 @@ function compField(point) {
   // редактор устройства для этой точки: кабели и работы (по умолчанию — как в «Устройствах»)
   const editor = (r) => {
     const dev = ctx.devices.get(r.deviceId) || {};
-    const q = qtyList(cableOpts, { addLabel: '➕ Кабель', empty: 'Без кабеля', onChange: () => { r.cables = q.get().map((c) => ({ cable: c.value, count: c.count })); mark(); } });
+    const q = qtyList(cableOpts, { addLabel: '➕ Кабель', empty: 'Без кабеля', onChange: () => { r.cables = q.get().map((c) => ({ cable: c.value, count: c.count })); mark(); paintWorks(); } });
     q.set((Array.isArray(r.cables) ? r.cables : dev.cables || []).map((c) => ({ value: c.cable, count: c.count })));
     const cur = new Set(Array.isArray(r.workIds) ? r.workIds : dev.workIds || []);
-    const wl = h('div', { class: 'picklist', style: { maxHeight: '180px' } }, [...works].sort((a, b) => cur.has(b.id) - cur.has(a.id)).map((w) => {
-      const cb = h('input', { type: 'checkbox', checked: cur.has(w.id), onchange: () => { cb.checked ? cur.add(w.id) : cur.delete(w.id); r.workIds = works.filter((x) => cur.has(x.id)).map((x) => x.id); mark(); } });
-      return h('label', { class: 'pickrow' }, cb, h('span', {}, w.name), h('small', {}, w.workType));
-    }));
+    // работы кабелей устройства — серые (уже есть), здесь не сохраняются
+    const wl = h('div', { class: 'picklist', style: { maxHeight: '180px' } });
+    const paintWorks = () => {
+      const inh = inheritedFromCables(ctx, Array.isArray(r.cables) ? r.cables : dev.cables || []);
+      wl.replaceChildren(...[...works].sort((a, b) => (cur.has(b.id) || inh.has(b.id)) - (cur.has(a.id) || inh.has(a.id))).map((w) => {
+        const lock = inh.has(w.id);
+        const cb = h('input', { type: 'checkbox', checked: lock || cur.has(w.id), disabled: lock, onchange: () => { cb.checked ? cur.add(w.id) : cur.delete(w.id); r.workIds = works.filter((x) => cur.has(x.id) && !inh.has(x.id)).map((x) => x.id); mark(); } });
+        return h('label', { class: 'pickrow' }, cb, h('span', {}, w.name, lock ? h('small', { class: 'mut' }, `  · уже есть: ${inh.get(w.id)}`) : null), h('small', {}, w.workType));
+      }));
+    };
+    paintWorks();
     const mark = () => { title.textContent = `Устройство «${dev.name || r.deviceId}» на этой точке${Array.isArray(r.cables) || Array.isArray(r.workIds) ? ' — изменено' : ''}`; };
     const title = h('div', { class: 'mut', style: { fontWeight: 600 } }); mark();
     return h('div', { class: 'dev-edit' }, title,

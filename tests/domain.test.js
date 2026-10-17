@@ -711,3 +711,23 @@ test('групповое переименование точек', async () => {
   assert.equal(renameLabel('A1-B1', { find: '1', replace: '' }), 'A-B');
   assert.equal(renameLabel('X-01', { shift: -1 }), 'X-00');
 });
+
+test('повторы работ: нижний уровень главнее, в задачах точки работа один раз', async () => {
+  const { buildContext, tasksOf, duplicateWorks, inheritedOfType } = await import('../src/domain/index.js');
+  const ctx = buildContext({
+    catalog: [{ id: 'W_INST', name: 'Установка интеркома', workType: 'Установка' }, { id: 'W_HK', name: 'Хивут кистона', workType: 'Хивут' }, { id: 'W_CHK', name: 'Проверка', workType: 'Проверка' }],
+    cables: [{ id: 'cat7', workIds: ['W_HK'] }],
+    devices: [{ id: 'DV_INT', name: 'Интерком', cables: [{ cable: 'cat7', count: 1 }], workIds: ['W_INST', 'W_HK'] }],
+    types: [{ id: 'Интерком', devices: [{ deviceId: 'DV_INT', count: 1 }], cables: [], workIds: ['W_INST', 'W_CHK'] }],
+    points: [{ id: 'p1', label: 'INT-1', typeId: 'Интерком' }],
+  });
+  const tasks = tasksOf(ctx.points.get('p1'), ctx);
+  assert.equal(tasks.filter((t) => t.workId === 'W_INST').length, 1);
+  assert.equal(tasks.find((t) => t.workId === 'W_HK').qty, 1);  // кабель + устройство — не 2
+  assert.equal(tasks.filter((t) => t.workId === 'W_CHK').length, 1);
+  assert.deepEqual([...inheritedOfType(ctx, [{ deviceId: 'DV_INT', count: 1 }]).keys()].sort(), ['W_HK', 'W_INST']);
+  const d = duplicateWorks(ctx);
+  assert.equal(d.found.length, 2);
+  assert.deepEqual(d.ops.find((o) => o.coll === 'types').data.workIds, ['W_CHK']);
+  assert.deepEqual(d.ops.find((o) => o.coll === 'devices').data.workIds, ['W_INST']);
+});

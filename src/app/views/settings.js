@@ -3,7 +3,7 @@ import { allGroups } from '../typegroups.js';
 import { h, formModal, confirmDialog, toast, qtyList, openModal } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { newId } from '../repo.js';
-import { installBinding, tablesOf, mainTable, hasDeviceId, libraryOps, migrateProject, auditRefs, buildContext, typePool, bundleFrom, libWith, addBundleOps, isSystemType } from '../../domain/index.js';
+import { inheritedOfType, inheritedFromCables, duplicateWorks, installBinding, tablesOf, mainTable, hasDeviceId, libraryOps, migrateProject, auditRefs, buildContext, typePool, bundleFrom, libWith, addBundleOps, isSystemType } from '../../domain/index.js';
 import { installFields, describeBinding } from './install.js';
 import { projectForm } from './projects.js';
 import { themeLabel, setTheme, nextTheme } from '../theme.js';
@@ -16,17 +16,29 @@ export const WORK_TYPES = ['Протяжка', 'Перетяжка', 'Перен
 const STAGES = ['Протяжка', 'Хивут', 'Установка', 'Проверка', 'Шилют'];
 
 // Список галочек: варианты {value,label}; get() возвращает выбранные значения в порядке списка
-function checkList(options, { empty = 'Список пуст', onCreate, createLabel = '🆕 Создать новое', onChange } = {}) {
-  const boxes = new Map(); options = [...options];
-  const row = (o) => { const cb = h('input', { type: 'checkbox', onchange: () => onChange?.() }); boxes.set(o.value, cb); return h('label', { class: 'pickrow' }, cb, h('span', {}, o.label)); };
+// locked(values) → Map значение → «откуда»: такие пункты уже есть на нижнем уровне — серая отмеченная галочка, не сохраняются здесь
+function checkList(options, { empty = 'Список пуст', onCreate, createLabel = '🆕 Создать новое', onChange, locked } = {}) {
+  const boxes = new Map(); const notes = new Map(); const manual = new Map(); let lockMap = new Map(); options = [...options];
+  const row = (o) => { const cb = h('input', { type: 'checkbox', onchange: () => onChange?.() }); const note = h('small', { class: 'mut' }); boxes.set(o.value, cb); notes.set(o.value, note); return h('label', { class: 'pickrow' }, cb, h('span', {}, o.label, note)); };
+  const applyLocks = (m) => {
+    lockMap = m || new Map();
+    boxes.forEach((cb, v) => {
+      if (lockMap.has(v)) { if (!cb.disabled) manual.set(v, cb.checked); cb.checked = true; cb.disabled = true; notes.get(v).textContent = `  · уже есть: ${lockMap.get(v)}`; }
+      else if (cb.disabled) { cb.disabled = false; cb.checked = !!manual.get(v); notes.get(v).textContent = ''; }
+    });
+  };
   const list = h('div', { class: 'picklist', style: { maxHeight: '220px' } }, options.length ? options.map(row) : h('div', { class: 'empty' }, empty));
   // новый пункт: в начало списка и сразу отмечен
   const add = (o) => { if (!options.length) list.replaceChildren(); if (!boxes.has(o.value)) { options.unshift(o); list.prepend(row(o)); } boxes.get(o.value).checked = true; onChange?.(); };
   const el = onCreate ? h('div', {}, list, h('div', { class: 'btns', style: { marginTop: '4px' } }, h('button', { type: 'button', class: 'sec', onclick: () => onCreate(add) }, createLabel))) : list;
-  return { el, get: () => options.filter((o) => boxes.get(o.value).checked).map((o) => o.value), set: (vals) => boxes.forEach((cb, v) => { cb.checked = (vals || []).includes(v); }) };
+  return {
+    el, get: () => options.filter((o) => boxes.get(o.value).checked && !lockMap.has(o.value)).map((o) => o.value),
+    set: (vals) => { boxes.forEach((cb, v) => { cb.disabled = false; cb.checked = (vals || []).includes(v); manual.set(v, cb.checked); }); applyLocks(lockMap); },
+    update: (v) => { if (locked) applyLocks(locked(v)); },
+  };
 }
 const custom = (key, label, options, extra = {}) => ({
-  key, label, type: 'custom', ...extra, build: (api) => { const c = checkList(options, { ...extra, onChange: api.changed }); c.set(api.value); return c; },
+  key, label, type: 'custom', ...extra, build: (api) => { const c = checkList(options, { ...extra, onChange: api.changed }); c.set(api.value); if (extra.locked) setTimeout(() => { try { c.update(api.values()); } catch { /* форма ещё строится */ } }, 0); return c; },
 });
 // «🆕 Новое …» внутри формы: открыть форму справочника поверх, после «Сохранить» вернуться и сразу добавить созданное
 const workLabel = (d) => `${d.name} · ${d.workType}`;
@@ -97,7 +109,8 @@ export const REFS = {
         qtyField('cables', 'Кабели точки (не от устройств)', opts(ctx().cables, (c) => c.id), 'cable',
           { addLabel: '➕ Добавить кабель', empty: 'Нет — кабели только от устройств', ...creator('cables', '🆕 Новый кабель'),
             hint: 'Когда несколько авизарим сидят на одном кабеле: например, дверь — 2×6005 на точку, а устройства без кабелей. Работы кабелей (хивут, проверка…) добавятся сами.' }),
-        { ...custom('pointWorks', 'Работы на всю точку', taskWorks(), { hint: 'Не по устройствам, а один раз на точку: например, проверка двери. Новая работа, созданная здесь, сама получит этот тип в «Для каких типов точек».', empty: 'Нет работ',
+        { ...custom('pointWorks', 'Работы на всю точку', taskWorks(), { hint: 'Не по устройствам, а один раз на точку: например, проверка двери. Серые галочки — работы, которые уже есть у устройств или кабелей состава (второй раз не нужны). Новая работа, созданная здесь, сама получит этот тип в «Для каких типов точек».', empty: 'Нет работ',
+          locked: (v) => inheritedOfType(ctx(), v.devices, v.cables),
           ...creator('catalog', '🆕 Новая работа', (id, data) => created?.set(id, data.forTypes || [])) }), visible: (v) => !legacy(v) },
         old({ key: 'defaultCable', label: 'Кабель по умолчанию', type: 'select', required: true, options: opts(ctx().cables, (c) => c.id), emptyLabel: 'Выберите' }),
         old({ key: 'defaultCables', label: 'Кабелей на точку', type: 'number', required: true }),
@@ -140,7 +153,7 @@ export const REFS = {
       { key: 'name', label: 'Название (русский)', required: true },
       { key: 'nameHe', label: 'Название (иврит)', required: true },
       qtyField('cables', 'Кабели', opts(ctx().cables, (c) => c.id), 'cable', { addLabel: '➕ Добавить кабель', empty: 'Без кабеля', ...creator('cables', '🆕 Новый кабель'), hint: 'Работы самого кабеля (хивут, проверка, шилют) добавятся сами — они заданы в «Кабели».' }),
-      custom('workIds', 'Работы устройства', taskWorks(), { hint: 'Обычно установка авизара; можно и другие (кивун, доп. работа).', empty: 'Нет работ', ...creator('catalog', '🆕 Новая работа') }),
+      custom('workIds', 'Работы устройства', taskWorks(), { hint: 'Обычно установка авизара; можно и другие (кивун, доп. работа). Серые галочки — работы его кабелей (уже есть, второй раз не нужны).', empty: 'Нет работ', locked: (v) => inheritedFromCables(ctx(), v.cables), ...creator('catalog', '🆕 Новая работа') }),
     ],
     defaults: {},
     prepare: (v) => ({ name: v.name, nameHe: v.nameHe, cables: v.cables || [], workIds: v.workIds || [] }),
@@ -231,6 +244,16 @@ export function auditModal() {
   openModal('Проверка справочников', h('div', {},
     h('div', { class: 'mut', style: { marginBottom: '8px' } }, '❌ — ссылка на то, чего нет (исправьте); ⚠️ — стоит посмотреть; ℹ️ — для сведения (не используется).'),
     auditBox(auditRefs(state.ctx))));
+}
+
+// ---- Повторы работ: работа на верхнем уровне (тип / устройство / устройство у точки), которая уже приходит с нижнего (устройство / кабель) ----
+function dupWorksModal() {
+  const { found, ops } = duplicateWorks(ctx());
+  if (!found.length) { toast('Повторов работ нет'); return; }
+  const c = openModal('🧹 Повторы работ', h('div', {},
+    h('div', { class: 'mut' }, 'Эти работы записаны дважды: на верхнем уровне и в составе (устройство или кабель). Лишняя копия на верхнем уровне будет убрана, работа в составе останется. Журнал не меняется.'),
+    h('div', { class: 'picklist', style: { maxHeight: '50vh' } }, found.map((f) => h('div', { class: 'pickrow' }, h('span', {}, h('b', {}, f.what), ` — «${f.work}»`, h('div', { class: 'sub mut' }, `уже есть: ${f.from}`))))),
+    h('div', { class: 'btns' }, h('button', { onclick: () => { getRepo().save(currentProject().id, ops); toast(`Убрано повторов: ${found.length}`); c(); } }, `🧹 Убрать (${found.length})`))), { sticky: true });
 }
 
 // ---- Общая группа для нескольких типов сразу (например, все двери) ----
@@ -342,6 +365,7 @@ export function refView() {
       ['devices', 'types', 'cables'].includes(key) ? h('button', { class: 'sec', onclick: addLibrary }, '📚 Добавить стандартные') : null,
       key === 'types' ? h('button', { class: 'sec', onclick: () => poolModal({ render: () => {} }) }, '🗂 Общий пул типов') : null,
       key === 'types' ? h('button', { class: 'sec', onclick: () => groupModal() }, '📂 Общая группа') : null,
+      key === 'types' ? h('button', { class: 'sec', onclick: () => dupWorksModal() }, '🧹 Убрать повторы работ') : null,
       key === 'types' && migrateProject(state.ctx, knownIds()).converted.length ? h('button', { class: 'wide', onclick: migrateTypes }, '🔄 Перевести старые типы на устройства') : null),
     h('div', { class: 'card', style: { padding: 0, marginTop: '12px' } }, rows.length ? rows : h('div', { class: 'empty' }, 'Список пуст.')));
 }
