@@ -230,7 +230,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
   // нажатие в режиме инструмента: прицепиться к ближайшей надписи/значку, дальше — по инструменту
   async function toolTap(d, pages, x, y, page, nearest) {
     const all = sheetPts(d);
-    if (tool === 'add') { const hit = nearest(all, (p) => p.pos, x, y, page); if (hit) { toast(`Здесь уже точка «${hit.label}»`); focusId = hit.id; viewer.draw(); openCard?.(hit); return; } }
+    if (tool === 'add') { const hit = nearest(all, (p) => p.pos, x, y, page); if (hit) { focusId = hit.id; viewer.draw(); existingCard(d, hit); return; } }
     let sn = null; try { sn = await wk.call('snap', { page, x, y, r: 14 / viewer.view.s }); } catch { /* без привязки */ }
     if (sn?.kind === 'text' && !labelLike(sn.label)) sn = null;  // посторонняя надпись (иврит, длинный текст) — не номер точки
     if (sn?.kind === 'shape' && Math.max(sn.w || 0, sn.h || 0) > 24) sn = null;  // крупное (стена, линия, штриховка) — не значок: ставим, где нажали
@@ -252,6 +252,25 @@ export function planModal({ point = null, placeFor = null } = {}) {
       toast(`«${p.label}» на чертеже`); focusId = p.id; tool = null; placeFor = null; temp = null; toolBar(); setTimeout(() => viewer?.draw(), 300); return;
     }
     addCard(d, sn, posFor, done);
+  }
+
+  // «➕ Точка на плане» по уже отмеченной точке: привязать это место к другой точке или нарисовать/убрать значок типа
+  function existingCard(d, p) {
+    const ic = currentProject()?.typeIcons?.[p.typeId];
+    const c = openModal(`«${p.label}» на плане`, h('div', {},
+      h('div', { class: 'mut' }, `${p.typeId}${p.cabinet ? ` · шкаф ${p.cabinet}` : ''}. Здесь уже стоит эта точка.`),
+      h('div', { class: 'btns' },
+        h('button', { class: 'sec', onclick: () => { c(); choosePoint({ title: `🔗 Какая точка здесь вместо «${p.label}»?`, exclude: p.id, onPick: (q) => {
+          getRepo().save(currentProject().id, [{ coll: 'points', id: q.id, data: { pos: { ...p.pos } } }, { coll: 'points', id: p.id, data: { pos: null } }]);
+          toast(`Здесь теперь «${q.label}». «${p.label}» — без места на плане`); focusId = q.id; setTimeout(() => viewer?.draw(), 300); return true;
+        } }); } }, '🔗 Привязать другую точку'),
+        h('button', { class: 'sec', onclick: () => {
+          const on = !p.pos.icon;
+          const pos = on ? { ...p.pos, icon: true, w: ic?.w || p.pos.w || 10, h: ic?.h || p.pos.h || 10 } : { ...p.pos, icon: false };
+          getRepo().save(currentProject().id, [{ coll: 'points', id: p.id, data: { pos } }]);
+          toast(on ? (ic ? 'Значок типа нарисован' : 'У типа значок не задан — «📌 Значки типов»') : 'Значок убран'); c(); setTimeout(() => viewer?.draw(), 300);
+        } }, p.pos.icon ? '🖼 Убрать значок типа' : '🖼 Значок по типу точки'),
+        h('button', { class: 'sec', onclick: () => { c(); openCard?.(p); } }, '📋 Карточка точки'))), {});
   }
 
   // «➕ Точка на плане»: оставить отметку / привязать к точке / новая точка
@@ -293,7 +312,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
       const hint = h('small', { class: 'mut' });
       const cabSel = h('select', { onchange: () => { cab = cabSel.value; cp.setType(tid, cab); suggest(); } }, h('option', { value: '' }, '— без шкафа —'), ...cabs.map((x) => h('option', { value: x, selected: x === cab }, `Шкаф ${x}`)));
       const cp = cablesPicker({ compact: true });
-      const iconCb = h('input', { type: 'checkbox', checked: sn?.kind !== 'text' });
+      const iconCb = h('input', { type: 'checkbox', checked: false });
       const iconNote = h('small', { class: 'mut' });
       const iconRow = h('label', { class: 'pickrow' }, iconCb, h('span', {}, '🖼 Нарисовать значок типа (на чертеже значка этой точки нет) ', iconNote));
       const iconInfo = () => { iconNote.textContent = tid && !currentProject()?.typeIcons?.[tid] ? '— у этого типа значок не задан («📌 Значки типов»), пока будет кружок' : ''; };
