@@ -62,7 +62,7 @@ self.onmessage = async (e) => {
       try { for (let i = 0; i < pdf.countLayers(); i++) pdf.setLayerVisible(i, !off.has(pdf.getLayerName(i))); } catch { /* без слоёв */ }
       lists = new Map(); res = true;
     } else if (cmd === 'numbered') {  // PDF с номерами
-      res = numberedPdf(await loadMupdf(), new Uint8Array(a.data), a.points, { title: a.title, icons: a.icons || {}, hidden: a.hidden || [] });
+      res = numberedPdf(await loadMupdf(), new Uint8Array(a.data), a.points, { title: a.title, icons: a.icons || {}, hidden: a.hidden || [], lang: a.lang || 'ru', typeNames: a.typeNames || {}, updated: a.updated || '' });
     } else if (cmd === 'crop') {
       const mupdf = await loadMupdf(); const z = a.zoom || 4;
       if (!lists.has(a.page)) lists.set(a.page, doc.loadPage(a.page).toDisplayList());

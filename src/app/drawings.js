@@ -45,10 +45,10 @@ async function uploadPdf(name, buf, p = currentProject()) {
   return (await r.json()).id;
 }
 /** «PDF с номерами» на Диск: папка проекта «Чертежи с номерами», один файл на чертёж — каждый раз заменяется свежим */
-export async function putNumbered(name, bytes, p = currentProject(), fileId = '') {
+export async function putNumbered(name, bytes, p = currentProject(), fileId = '', kind = 'numbered') {
   if (mem()) return null;
   if (useRedirect() && !storedTokenValid()) return null;  // iPhone без разрешения Google — не уводим со страницы
-  const parent = await projectFolder(dreq, p, 'numbered');
+  const parent = await projectFolder(dreq, p, kind);
   let old = null;
   if (fileId) { try { const f = await drive('GET', `${D}/${fileId}?fields=id,trashed`); if (!f.trashed) old = f; } catch { /* удалён — создадим новый */ } }
   if (!old) {

@@ -368,7 +368,7 @@ export function settingsView(ui) {
     h('div', { class: 'card', style: { padding: 0 } },
       h('div', { class: 'group', style: { padding: '10px 14px 4px' } }, `Проект «${p.name}»`),
       row('🔧', 'Привязка установки', 'Что считается установкой для каждого типа точек', () => ui.open('install')),
-      row('📊', 'Таблицы для руководства', `${tablesOf(p).length} шт. · основная: ${mainTable(p).name}`, () => ui.open('tables')),
+      row('👔', 'Для руководства', `Папка со ссылкой · таблиц: ${tablesOf(p).length} · основная: ${mainTable(p).name}`, () => ui.open('tables')),
       row('🗄', 'Настройки шкафа', 'Свои кабели и их число для шкафа', () => ui.open('cabinets')),
       row('👥', 'Участники', `${(p.memberEmails || []).length} в проекте`, () => ui.open('members')),
       row('✏️', 'Данные проекта', 'Название, помощник, иврит, примечание', () => projectForm(p, ui)),

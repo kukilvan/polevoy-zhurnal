@@ -4,6 +4,11 @@
 // в просмотрщике можно оставить только нужные. Последняя страница — легенда.
 import { combineLabels } from '../domain/points.js';
 import { STATUS_COLORS } from '../domain/plan.js';
+import { legendPdfHe } from './legendhe.js';
+
+// Легенда на иврите (для папки руководства): названия статусов
+export const STATUS_HE = { 'новая': 'חדשה (טרם נמשך)', 'померяно': 'נמדד (טרם נמשך)', 'протянуто частично': 'נמשך חלקית', 'протянуто': 'נמשך', 'захивучено': 'חווט',
+  'установлено не всё': 'הותקן חלקית', 'установлено': 'הותקן', 'проверено': 'נבדק', 'проблема': 'תקלה' };
 
 export const TYPE_COLORS = ['#e0007a', '#0a84ff', '#ff9f0a', '#30a14e', '#bf5af2', '#ff453a', '#0fb5ae', '#8e6c00', '#5856d6', '#c2185b'];
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(String(hex || '#9e9e9e').slice(i, i + 2), 16) / 255);
@@ -29,7 +34,7 @@ export function layoutTags(tags, { circles = [], frames = [], fs = 6 } = {}) {
 }
 
 /** mupdf — модуль; data — PDF; points — [{ label, typeId, pos, color? }]; hidden — [{pos}] → Uint8Array */
-export function numberedPdf(mupdf, data, points, { title = '', icons = {}, hidden = [], fs = 7 } = {}) {
+export function numberedPdf(mupdf, data, points, { title = '', icons = {}, hidden = [], fs = 7, lang = 'ru', typeNames = {}, updated = '' } = {}) {
   const doc = mupdf.Document.openDocument(data, 'application/pdf').asPDF();
   const types = [...new Set(points.map((p) => p.typeId))].sort((a, b) => a.localeCompare(b, 'ru'));
   const typeColor = (t) => rgb(TYPE_COLORS[types.indexOf(t) % TYPE_COLORS.length]);
@@ -88,6 +93,23 @@ export function numberedPdf(mupdf, data, points, { title = '', icons = {}, hidde
       const ft = page.createAnnotation('FreeText'); ft.setRect([b[0] + 0.5, b[1] + 0.5, b[2] - 0.2, b[3] - 0.2]); ft.setContents(t.lines.join('\n'));
       ft.setDefaultAppearance('Helv', fs, [0, 0, 0]); ft.setBorderWidth(0); ft.update(); inLayer(ft, t.lyr);
     }
+  }
+  // легенда на иврите — отдельными страницами со встроенным шрифтом
+  if (lang === 'he') {
+    const L = [{ text: `מקרא: ${title}`, size: 16 }];
+    if (updated) L.push({ text: `עודכן: ${updated}`, size: 10, color: [0.3, 0.3, 0.3] });
+    L.push({ text: 'צבע המסגרת = סטטוס הנקודה', size: 10, color: [0.3, 0.3, 0.3] });
+    STATUS_COLORS.forEach(([c, t]) => L.push({ text: STATUS_HE[t] || t, size: 10, swatch: rgb(c) }));
+    for (const t of types) {
+      const ls = points.filter((p) => p.typeId === t).map((p) => p.label);
+      L.push({ text: `${typeNames[t] || t} ${ls.length}`, size: 12, color: typeColor(t) });
+      let cur = '';
+      for (const l of ls) { const nxt = cur ? `${cur}, ${l}` : l; if (nxt.length * 9 * 0.55 > 842 - 60) { L.push({ text: cur, size: 9, color: [0.2, 0.2, 0.2] }); cur = l; } else cur = nxt; }
+      if (cur) L.push({ text: cur, size: 9, color: [0.2, 0.2, 0.2] });
+    }
+    const leg = mupdf.Document.openDocument(legendPdfHe(mupdf, L), 'application/pdf').asPDF();
+    for (let i = 0; i < leg.countPages(); i++) doc.graftPage(-1, leg, i);
+    return doc.saveToBuffer('compress').asUint8Array();
   }
   // легенда: цвета статусов и точки по типам
   const W = 842; const H = 595; const lines = [];

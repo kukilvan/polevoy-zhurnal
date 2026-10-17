@@ -38,24 +38,34 @@ export async function updateProjectTables(api, project, data, now = new Date()) 
 // Пересобираем, только если что-то поменялось (отпечаток). api: download(fileId) → байты, upload(fileId, байты)
 export async function updateProjectNumbered(api, mupdf, project, data, now = new Date()) {
   const ctx = buildContext({ ...data, projects: [project] });
-  const icons = project.typeIcons || {}; const patches = {}; const report = [];
-  for (const d of (project.drawings || []).filter((x) => !x.deleted && x.numberedFileId && x.fileId)) {
-    const name = d.title || d.name;
+  const icons = project.typeIcons || {}; const patches = {}; const mgrPatches = {}; const report = [];
+  const typeNames = Object.fromEntries([...ctx.types.values()].map((t) => [t.id, t.nameHe || t.id]));
+  const updated = now.toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', dateStyle: 'short', timeStyle: 'short' });
+  const srcCache = new Map(); const src = async (id) => { if (!srcCache.has(id)) srcCache.set(id, await api.download(id)); return srcCache.get(id); };
+  // ваши «Чертежи с номерами» и копии в папке «Для руководства» (своё название, язык легенды)
+  const jobs = [];
+  for (const d of (project.drawings || []).filter((x) => !x.deleted && x.fileId)) {
+    if (d.numberedFileId) jobs.push({ d, fileId: d.numberedFileId, old: d.numberedHash, title: d.title || d.name, lang: 'ru', what: 'PDF с номерами', put: (pt) => { patches[d.id] = pt.ok ? { numberedHash: pt.hash, numberedAt: pt.at, numberedError: '' } : { numberedError: pt.error, numberedTried: pt.at }; } });
+    const md = project.managers?.drawings?.[d.id];
+    if (md?.on && md.fileId) jobs.push({ d, fileId: md.fileId, old: md.hash, title: (md.name || '').trim() || (d.title || d.name).replace(/\.pdf$/i, ''), lang: md.lang || 'ru', what: 'для руководства', put: (pt) => { mgrPatches[d.id] = pt.ok ? { hash: pt.hash, at: pt.at, error: '' } : { error: pt.error }; } });
+  }
+  for (const j of jobs) {
     try {
-      const input = numberedInput(ctx.points.values(), ctx, d); const hash = numberedHash(input, d, icons);
-      if (hash === d.numberedHash) { report.push(`${name}: PDF с номерами без изменений`); continue; }
-      const src = await api.download(d.fileId);
-      const out = numberedPdf(mupdf, src, input, { title: name, icons, hidden: d.hidden || [] });
-      await api.upload(d.numberedFileId, out);
-      patches[d.id] = { numberedHash: hash, numberedAt: now.toISOString(), numberedError: '' };
-      report.push(`${name}: PDF с номерами обновлён (точек ${input.length})`);
+      const input = numberedInput(ctx.points.values(), ctx, j.d);
+      const hash = numberedHash(input, { ...j.d, title: j.title }, icons, j.lang);  // так же, как в приложении
+      if (hash === j.old) { report.push(`${j.title} (${j.what}): без изменений`); continue; }
+      const out = numberedPdf(mupdf, await src(j.d.fileId), input, { title: j.title, icons, hidden: j.d.hidden || [], lang: j.lang, typeNames, updated });
+      await api.upload(j.fileId, out);
+      j.put({ ok: true, hash, at: now.toISOString() });
+      report.push(`${j.title} (${j.what}): обновлён (точек ${input.length})`);
     } catch (e) {
-      patches[d.id] = { numberedError: String(e.message || e).slice(0, 300), numberedTried: now.toISOString() };
-      report.push(`${name}: ОШИБКА PDF с номерами — ${e.message}`);
+      j.put({ ok: false, error: String(e.message || e).slice(0, 300), at: now.toISOString() });
+      report.push(`${j.title} (${j.what}): ОШИБКА — ${e.message}`);
     }
   }
-  return { patches, report };
+  return { patches, mgrPatches, report };
 }
+export const applyManagerPatches = (project, patches) => { const m = project.managers || {}; const ds = { ...(m.drawings || {}) }; Object.entries(patches).forEach(([id, pt]) => { ds[id] = { ...(ds[id] || {}), ...pt }; }); return { ...m, drawings: ds }; };
 export const applyDrawingPatches = (project, patches) => (project.drawings || []).map((d) => (patches[d.id] ? { ...d, ...patches[d.id] } : d));
 
 // Применяет патчи к свежей версии списка таблиц (в приложении её могли изменить, пока шла работа)

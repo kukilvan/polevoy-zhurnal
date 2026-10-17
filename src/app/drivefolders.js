@@ -4,7 +4,7 @@
 const D = 'https://www.googleapis.com/drive/v3/files';
 const FOLDER = 'application/vnd.google-apps.folder';
 export const ROOT_NAME = 'Полевой журнал';
-export const KIND_NAMES = { drawings: 'Чертежи', backups: 'Резервные копии', numbered: 'Чертежи с номерами' };
+export const KIND_NAMES = { drawings: 'Чертежи', backups: 'Резервные копии', numbered: 'Чертежи с номерами', managers: 'Для руководства' };
 const safe = (s) => String(s || 'Проект').replace(/[\\/:*?"<>|]/g, '_').trim() || 'Проект';
 const esc = (s) => String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 

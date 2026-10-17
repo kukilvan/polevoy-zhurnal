@@ -3,6 +3,7 @@ import { h, formModal, confirmDialog, toast } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { COLUMNS, STATUS_KEYS, NO_CABINET, tablesOf, buildReport, fileTitle } from '../../domain/index.js';
 import { updateTable } from './project.js';
+import { managersFolderCard, toggleTableInFolder } from './managersfolder.js';
 
 const when = (iso) => new Date(iso).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
 
@@ -97,11 +98,12 @@ export function tablesView(ui) {
     t.auto ?? t.main ? h('div', { class: t.serverError ? 'pill st-bad' : 'mut', style: t.serverError ? { marginTop: '4px' } : {} },
       t.serverError ? `🌙 Ночью не обновилась: ${t.serverError}` : t.serverAt ? `🌙 Автообновление ночью: ${when(t.serverAt)}` : '🌙 Автообновление включено, ночью ещё не запускалось') : null,
     h('div', { class: 'mut' }, t.syncedAt ? `Обновлена: ${when(t.syncedAt)}` : 'Ещё не создавалась'),
+    h('label', { class: 'pickrow' }, h('input', { type: 'checkbox', checked: !!t.inFolder, onchange: (e) => toggleTableInFolder(t, e.target.checked) }), h('span', {}, '📁 В папке для руководства (переедет туда при следующем обновлении)')),
     h('div', { class: 'btns' },
       h('button', { onclick: () => updateTable(t.id) }, '🔄 Обновить'),
       t.link ? h('button', { class: 'sec', onclick: () => window.open(t.link, '_blank') }, '📊 Открыть') : null,
       h('button', { class: 'sec', onclick: () => tableForm(t) }, '✏️ Изменить')));
-  return h('div', {},
+  return h('div', {}, managersFolderCard(ui),
     h('div', { class: 'mut', style: { margin: '0 2px 10px' } }, 'Таблицу создаёт и заполняет приложение (значениями, без формул). Здесь выбирается, что в неё попадёт. Основная обновляется кнопкой на вкладке «Проект».'),
     h('div', { class: 'btns', style: { marginTop: 0, marginBottom: '10px' } }, h('button', { onclick: () => tableForm(null) }, '➕ Новая таблица')),
     list.map(card));

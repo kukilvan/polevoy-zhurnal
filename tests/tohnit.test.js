@@ -171,3 +171,16 @@ test('сервер: PDF с номерами пересобирается тол�
   data.points[0].label = 'C02';
   await updateProjectNumbered(api, mupdf, project, data); assert.equal(up.length, 2);
 });
+
+test('сервер: копия тохнита для руководства — своё название, обновляется отдельно', async () => {
+  const mupdf = await import('mupdf');
+  const src = new mupdf.PDFDocument(); src.insertPage(-1, src.addPage([0, 0, 400, 300], 0, src.addObject(src.newDictionary()), '')); const pdf = src.saveToBuffer('').asUint8Array();
+  const { updateProjectNumbered, applyManagerPatches } = await import('../scripts/server-tables-lib.mjs');
+  const d = { id: 'D1', name: 'a.pdf', fileId: 'SRC' };
+  const project = { id: 'P', name: 'P', drawings: [d], managers: { drawings: { D1: { on: true, fileId: 'MGR', name: 'קומה 0', lang: 'he' } } } };
+  const data = { points: [{ id: 'p1', label: 'C01', typeId: 'Камера', pos: { page: 0, x: 50, y: 50, w: 10, h: 10, sheet: 'a.pdf' } }], types: [{ id: 'Камера', nameHe: 'מצלמה' }] };
+  const up = []; const api = { download: async () => pdf, upload: async (id) => up.push(id) };
+  const r = await updateProjectNumbered(api, mupdf, project, data);
+  assert.deepEqual(up, ['MGR']); assert.ok(r.mgrPatches.D1.hash);
+  assert.equal(applyManagerPatches(project, r.mgrPatches).drawings.D1.name, 'קומה 0');
+});

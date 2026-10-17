@@ -7,14 +7,16 @@ import { drawingTitle, putNumbered, shareWithServer, updateDrawing } from '../dr
 import { numberedInput, numberedHash } from '../../domain/index.js';
 
 export const numberedName = (d) => `${drawingTitle(d).replace(/\.pdf$/i, '').replace(/[\\/:*?"<>|]/g, '_')}_с_номерами.pdf`;
-async function build(drawing, buf) {
+export async function build(drawing, buf, { title = drawingTitle(drawing), lang = 'ru', quiet = false } = {}) {
   const input = numberedInput(state.ctx.points.values(), state.ctx, drawing);
-  if (!input.length) { toast('На этом чертеже нет точек'); return null; }
+  if (!input.length) { if (!quiet) toast('На этом чертеже нет точек'); return null; }
   const icons = currentProject()?.typeIcons || {};
+  const typeNames = Object.fromEntries([...state.ctx.types.values()].map((t) => [t.id, t.nameHe || t.id]));
+  const updated = new Date().toLocaleString('he-IL', { timeZone: 'Asia/Jerusalem', dateStyle: 'short', timeStyle: 'short' });
   const wk = makeWorker();
   try {
-    const out = await wk.call('numbered', { data: buf.slice(0), title: drawingTitle(drawing), points: input, icons, hidden: drawing.hidden || [] });
-    return { out, hash: numberedHash(input, drawing, icons) };
+    const out = await wk.call('numbered', { data: buf.slice(0), title, points: input, icons, hidden: drawing.hidden || [], lang, typeNames, updated });
+    return { out, hash: numberedHash(input, { ...drawing, title }, icons, lang) };
   } finally { wk.stop(); }
 }
 
