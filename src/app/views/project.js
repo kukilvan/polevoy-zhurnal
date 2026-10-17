@@ -1,4 +1,5 @@
 // Вкладка «Проект»: карточка текущего проекта и сводка по точкам.
+import { projectWizard } from './wizard.js';
 import { readsCount, readsToday, readsResetAt, DAILY_READ_LIMIT } from '../repo.js';
 import { state, currentProject, pointsSorted, infoOf, getRepo } from '../store.js';
 import { projectForm } from './projects.js';
@@ -172,7 +173,7 @@ export function projectView(ui) {
   const p = currentProject();
   if (!p) {
     return h('div', { class: 'empty' }, h('p', {}, 'У вас пока нет проекта.'),
-      h('button', { onclick: () => projectForm(null, ui) }, '➕ Создать проект'));
+      h('button', { onclick: () => projectWizard(ui) }, '➕ Создать проект'));
   }
   return h('div', {},
     h('div', { class: 'card' },

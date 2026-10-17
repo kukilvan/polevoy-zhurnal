@@ -1,4 +1,5 @@
 // Оболочка: верхняя панель, нижняя панель из 5 экранов, меню, переключение экранов.
+import { projectWizard } from './views/wizard.js';
 import { startPool } from './pool.js';
 import { h, openModal, toast } from './ui.js';
 import { state, subscribe, currentProject, ready, getRepo, setCurrentProject, pendingCount } from './store.js';
@@ -38,7 +39,7 @@ export function createShell({ user, onLogout, diag }) {
     const item = (label, fn) => h('button', { class: 'menu-item', onclick: () => { close(); fn(); } }, label);
     const close = openModal('Меню', h('div', {},
       item('📁 Все проекты', () => open('projects')),
-      item('➕ Новый проект', () => projectForm(null, ui)),
+      item('➕ Новый проект', () => projectWizard(ui)),
       item('📅 Месяц (отчёт начальнику)', () => open('month')),
       item('🕘 История и откат', () => open('history')),
       item('📖 Как пользоваться', () => open('guide')),

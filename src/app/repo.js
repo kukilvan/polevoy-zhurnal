@@ -292,7 +292,8 @@ export function createRepo(backend, user) {
       return api.save(pid, [{ coll, id, action: 'restore', data: { deleted: false, deletedAt: null, deletedBy: null, deletedByName: null } }]);
     },
     // Новый проект: документ проекта + начальные справочники внутри него (все участники видят одно и то же)
-    createProject(data) {
+    // refs: { types, devices, cables, catalog } — выбранное в мастере из общего пула (без старого стандартного набора)
+    createProject(data, refs = null) {
       const pid = newId();
       const now = Date.now();
       const project = clean({
@@ -303,7 +304,8 @@ export function createRepo(backend, user) {
       const add = (coll, items, idOf = (x) => x.id) => items.forEach((x) => seed.push({ coll, id: idOf(x), data: { ...x, projectId: pid, id: idOf(x), createdBy: by.uid, createdAt: now, updatedBy: by.uid, updatedAt: now } }));
       const inst = api.prefs?.installDefaults || {}; // личные привязки установки по умолчанию
       const types = composedTypes(POINT_TYPES.map((t) => (inst[t.id] ? { ...t, installMode: inst[t.id].mode, installWorkIds: inst[t.id].workIds || [] } : t)));
-      const merged = { catalog: [...CATALOG], types: [...types], cables: [...CABLES], devices: [...DEVICES] };
+      const merged = refs ? { catalog: refs.catalog || [], types: refs.types || [], cables: refs.cables || [], devices: refs.devices || [] }
+        : { catalog: [...CATALOG], types: [...types], cables: [...CABLES], devices: [...DEVICES] };
       add('catalog', merged.catalog); add('types', merged.types); add('cables', merged.cables); add('devices', merged.devices); add('configs', CONFIGS);
       add('units', UNITS); add('culprits', CULPRITS); add('delayReasons', DELAY_REASONS);
       info(`Создаю проект «${data.name}», справочников: ${seed.length}`);
