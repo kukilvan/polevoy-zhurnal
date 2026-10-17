@@ -44,7 +44,8 @@ body.noscroll { overflow: hidden; }
 .sheet-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px 8px; }
 .sheet-head .x { background: transparent; border: 0; color: var(--mut); padding: 4px 10px; font-size: 18px; }
 .sheet-head .x:hover { color: var(--fg, inherit); background: var(--line); border-radius: 8px; }
-.sheet-body { padding: 4px 16px 16px; overflow: auto; }
+.sheet-body { padding: 4px 16px 16px; overflow: auto; overscroll-behavior: contain; }
+.backdrop { overscroll-behavior: contain; }
 .field { display: block; margin-bottom: 12px; }
 .field > span { display: block; font-size: 13px; color: var(--mut); margin-bottom: 4px; }
 .field small { display: block; color: var(--mut); font-size: 12px; margin-top: 3px; }

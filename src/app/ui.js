@@ -24,11 +24,21 @@ function root() {
   if (!modalRoot) { modalRoot = h('div', { id: 'modal-root' }); document.body.appendChild(modalRoot); }
   return modalRoot;
 }
+const mousePc = () => { try { return matchMedia('(hover: hover) and (pointer: fine)').matches; } catch { return false; } };
 export function openModal(title, content, { onClose, sticky = false, wide = false } = {}) {  // sticky: клик мимо окна не закрывает (долгая работа внутри)
   const sheet = h('div', { class: 'sheet', role: 'dialog', style: wide ? { maxWidth: '1200px' } : {} },
     h('div', { class: 'sheet-head' }, h('b', {}, title), h('button', { class: 'x', type: 'button', onclick: () => close() }, '✕')),
     h('div', { class: 'sheet-body' }, content));
-  const back = h('div', { class: 'backdrop', onclick: (e) => { if (e.target === back && !sticky) close(); } }, sheet);
+  // на компьютере (мышь) клик мимо окна его не закрывает — только ✕; на телефоне как раньше
+  const back = h('div', { class: 'backdrop', onclick: (e) => { if (e.target === back && !sticky && !mousePc()) close(); } }, sheet);
+  // колесо мыши сбоку от окна прокручивает само окно, а не страницу под ним
+  back.addEventListener('wheel', (e) => {
+    const body = sheet.querySelector('.sheet-body'); if (body?.contains(e.target)) return;
+    e.preventDefault();
+    if (!body) return;
+    const k = e.deltaMode === 1 ? 16 : e.deltaMode === 2 ? body.clientHeight : 1;
+    body.scrollTop += e.deltaY * k;
+  }, { passive: false });
   root().appendChild(back);
   document.body.classList.add('noscroll');
   function close() {
