@@ -111,6 +111,7 @@ export function poolModal(kind) {
     const all = [...pool[kind].values()].filter((x) => !(kind === 'types' && isSystemType(x))).sort((a, b) => nameOf(kind, a).localeCompare(nameOf(kind, b), 'ru', { numeric: true }));
     const shown = all.filter((x) => !q || `${nameOf(kind, x)} ${x.nameHe || ''}`.toLowerCase().includes(q));
     const inb = admin ? inboxOf(kind) : null;
+    const body = box.closest('.sheet-body') || box.parentElement; const keep = body?.scrollTop || 0; // не прыгать наверх после галочки
     const search = h('input', { type: 'search', placeholder: 'Поиск', value: q, oninput: (e) => { q = e.target.value.trim().toLowerCase(); draw(); search.focus(); } });
     const seedBtn = admin && POOL_KINDS.every((k) => !pool[k].size) ? h('div', { class: 'card' },
       h('div', {}, 'Пул пуст. Заполнить его всем из справочников этого проекта (типы точек, устройства, кабели, работы)?'),
@@ -132,6 +133,7 @@ export function poolModal(kind) {
       inb && inb.ignored.length ? h('details', { class: 'card', style: { marginBottom: '10px' } }, h('summary', {}, `🚫 Не показываются (${inb.ignored.length})`), inb.ignored.map((x) => row(null, { candidate: x }))) : null,
       h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center' } }, search, admin ? h('button', { class: 'sec', onclick: () => { setFormTarget({ ctx: poolCtx(), save: savePool }); itemForm(kind, null); } }, '➕ Новый в пул') : null),
       h('div', { class: 'card', style: { padding: 0, marginTop: '8px' } }, shown.length ? shown.map((x) => row(x)) : h('div', { class: 'empty' }, all.length ? 'Ничего не найдено' : 'В пуле пока ничего нет'))].filter(Boolean));
+    if (body) body.scrollTop = keep;
   }
   draw();
   void close;

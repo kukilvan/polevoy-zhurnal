@@ -118,6 +118,61 @@ const addReads = (n) => {
   try { localStorage.setItem('pz.reads', JSON.stringify({ day: ptDay(), n: readsToday() + n })); } catch { /* без хранилища */ }
 };
 
+// Слушатель коллекции с экономией чтений: после первой полной загрузки — кэш + только изменённые документы.
+function deltaListen(col, key, shape, label, cb, retryDenied = false) {
+  let unsub = () => {}; let stopped = false; let tries = 0; let timer = null;
+  const onErr = (restart) => (e) => {
+    if (stopped) return;
+    if (retryDenied && e.code === 'permission-denied' && tries < 15) { tries++; timer = setTimeout(() => { if (!stopped) restart(); }, 1500); return; }
+    error(label, `${e.code || ''} ${e.message || e}`);
+  };
+  // как раньше: слушаем всю коллекцию (первый запуск, раз в неделю, при неполном кэше)
+  const startFull = () => {
+    let stamped = false; // отметка времени полной загрузки ставится один раз за запуск
+    unsub = onSnapshot(col, (snap) => {
+      tries = 0;
+      if (!snap.metadata.fromCache) {
+        addReads(snap.docChanges().length);
+        const prev = metaGet(key) || {};
+        const last = maxMillis([prev.last, ...snap.docs.map(srvMillis)]);
+        if (last > 0 && !snap.metadata.hasPendingWrites) { metaSet(key, { last, full: stamped ? prev.full : Date.now(), n: snap.size }); stamped = true; }
+      }
+      cb(snap.docs.map(shape));
+    }, onErr(startFull));
+  };
+  // экономный режим: кэш телефона + только изменения с прошлой отметки
+  const startDelta = (meta) => {
+    const map = new Map();
+    const q = query(col, where('updatedAtServer', '>', Timestamp.fromMillis(meta.last - DELTA_MARGIN)));
+    unsub = onSnapshot(q, (snap) => {
+      tries = 0;
+      if (!snap.metadata.fromCache) addReads(snap.docChanges().length);
+      snap.docChanges().forEach((ch) => { if (ch.type === 'removed') map.delete(ch.doc.id); else map.set(ch.doc.id, shape(ch.doc)); });
+      const prev = metaGet(key) || meta;
+      if (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites) {
+        metaSet(key, { ...prev, last: maxMillis([prev.last, ...snap.docs.map(srvMillis)]), n: Math.max(prev.n || 0, map.size) });
+      }
+      cb([...map.values()]);
+    }, onErr(() => startDelta(meta)));
+    return map;
+  };
+  const start = async () => {
+    const meta = metaGet(key);
+    if (!meta) { startFull(); return; }
+    try {
+      const cached = await getDocsFromCache(col);
+      if (stopped) return;
+      if (decideMode(meta, cached.size) !== 'delta') { startFull(); return; }
+      // сначала сразу показываем всё, что есть в кэше, затем подключаем слушатель изменений
+      const map = startDelta(meta);
+      cached.docs.forEach((d) => map.set(d.id, shape(d)));
+      cb([...map.values()]);
+    } catch { if (!stopped) startFull(); }
+  };
+  start();
+  return () => { stopped = true; clearTimeout(timer); unsub(); };
+}
+
 // ---------- хранилище: Firestore ----------
 export function createFirestoreBackend(db, uid) {
   return {
@@ -139,60 +194,7 @@ export function createFirestoreBackend(db, uid) {
     },
     listenColl(pid, name, cb) {
       // Если проект ещё не дошёл до сервера, чтение отклоняется — повторяем попытку
-      const col = collection(db, 'projects', pid, name);
-      const key = `pz.sync.${uid}.${pid}.${name}`;
-      let unsub = () => {}; let stopped = false; let tries = 0; let timer = null;
-      const shape = (d) => ({ ...d.data(), _pending: d.metadata.hasPendingWrites });
-      const onErr = (restart) => (e) => {
-        if (stopped) return;
-        if (e.code === 'permission-denied' && tries < 15) { tries++; timer = setTimeout(() => { if (!stopped) restart(); }, 1500); return; }
-        error(`Чтение ${name}`, `${e.code || ''} ${e.message || e}`);
-      };
-      // как раньше: слушаем всю коллекцию (первый запуск, раз в неделю, при неполном кэше)
-      const startFull = () => {
-        let stamped = false; // отметка времени полной загрузки ставится один раз за запуск
-        unsub = onSnapshot(col, (snap) => {
-          tries = 0;
-          if (!snap.metadata.fromCache) {
-            addReads(snap.docChanges().length);
-            const prev = metaGet(key) || {};
-            const last = maxMillis([prev.last, ...snap.docs.map(srvMillis)]);
-            if (last > 0 && !snap.metadata.hasPendingWrites) { metaSet(key, { last, full: stamped ? prev.full : Date.now(), n: snap.size }); stamped = true; }
-          }
-          cb(snap.docs.map(shape));
-        }, onErr(startFull));
-      };
-      // экономный режим: кэш телефона + только изменения с прошлой отметки
-      const startDelta = (meta) => {
-        const map = new Map();
-        const q = query(col, where('updatedAtServer', '>', Timestamp.fromMillis(meta.last - DELTA_MARGIN)));
-        unsub = onSnapshot(q, (snap) => {
-          tries = 0;
-          if (!snap.metadata.fromCache) addReads(snap.docChanges().length);
-          snap.docChanges().forEach((ch) => { if (ch.type === 'removed') map.delete(ch.doc.id); else map.set(ch.doc.id, shape(ch.doc)); });
-          const prev = metaGet(key) || meta;
-          if (!snap.metadata.fromCache && !snap.metadata.hasPendingWrites) {
-            metaSet(key, { ...prev, last: maxMillis([prev.last, ...snap.docs.map(srvMillis)]), n: Math.max(prev.n || 0, map.size) });
-          }
-          cb([...map.values()]);
-        }, onErr(() => startDelta(meta)));
-        return map;
-      };
-      const start = async () => {
-        const meta = metaGet(key);
-        if (!meta) { startFull(); return; }
-        try {
-          const cached = await getDocsFromCache(col);
-          if (stopped) return;
-          if (decideMode(meta, cached.size) !== 'delta') { startFull(); return; }
-          // сначала сразу показываем всё, что есть в кэше, затем подключаем слушатель изменений
-          const map = startDelta(meta);
-          cached.docs.forEach((d) => map.set(d.id, shape(d)));
-          cb([...map.values()]);
-        } catch { if (!stopped) startFull(); }
-      };
-      start();
-      return () => { stopped = true; clearTimeout(timer); unsub(); };
+      return deltaListen(collection(db, 'projects', pid, name), `pz.sync.${uid}.${pid}.${name}`, (d) => ({ ...d.data(), _pending: d.metadata.hasPendingWrites }), `Чтение ${name}`, cb, true);
     },
     // Запись пачками (в одной пачке до 500 операций). Не ждём ответа сервера: офлайн запись остаётся в очереди.
     commit(pid, writes) {
@@ -210,18 +212,17 @@ export function createFirestoreBackend(db, uid) {
     },
     // Общий пул: коллекции pool_types, pool_devices, pool_cables, pool_catalog (читают все, пишет только администратор пула)
     listenPool(kind, cb) {
-      return onSnapshot(collection(db, `pool_${kind}`), (snap) => { if (!snap.metadata.fromCache) addReads(snap.docChanges().length); cb(snap.docs.map((d) => d.data())); },
-        (e) => error(`Чтение общего пула (${kind})`, `${e.code || ''} ${e.message || e}`));
+      // удалённое в пуле помечается deleted:true (а не стирается), чтобы экономное чтение «только изменений» его увидело
+      return deltaListen(collection(db, `pool_${kind}`), `pz.sync.${uid}.pool.${kind}`, (d) => d.data(), `Чтение общего пула (${kind})`, (list) => cb(list.filter((x) => !x.deleted)));
     },
     commitPool(writes) {
       const batch = writeBatch(db);
-      writes.forEach((w) => { const ref = doc(db, `pool_${w.coll}`, docKey(w.id)); if (w.remove) batch.delete(ref); else batch.set(ref, { ...w.data, updatedAtServer: serverTimestamp() }, { merge: true }); });
+      writes.forEach((w) => { const ref = doc(db, `pool_${w.coll}`, docKey(w.id)); if (w.remove) batch.set(ref, { deleted: true, updatedAtServer: serverTimestamp() }, { merge: true }); else batch.set(ref, { ...w.data, updatedAtServer: serverTimestamp() }, { merge: true }); });
       return batch.commit();
     },
     // Входящие администратора пула: новое и изменённое из проектов (пишут все, читает только администратор)
     listenInbox(cb) {
-      return onSnapshot(collection(db, 'pool_inbox'), (snap) => { if (!snap.metadata.fromCache) addReads(snap.docChanges().length); cb(snap.docs.map((d) => ({ ...d.data(), key: d.id }))); },
-        (e) => error('Чтение входящих пула', `${e.code || ''} ${e.message || e}`));
+      return deltaListen(collection(db, 'pool_inbox'), `pz.sync.${uid}.pool.inbox`, (d) => ({ ...d.data(), key: d.id }), 'Чтение входящих пула', cb);
     },
     setInbox(list) {
       const batch = writeBatch(db);

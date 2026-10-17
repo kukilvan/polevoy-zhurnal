@@ -35,10 +35,13 @@ async function drive(method, url, { body, headers = {}, raw = false } = {}, retr
 const D = 'https://www.googleapis.com/drive/v3/files';
 // Загрузка большого файла по частям не нужна: возобновляемая загрузка одним куском (до сотен МБ)
 const dreq = (method, url, body) => drive(method, url, body ? { body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } } : {});
+const qEsc = (s) => String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 async function uploadPdf(name, buf, p = currentProject()) {
   const parent = await projectFolder(dreq, p, 'drawings');
-  const init = await drive('POST', 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id', {
-    body: JSON.stringify({ name, parents: [parent], mimeType: 'application/pdf' }), headers: { 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': 'application/pdf' }, raw: true });
+  // такой файл уже есть в папке проекта — заменяем его содержимое, а не создаём копию
+  const old = (await drive('GET', `${D}?q=${encodeURIComponent(`name='${qEsc(name)}' and '${parent}' in parents and trashed=false`)}&fields=files(id)`)).files?.[0];
+  const init = await drive(old ? 'PATCH' : 'POST', `https://www.googleapis.com/upload/drive/v3/files${old ? `/${old.id}` : ''}?uploadType=resumable&fields=id`, {
+    body: JSON.stringify(old ? {} : { name, parents: [parent], mimeType: 'application/pdf' }), headers: { 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': 'application/pdf' }, raw: true });
   const loc = init.headers.get('Location'); if (!loc) throw new Error('Диск не дал адрес для загрузки');
   const r = await fetch(loc, { method: 'PUT', headers: { 'Content-Type': 'application/pdf' }, body: buf });
   if (!r.ok) throw new Error(`Загрузка на Диск: HTTP ${r.status}`);
@@ -78,12 +81,14 @@ export async function shareDrawing(fileId, p = currentProject()) {
 }
 
 /** Сохранить чертёж в проект: сразу копия на устройстве и запись в проекте, потом — на Диск (если не вышло, можно повторить) */
-export async function addDrawing(buf, { name, floor = '', pages = [], push = true }) {
+export async function addDrawing(buf, { name, floor = '', pages = [], push = true, fileId = null }) {
   const p = currentProject(); const repo = getRepo();
   const old = drawingsOf(p).find((d) => d.name === name);
   const id = old?.id || `DR_${newId(6)}`;
   await cachePut(id, buf);
-  const entry = { ...(old || {}), id, name, floor: floor || old?.floor || '', pages, size: buf.byteLength, addedAt: new Date().toISOString(), addedBy: repo.user?.email || '', fileId: old?.fileId || null };
+  // fileId — чертёж взят с Google Диска: новую копию не загружаем
+  const entry = { ...(old || {}), id, name, floor: floor || old?.floor || '', pages, size: buf.byteLength, addedAt: new Date().toISOString(), addedBy: repo.user?.email || '', fileId: fileId || old?.fileId || null };
+  if (fileId && !mem()) shareDrawing(fileId, p).catch(() => {});
   const list = [...(p.drawings || []).filter((d) => d.id !== id), entry];
   repo.saveProject(p.id, { drawings: list });
   // на iPhone вход в Google уводит со страницы — отправим на Диск позже (кнопка «⬆ На Диск» в плане), если доступа ещё нет
@@ -127,3 +132,20 @@ export async function placeDrawings(p = currentProject()) {
   for (const d of list) if (await moveInto(dreq, d.fileId, parent)) n++;
   return n;
 }
+
+/** PDF тохнитов, которые уже лежат на Google Диске в папках «Чертежи» проектов приложения: [{ id, name, project }] */
+export async function listDrivePdfs() {
+  if (mem()) return [];
+  const fq = `mimeType='application/vnd.google-apps.folder' and trashed=false and appProperties has { key='pzKind' and value='drawings' }`;
+  const folders = (await drive('GET', `${D}?q=${encodeURIComponent(fq)}&fields=files(id,parents)&pageSize=100`)).files || [];
+  const out = [];
+  for (const f of folders) {
+    let project = '';
+    try { const par = f.parents?.[0]; if (par) project = (await drive('GET', `${D}/${par}?fields=name`)).name || ''; } catch { /* ok */ }
+    const q = `'${f.id}' in parents and trashed=false and mimeType='application/pdf'`;
+    ((await drive('GET', `${D}?q=${encodeURIComponent(q)}&fields=files(id,name,size,modifiedTime)&pageSize=200`)).files || []).forEach((x) => out.push({ ...x, project }));
+  }
+  return out.sort((a, b) => a.project.localeCompare(b.project, 'ru') || a.name.localeCompare(b.name, 'ru', { numeric: true }));
+}
+/** Скачать файл с Диска */
+export async function downloadDriveFile(id) { const r = await drive('GET', `${D}/${id}?alt=media`, { raw: true }); return r.arrayBuffer(); }

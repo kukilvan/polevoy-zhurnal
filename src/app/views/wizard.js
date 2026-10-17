@@ -8,6 +8,7 @@ import { POOL_KINDS, POOL_TITLES, poolMaps, depsOf, isSystemType, mainTable, wit
 import { bare } from '../../domain/typelib.js';
 import { pool, poolReady, onPool } from '../pool.js';
 import { typeFilterOptions } from '../typegroups.js';
+import { drawingsOf, drawingTitle } from '../drawings.js';
 
 const nameOf = (kind, x) => (kind === 'types' || kind === 'cables' ? x.id : x.name || x.id);
 const FREE_WORKS = ['Протяжка', 'Перетяжка', 'Перенос', 'Время', 'Доп. работа'];  // работы не по составу точек — отмечены сразу
@@ -95,6 +96,9 @@ export function projectWizard(ui) {
   }
   function draw() {
     const [title, fn] = STEPS[step];
+    // при перерисовке (галочка) не прыгать наверх: запоминаем прокрутку списка и окна
+    const pl = box.querySelector('.picklist'); const keepList = pl?.scrollTop || 0; const body = box.closest('.sheet-body'); const keepBody = body?.scrollTop || 0; const sameStep = box.dataset.step === String(step);
+    box.dataset.step = String(step);
     box.replaceChildren(
       h('div', { class: 'mut', style: { marginBottom: '6px' } }, `Шаг ${step + 1} из ${STEPS.length}: `, h('b', {}, title),
         step > 0 && step < 5 && !poolReady() ? ' · загружаю общий пул…' : ''),
@@ -103,6 +107,7 @@ export function projectWizard(ui) {
         step > 0 ? h('button', { class: 'sec', onclick: () => { step--; q = ''; draw(); } }, '← Назад') : null,
         step < STEPS.length - 1 ? h('button', { onclick: () => { if (step === 0 && !data.name.trim()) { toast('Впишите название проекта'); return; } step++; q = ''; draw(); } }, 'Далее →')
           : h('button', { onclick: create }, '✅ Создать проект')));
+    if (sameStep) { const pl2 = box.querySelector('.picklist'); if (pl2) pl2.scrollTop = keepList; if (body) body.scrollTop = keepBody; }
   }
   draw();
 }
@@ -125,26 +130,29 @@ function afterCreate(pid, ui) {
   }
   function drawings() {
     const rows = h('div', {}); const files = [];
-    const input = h('input', { type: 'file', accept: '.pdf,application/pdf', multiple: true, onchange: () => {
-      [...input.files].forEach((f) => files.push({ f, floor: h('input', { placeholder: 'этаж', style: { width: '90px' } }) }));
-      rows.replaceChildren(...files.map((x) => h('div', { class: 'pickrow' }, h('span', { style: { flex: 1 } }, x.f.name), x.floor)));
-    } });
-    return [h('div', { class: 'mut' }, 'PDF тохнитов проекта. Для каждого можно указать этаж. Файлы уйдут на Google Диск в папку проекта.'), input, rows,
+    const paint = () => rows.replaceChildren(...files.map((x) => h('div', { class: 'pickrow' }, h('span', { style: { flex: 1 } }, x.name, x.fileId ? h('small', { class: 'mut' }, '  · с Диска') : null), x.floor)));
+    const addOne = async () => { const { pickPdf } = await import('./pdfpick.js'); const r = await pickPdf({ title: 'Тохнит для проекта', project: false }); if (!r) return;
+      if (files.some((x) => x.name === r.name)) { toast('Этот тохнит уже в списке'); return; }
+      files.push({ ...r, floor: h('input', { placeholder: 'этаж', style: { width: '90px' }, value: (r.name.match(/(-?\d+(?:\.\d+)?)/) || [])[1] || '' }) }); paint(); };
+    return [h('div', { class: 'mut' }, 'Тохниты проекта: с устройства или уже лежащие на Google Диске (без повторной загрузки). Для каждого можно указать этаж.'),
+      h('button', { class: 'sec', onclick: addOne }, '➕ Добавить тохнит'), rows,
       h('button', { onclick: async () => {
         if (!files.length) { next(); return; }
         const { addDrawing } = await import('../drawings.js'); const { makeWorker } = await import('./tohnitview.js');
         for (const x of files) {
-          try { const buf = await x.f.arrayBuffer(); const wk = makeWorker(); const o = await wk.call('openDoc', { data: buf.slice(0) }); wk.stop();
-            await addDrawing(buf, { name: x.f.name, floor: x.floor.value.trim(), pages: o.pages }); } catch (e) { toast(`${x.f.name}: ${e.message}`); }
+          try { const wk = makeWorker(); const o = await wk.call('openDoc', { data: x.buf.slice(0) }); wk.stop();
+            await addDrawing(x.buf, { name: x.name, floor: x.floor.value.trim(), pages: o.pages, fileId: x.fileId || null }); } catch (e) { toast(`${x.name}: ${e.message}`); }
         }
         toast(`Чертежей добавлено: ${files.length}`); next();
       } }, 'Добавить и дальше')];
   }
   function points() {
-    return [h('div', { class: 'mut' }, 'Точки можно добавить сразу: из файла (после разбора тохнита) или разобрать чертёж в приложении. Откроется своё окно; после него нажмите «Дальше».'),
+    const ds = drawingsOf();
+    return [h('div', { class: 'mut' }, 'Точки можно добавить сразу: из файла (после разбора тохнита) или разобрать тохнит проекта. Откроется своё окно; после него нажмите «Дальше».'),
       h('div', { class: 'btns' },
         h('button', { class: 'sec', onclick: () => import('./pointsfile.js').then((m) => m.pointsFromFile()) }, '📥 Точки из файла'),
-        h('button', { class: 'sec', onclick: () => import('./tohnitview.js').then((m) => m.pointsFromDrawing()) }, '📐 Из чертежа (PDF)')),
+        ...ds.map((d) => h('button', { class: 'sec', onclick: async () => { const { loadDrawing } = await import('../drawings.js'); const m = await import('./tohnitview.js'); try { m.pointsFromDrawing({ drawing: d, buf: await loadDrawing(d) }); } catch (e) { toast(e.message); } } }, `📐 Разобрать «${drawingTitle(d)}»`)),
+        h('button', { class: 'sec', onclick: () => import('./tohnitview.js').then((m) => m.pointsFromDrawing()) }, ds.length ? '📐 Другой тохнит…' : '📐 Из чертежа (PDF)')),
       h('button', { onclick: next }, 'Дальше')];
   }
   function managers() {

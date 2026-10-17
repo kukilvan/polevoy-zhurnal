@@ -1,4 +1,5 @@
 // «🗺 План»: чертёж проекта с точками по статусу. Нажал на точку — её карточка; из карточки точки «📍 На чертеже» — сюда же, к ней.
+import { pickPdf } from './pdfpick.js';
 import { h, openModal, toast, confirmDialog } from '../ui.js';
 import { state, currentProject, infoOf, getRepo, subscribe } from '../store.js';
 import { drawingsOf, drawingTitle, drawingFor, loadDrawing, addDrawing, pushDrawing, removeDrawing, updateDrawing, posKey } from '../drawings.js';
@@ -76,12 +77,11 @@ export function planModal({ point = null, placeFor = null } = {}) {
   const sheetPts = (d) => [...state.ctx.points.values()].filter((p) => p.pos && drawingFor(p)?.id === d.id);
 
   function addPdf() {
-    const input = h('input', { type: 'file', accept: '.pdf,application/pdf', style: { display: 'none' } });
-    input.addEventListener('change', async () => {
-      const f = input.files?.[0]; if (!f) return;
+    (async () => {
+      const r = await pickPdf({ title: '➕ Чертёж в план', project: false }); if (!r) return;
+      const f = { name: r.name }; const buf = r.buf;
       const dup = drawingsOf().find((x) => x.name === f.name);
       if (dup && !(await confirmDialog(`Этот файл уже добавлен: «${drawingTitle(dup)}» (файл ${f.name}). Заменить чертёж новым файлом? Точки и отметки останутся.`, { yes: 'Заменить' }))) return;
-      const buf = await f.arrayBuffer();
       // точки, чей чертёж ещё не добавлен: предложить связать с этим файлом
       const orphan = [...new Set([...state.ctx.points.values()].filter((p) => p.pos?.sheet && !drawingFor(p)).map((p) => p.pos.sheet))];
       let alias = null;
@@ -97,14 +97,13 @@ export function planModal({ point = null, placeFor = null } = {}) {
       try {
         const tmp = makeWorker(); const o = await tmp.call('openDoc', { data: buf.slice(0) }); tmp.stop();
         const fl = [...state.ctx.points.values()].find((p) => p.pos?.sheet === (alias || f.name))?.floor || '';
-        let d = await addDrawing(buf, { name: f.name, floor: fl, pages: o.pages }).catch((e) => { toast(`Чертёж сохранён на этом устройстве, на Диск — не получилось: ${e.message}`); return null; });
+        let d = await addDrawing(buf, { name: f.name, floor: fl, pages: o.pages, fileId: r.fileId || null }).catch((e) => { toast(`Чертёж сохранён на этом устройстве, на Диск — не получилось: ${e.message}`); return null; });
         d = d || drawingsOf().find((x) => x.name === f.name);
         if (alias && d) { const p = currentProject(); getRepo().saveProject(p.id, { drawings: (p.drawings || []).map((x) => (x.id === d.id ? { ...x, aliases: [...new Set([...(x.aliases || []), alias])] } : x)) }); }
         toast('Чертёж добавлен'); setTimeout(() => draw(d?.id), 300);
         if (d && state.ctx.points.size) linkPoints(d, buf, { onDone: () => draw(d.id) }).catch((e) => toast(`Связать точки не получилось: ${e.message}`));
       } catch (e) { toast(`Не получилось: ${e.message}`); }
-    });
-    input.click();
+    })();
   }
 
   async function show(d) {

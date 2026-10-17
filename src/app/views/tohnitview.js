@@ -1,5 +1,6 @@
 // «📐 Из чертежа»: разбор тохнита (PDF) прямо в приложении, без ИИ — по каталогу подписей.
 // Незнакомые группы подписей — вопросы кнопками; ответы можно запомнить (личный каталог, общий для всех проектов).
+import { pickPdf } from './pdfpick.js';
 import { h, openModal, toast, confirmDialog } from '../ui.js';
 import { state, getRepo, currentProject, subscribe } from '../store.js';
 import { importPreview } from './pointsfile.js';
@@ -65,7 +66,7 @@ function iconGroupsOf(drawing) {
 }
 
 // drawing + buf — правка уже сохранённого чертежа (из «🗺 План» → «✏️ Редактировать»): без выбора файла; значки — уже отмеченные
-export function pointsFromDrawing({ drawing = null, buf: preBuf = null } = {}) {
+export function pointsFromDrawing({ drawing = null, buf: preBuf = null, file = null } = {}) {  // file: { name, buf, fileId } — уже выбранный PDF
   const input = h('input', { type: 'file', accept: '.pdf,application/pdf', style: { display: 'none' } });
   const floorIn = h('input', { placeholder: 'Этаж (например 0, -3.50)' });
   const status = h('div', { class: 'mut', style: { margin: '6px 0' } });
@@ -76,7 +77,7 @@ export function pointsFromDrawing({ drawing = null, buf: preBuf = null } = {}) {
     h('div', { class: 'mut' }, drawing ? 'Чертёж разобран заново по каталогу: новые подписи можно добавить (существующие точки пропускаются); значки без номеров — поправить: добавить пропущенные, убрать лишние, номера пересчитаются.'
       : 'Тохнит в PDF (из AutoCAD, с текстом). Приложение само найдёт подписи точек по каталогу; что не знает — спросит. Чертёж никуда не отправляется. Первый раз загружается модуль чтения PDF (≈4 МБ).'),
     h('label', { class: 'field' }, h('span', {}, 'Этаж'), floorIn),
-    drawing ? null : h('div', { class: 'btns' }, h('button', { onclick: () => input.click() }, '📂 Выбрать PDF'), input),
+    drawing ? null : h('div', { class: 'btns' }, h('button', { onclick: async () => { const r = await pickPdf({ title: 'Тохнит для разбора' }); if (r) useFile(r); } }, '📂 Выбрать PDF'), input),
     status, out), { sticky: true, onClose: () => wk?.stop() });
 
   const answers = {}; const remember = new Set();
@@ -148,14 +149,14 @@ export function pointsFromDrawing({ drawing = null, buf: preBuf = null } = {}) {
       out.replaceChildren(importPreview({ ...r.data, points: [...r.data.points, ...iconPts()] }, fileName, async () => {
         try { const n = await saveLearned(keep); if (n) toast(`Запомнено правил: ${n}`); } catch { /* не страшно */ }
         if (keepPdf.checked && theFile && !drawing) {  // чертёж — в проект: план и «📍 На чертеже»
-          theFile.arrayBuffer().then((buf) => addDrawing(buf, { name: fileName, floor: floorIn.value.trim(), pages: pagesInfo }))
+          theFile.arrayBuffer().then((buf) => addDrawing(buf, { name: fileName, floor: floorIn.value.trim(), pages: pagesInfo, fileId: theFile.fileId || null }))
             .then((d) => toast(d?.fileId ? 'Чертёж сохранён в проект и на Диск' : 'Чертёж сохранён в проект (на Диск — кнопка «⬆ На Диск» в плане)'))
             .catch((e) => toast(`Чертёж сохранён на этом устройстве; на Диск — не получилось: ${e.message}`));
         }
         close();
       }));
     } }, `Дальше → проверить и добавить (${pts.length})`);
-    out.replaceChildren(
+    out.replaceChildren(...[
       h('div', { class: 'card', style: { margin: '10px 0' } }, h('b', {}, `Найдено точек: ${pts.length}`),
         h('div', { style: { fontSize: '14px', marginTop: '6px' } }, Object.entries(byType).sort((a, b) => b[1] - a[1]).map(([t, n]) => h('div', {}, `${t}: ${n}`))),
         r.hiddenLayers.length ? h('div', { class: 'mut', style: { marginTop: '6px' } }, `Скрыто слоёв-мусора: ${r.hiddenLayers.length}`) : null),
@@ -165,7 +166,7 @@ export function pointsFromDrawing({ drawing = null, buf: preBuf = null } = {}) {
         h('div', { class: 'btns' }, h('button', { class: pts.length ? 'sec' : '', onclick: () => iconsPicker({ wk, pages: pagesInfo, floor: floorIn.value.trim(), sheet: fileName, groups: iconGroups,
           onDone: (gs) => { iconGroups = gs; render(lastR); } }) }, iconGroups.length ? '✏️ Изменить значки' : '🔎 Отметить значки на плане'))),
       drawing ? null : h('label', { class: 'pickrow', style: { margin: '8px 0' } }, keepPdf, h('span', {}, '📌 Сохранить чертёж в проект — «🗺 План» и «📍 На чертеже» в карточке точки')),
-      h('div', { class: 'btns' }, next));
+      h('div', { class: 'btns' }, next)].filter(Boolean));
   }
 
   async function load(buf) {
@@ -184,6 +185,14 @@ export function pointsFromDrawing({ drawing = null, buf: preBuf = null } = {}) {
     fileName = file.name; theFile = file; if (!floorIn.value.trim()) floorIn.value = (fileName.match(/(-?\d+(?:\.\d+)?)/) || [])[1] || '';
     load(await file.arrayBuffer());
   });
+  // выбранный PDF (из проекта, с Диска или с устройства); тохнит этого проекта — сразу режим «✏️ Редактировать»
+  function useFile(r) {
+    if (r.drawing) { close(); pointsFromDrawing({ drawing: r.drawing, buf: r.buf }); return; }
+    fileName = r.name; theFile = { name: r.name, fileId: r.fileId || null, arrayBuffer: async () => r.buf.slice(0) };
+    if (!floorIn.value.trim()) floorIn.value = (fileName.match(/(-?\d+(?:\.\d+)?)/) || [])[1] || '';
+    load(r.buf.slice(0));
+  }
+  if (file) useFile(file);
   if (drawing) { fileName = drawing.name; floorIn.value = drawing.floor || ''; load(preBuf.slice(0)); }
   void lastQuestions;
 }
