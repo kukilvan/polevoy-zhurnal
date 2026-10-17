@@ -108,3 +108,15 @@ export function nextLabel(points, typeId, cabinet = '') {
   while (next && used.has(next) && guard++ < 500) next = bump(next);
   return next;
 }
+
+// Подпись нескольких точек на одной отметке плана: по порядку (TV13, TV14 … TV19) — «TV13-19»; вразнобой — каждая отдельно, по порядку
+export function combineLabels(labels) {
+  const ls = [...new Set(labels)].sort((a, b) => compareLabels(a, b));
+  if (ls.length < 2) return ls;
+  const ps = ls.map((l) => l.match(/^(.*?)(\d+)$/));
+  if (ps.every(Boolean) && ps.every((m) => m[1] === ps[0][1])) {
+    const nums = ps.map((m) => +m[2]);
+    if (nums.every((n, i) => i === 0 || n === nums[i - 1] + 1)) return [`${ls[0]}-${ps[ps.length - 1][2]}`];
+  }
+  return ls;
+}

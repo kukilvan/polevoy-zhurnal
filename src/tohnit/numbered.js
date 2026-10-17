@@ -1,5 +1,7 @@
 // PDF с номерами: исходный чертёж + у каждой точки кружок и номер цветом по типу (пометки PDF — можно скрыть/удалить в любом просмотрщике)
 // + последняя страница «Легенда номеров»: по типам — сколько и какие.
+import { combineLabels } from '../domain/points.js';
+
 export const TYPE_COLORS = ['#e0007a', '#0a84ff', '#ff9f0a', '#30a14e', '#bf5af2', '#ff453a', '#0fb5ae', '#8e6c00', '#5856d6', '#c2185b'];
 const rgb = (hex) => [1, 3, 5].map((i) => parseInt(hex.slice(i, i + 2), 16) / 255);
 
@@ -33,17 +35,23 @@ export function numberedPdf(mupdf, data, points, { title = '', icons = {} } = {}
     } catch { /* без слоя */ }
   }
   const stampOf = (t) => { if (!icons[t]) return null; if (!imgs.has(t)) { try { imgs.set(t, new mupdf.Image(b64(icons[t].png))); } catch { imgs.set(t, null); } } return imgs.get(t); };
+  // несколько точек на одной отметке — одна подпись («TV13-14» или столбиком)
+  const gkey = (p) => `${p.pos.page || 0}|${Math.round(p.pos.x)}|${Math.round(p.pos.y)}`;
+  const groups = new Map(); points.filter((p) => p.pos).forEach((p) => { const k = gkey(p); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p.label); });
+  const done = new Set();
   for (const p of points) {
     if (!p.pos) continue; const pi = p.pos.page || 0; if (pi >= doc.countPages()) continue;
+    const gk = gkey(p); if (done.has(gk)) continue; done.add(gk);
+    const lines = combineLabels(groups.get(gk));
     if (!pages.has(pi)) pages.set(pi, doc.loadPage(pi));
     const page = pages.get(pi); const c = colorOf(p.typeId);
     const img = p.pos.icon ? stampOf(p.typeId) : null;
     if (img) { const iw = icons[p.typeId].w || 12; const ih = icons[p.typeId].h || 12; const st = page.createAnnotation('Stamp'); st.setRect([p.pos.x - iw / 2, p.pos.y - ih / 2, p.pos.x + iw / 2, p.pos.y + ih / 2]); st.setStampImage(img); st.setContents(`${p.label} — ${p.typeId} (добавлено на объекте)`); st.update(); if (addedLayer) try { st.getObject().put('OC', addedLayer); } catch { /* ok */ } }
     const r = Math.max(5, Math.min(p.pos.h || 8, 12) * 0.8); const fs = Math.max(6, Math.min(14, (p.pos.h || 8)));
-    const ci = page.createAnnotation('Circle'); ci.setRect([p.pos.x - r, p.pos.y - r, p.pos.x + r, p.pos.y + r]); ci.setColor(c); ci.setBorderWidth(1.2); ci.setContents(`${p.label} — ${p.typeId}`); ci.update(); inLayer(ci, p.typeId);
-    const tw = p.label.length * fs * 0.62 + 4;
-    const ft = page.createAnnotation('FreeText'); ft.setRect([p.pos.x + r + 1, p.pos.y - fs * 0.7, p.pos.x + r + 1 + tw, p.pos.y + fs * 0.7]);
-    ft.setContents(p.label); ft.setDefaultAppearance('Helv', fs, c); ft.setBorderWidth(0); ft.update(); inLayer(ft, p.typeId);
+    const ci = page.createAnnotation('Circle'); ci.setRect([p.pos.x - r, p.pos.y - r, p.pos.x + r, p.pos.y + r]); ci.setColor(c); ci.setBorderWidth(1.2); ci.setContents(`${lines.join(', ')} — ${p.typeId}`); ci.update(); inLayer(ci, p.typeId);
+    const tw = Math.max(...lines.map((l) => l.length)) * fs * 0.62 + 4; const th = fs * 1.2 * lines.length + fs * 0.2;
+    const ft = page.createAnnotation('FreeText'); ft.setRect([p.pos.x + r + 1, p.pos.y - th / 2, p.pos.x + r + 1 + tw, p.pos.y + th / 2]);
+    ft.setContents(lines.join('\n')); ft.setDefaultAppearance('Helv', fs, c); ft.setBorderWidth(0); ft.update(); inLayer(ft, p.typeId);
   }
   // легенда
   const W = 842; const H = 595; const lines = [];

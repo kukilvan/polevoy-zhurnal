@@ -2,7 +2,7 @@
 import { h, openModal, toast, confirmDialog } from '../ui.js';
 import { state, currentProject, infoOf, getRepo, subscribe } from '../store.js';
 import { drawingsOf, drawingTitle, drawingFor, loadDrawing, addDrawing, pushDrawing, removeDrawing, updateDrawing, posKey } from '../drawings.js';
-import { missingStages, comparePoints, nextLabel } from '../../domain/index.js';
+import { missingStages, comparePoints, nextLabel, combineLabels } from '../../domain/index.js';
 import { newId } from '../repo.js';
 import { typePicker } from './tohnitview.js';
 import { cablesPicker } from './cablespick.js';
@@ -37,11 +37,12 @@ const labelLike = (t = '') => /\d/.test(t) && !/[\u0590-\u05FF]/.test(t) && t.le
 function placeTags(g, api, tags, circles, frames = []) {
   const fs = Math.round(Math.min(26, Math.max(12, 5.5 * api.view.s)));
   g.font = `bold ${fs}px system-ui`; g.textBaseline = 'middle';
-  const placed = [...frames]; const padX = 4; const hh = fs + 6;
+  const placed = [...frames]; const padX = 4;
   const hitsBox = (b) => placed.some((q) => b[0] < q[2] && b[2] > q[0] && b[1] < q[3] && b[3] > q[1]);
   const hitsCircle = (b) => circles.some(([cx, cy, cr]) => { const dx = Math.max(b[0] - cx, 0, cx - b[2]); const dy = Math.max(b[1] - cy, 0, cy - b[3]); return dx * dx + dy * dy < cr * cr; });
   for (const t of tags.sort((a, b) => a.y - b.y || a.x - b.x)) {
-    const w = g.measureText(t.p.label).width + 2 * padX; const gap = 3; const r = t.r;
+    const lines = combineLabels(t.labels || [t.p.label]); const lh = fs + 2; const hh = lines.length * lh + 4;
+    const w = Math.max(...lines.map((l) => g.measureText(l).width)) + 2 * padX; const gap = 3; const r = t.r;
     const opts = [[t.x + r + gap, t.y - r - hh + 4], [t.x + r + gap, t.y - hh / 2], [t.x + r + gap, t.y + r - 4], [t.x - w / 2, t.y - r - hh - gap], [t.x - w / 2, t.y + r + gap],
       [t.x - r - gap - w, t.y - r - hh + 4], [t.x - r - gap - w, t.y - hh / 2], [t.x - r - gap - w, t.y + r - 4],
       [t.x + r + gap, t.y - r - 2 * hh], [t.x - w / 2, t.y + r + gap + hh], [t.x - w / 2, t.y - r - 2 * hh - gap], [t.x + r + gap, t.y + r + hh]];
@@ -53,7 +54,7 @@ function placeTags(g, api, tags, circles, frames = []) {
     if (Math.hypot(cx - t.x, cy - t.y) > r + gap + 4) { g.strokeStyle = t.col; g.lineWidth = 1; g.beginPath(); g.moveTo(t.x, t.y); g.lineTo(cx, cy); g.stroke(); }
     g.fillStyle = 'rgba(255,255,255,.92)'; g.fillRect(best[0], best[1], w, hh);
     g.strokeStyle = t.col; g.lineWidth = 2; g.strokeRect(best[0], best[1], w, hh);
-    g.fillStyle = '#111'; g.fillText(t.p.label, best[0] + padX, best[1] + hh / 2 + 1);
+    g.fillStyle = '#111'; lines.forEach((l, i) => g.fillText(l, best[0] + padX, best[1] + 2 + lh * i + lh / 2 + 1));
   }
   g.textBaseline = 'alphabetic';
 }
@@ -137,15 +138,19 @@ export function planModal({ point = null, placeFor = null } = {}) {
           if (tool) { toolTap(d, o.pages, x, y, page, nearest); return; }
           if (fType === UNL || fType === HID) { const m = nearest(marks(), (it) => it.pos, x, y, page); if (m) markCard(d, m, fType === HID); return; }
           const best = nearest(pts().filter(stageOk), (p) => p.pos, x, y, page); if (!best) return;
-          if (selMode) { sel.has(best.id) ? sel.delete(best.id) : sel.add(best.id); selBar(); viewer.draw(); return; }
-          focusId = best.id; viewer.draw(); openCard?.(best);
+          if (selMode) sel.has(best.id) ? sel.delete(best.id) : sel.add(best.id);
+          const group = pts().filter((p) => p.id !== best.id && posKey(p.pos) === posKey(best.pos));
+          if (selMode) { [best, ...group].forEach((p) => (sel.has(best.id) ? sel.add(p.id) : sel.delete(p.id))); selBar(); viewer.draw(); return; }
+          focusId = best.id; viewer.draw();
+          if (group.length) { const all = [best, ...group].sort(comparePoints); const cc = openModal('Точки на этой отметке', h('div', { class: 'card', style: { padding: 0 } }, all.map((p) => h('div', { class: 'item', onclick: () => { cc(); openCard?.(p); } }, h('div', { class: 'name' }, p.label, h('div', { class: 'sub' }, p.typeId))))), {}); return; }
+          openCard?.(best);
         },
         overlay: (g, api) => {
           const big = api.view.s > 0.6;
           if (fType === UNL || fType === HID) { for (const m of marks()) { if ((m.pos.page || 0) !== api.page) continue; if (fType === HID) { outline(g, api, m.pos, '#c7c7cc', { width: 1, fill: 'rgba(255,255,255,.9)' }); } else outline(g, api, m.pos, '#ff9500', { width: 2 }); } return; }
           // скрытые подписи и значки — закрашены белым, чтобы не мешали
           for (const m of hid()) { if ((m.pos.page || 0) === api.page) outline(g, api, m.pos, '#ffffff', { width: 2, pad: 2, fill: '#ffffff' }); }
-          const icons = currentProject()?.typeIcons || {}; const tags = []; const circles = []; const frames = [];
+          const icons = currentProject()?.typeIcons || {}; const tags = []; const circles = []; const frames = []; const byKey = new Map();
           for (const p of pts()) {
             if ((p.pos.page || 0) !== api.page) continue;
             const on = stageOk(p); const col = on ? statusColor(infoOf(p).status) : '#d0d0d0';
@@ -153,7 +158,12 @@ export function planModal({ point = null, placeFor = null } = {}) {
             if (ic) { const im = iconImg(p.typeId, ic.png, () => viewer?.draw()); if (im.complete && im.naturalWidth) { const [sx, sy] = api.toScr(p.pos.x, p.pos.y); const w = (ic.w || 12) * api.view.s; const hh = (ic.h || 12) * api.view.s; g.globalAlpha = on ? 1 : 0.4; g.drawImage(im, sx - w / 2, sy - hh / 2, w, hh); g.globalAlpha = 1; } }
             outline(g, api, p.pos, col, { width: on ? (big ? 1.5 : 2) : 1 });
             if (sel.has(p.id)) outline(g, api, p.pos, '#00b7ff', { width: 3, pad: 1.5 + 3 / api.view.s });
-            if (!isText(p.pos)) { const [x, y] = api.toScr(p.pos.x, p.pos.y); const r = Math.max(5, (Math.max(p.pos.w || 8, p.pos.h || 8) / 2 + 1.5) * api.view.s); circles.push([x, y, r]); if (on && big) tags.push({ p, col, x, y, r }); } else { const [x, y] = api.toScr(p.pos.x, p.pos.y); const hw = (p.pos.w / 2 + 2) * api.view.s; const hh2 = (p.pos.h / 2 + 2) * api.view.s; frames.push([x - hw, y - hh2, x + hw, y + hh2]); }
+            if (!isText(p.pos)) {
+              const k = posKey(p.pos); const same = byKey.get(k);  // несколько точек на одной отметке — одна подпись
+              if (same) { same.labels.push(p.label); continue; }
+              const [x, y] = api.toScr(p.pos.x, p.pos.y); const r = Math.max(5, (Math.max(p.pos.w || 8, p.pos.h || 8) / 2 + 1.5) * api.view.s); circles.push([x, y, r]);
+              const t = { p, col, x, y, r, labels: [p.label] }; byKey.set(k, t); if (on && big) tags.push(t);
+            } else { const [x, y] = api.toScr(p.pos.x, p.pos.y); const hw = (p.pos.w / 2 + 2) * api.view.s; const hh2 = (p.pos.h / 2 + 2) * api.view.s; frames.push([x - hw, y - hh2, x + hw, y + hh2]); }
           }
           placeTags(g, api, tags, circles, frames);
           const f = focusId && state.ctx.points.get(focusId);
@@ -319,6 +329,9 @@ export function planModal({ point = null, placeFor = null } = {}) {
         if (rename) { data.label = sn.label; data.planName = p.label; } else if (sn?.kind === 'text' && p.label !== sn.label) data.planName = sn.label;
         getRepo().save(currentProject().id, [{ coll: 'points', id: p.id, data }]);
         toast(`«${rename ? sn.label : p.label}» на чертеже`); focusId = p.id; finish(); return true;
+      }, onPickMany: (list) => {
+        getRepo().save(currentProject().id, list.map((p) => ({ coll: 'points', id: p.id, data: { pos: posFor(p.typeId) } })));
+        toast(`На эту отметку: ${combineLabels(list.map((p) => p.label)).join(', ')}`); focusId = list[0].id; finish(); return true;
       } });
     }
     function fresh() {
@@ -413,6 +426,10 @@ export function planModal({ point = null, placeFor = null } = {}) {
       getRepo().save(currentProject().id, [{ coll: 'points', id: p.id, data }]);
       const k = posKey(m.pos); updateDrawing(d.id, (x) => ({ unlinked: (x.unlinked || []).filter((y) => posKey(y.pos) !== k), hidden: (x.hidden || []).filter((y) => posKey(y.pos) !== k) }));
       toast(`«${rename ? m.label : p.label}» связана с чертежом`); return true;
+    }, onPickMany: (list) => {
+      getRepo().save(currentProject().id, list.map((p) => ({ coll: 'points', id: p.id, data: { pos: { ...m.pos, sheet: d.name }, planName: m.label } })));
+      const k = posKey(m.pos); updateDrawing(d.id, (x) => ({ unlinked: (x.unlinked || []).filter((y) => posKey(y.pos) !== k), hidden: (x.hidden || []).filter((y) => posKey(y.pos) !== k) }));
+      toast(`На «${m.label}»: ${combineLabels(list.map((p) => p.label)).join(', ')}`); return true;
     } });
   }
 

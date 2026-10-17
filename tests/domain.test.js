@@ -691,3 +691,12 @@ test('название следующей точки: тот же формат, 
   assert.equal(nextLabel([P('GA1/C-1')], 'Вайфай', 'GA1'), '');
   assert.equal(nextLabel([P('GA1/AP-01', 'Вайфай'), P('GA1/AP-02', 'X')], 'Вайфай', 'GA1'), 'GA1/AP-03');
 });
+
+test('подпись нескольких точек на одной отметке', async () => {
+  const { combineLabels } = await import('../src/domain/points.js');
+  assert.deepEqual(combineLabels(['TV14', 'TV13']), ['TV13-14']);
+  assert.deepEqual(combineLabels(['TV19', 'TV20', 'TV21', 'TV22', 'TV23', 'TV24', 'TV25', 'TV26']), ['TV19-26']);
+  assert.deepEqual(combineLabels(['TV21', 'TV13', 'TV16']), ['TV13', 'TV16', 'TV21']);
+  assert.deepEqual(combineLabels(['A-09', 'A-10']), ['A-09-10']);
+  assert.deepEqual(combineLabels(['X1']), ['X1']);
+});
