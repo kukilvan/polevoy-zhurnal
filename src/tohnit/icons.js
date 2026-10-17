@@ -119,7 +119,8 @@ export function snapAt(spans, pages, page, x, y, { hidden = () => false, r = 12 
   }
   // надпись важнее, если палец на ней (или она ближе значка)
   if (txt && (!shp || dRect(txt) <= Math.hypot(Math.max(0, shp[0] - x, x - shp[2]), Math.max(0, shp[1] - y, y - shp[3])))) {
-    return { kind: 'text', label: txt.t.trim(), page, x: +((txt.x0 + txt.x1) / 2).toFixed(1), y: +((txt.y0 + txt.y1) / 2).toFixed(1), w: +(txt.x1 - txt.x0).toFixed(1), h: +(txt.y1 - txt.y0).toFixed(1) };
+    const angle = txt.dir ? +(Math.atan2(txt.dir[1], txt.dir[0]) * 180 / Math.PI).toFixed(1) : 0;  // наклон надписи (0 — горизонтально)
+    return { kind: 'text', label: txt.t.trim(), page, x: +((txt.x0 + txt.x1) / 2).toFixed(1), y: +((txt.y0 + txt.y1) / 2).toFixed(1), w: +(txt.x1 - txt.x0).toFixed(1), h: +(txt.y1 - txt.y0).toFixed(1), angle, size: txt.size || 0 };
   }
   if (shp) { const s = Math.max(shp[2] - shp[0], shp[3] - shp[1]); return { kind: 'shape', page, x: +((shp[0] + shp[2]) / 2).toFixed(1), y: +((shp[1] + shp[3]) / 2).toFixed(1), w: +s.toFixed(1), h: +s.toFixed(1) }; }
   return null;

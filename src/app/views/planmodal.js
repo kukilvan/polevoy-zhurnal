@@ -163,9 +163,15 @@ export function planModal({ point = null, placeFor = null } = {}) {
               if (same) { same.labels.push(p.label); continue; }
               const [x, y] = api.toScr(p.pos.x, p.pos.y); const r = Math.max(5, (Math.max(p.pos.w || 8, p.pos.h || 8) / 2 + 1.5) * api.view.s); circles.push([x, y, r]);
               const t = { p, col, x, y, r, labels: [p.label] }; byKey.set(k, t); if (on && big) tags.push(t);
-            } else { const [x, y] = api.toScr(p.pos.x, p.pos.y); const hw = (p.pos.w / 2 + 2) * api.view.s; const hh2 = (p.pos.h / 2 + 2) * api.view.s; frames.push([x - hw, y - hh2, x + hw, y + hh2]); }
+            } else {
+              // надпись на чертеже: своя подпись не нужна, если точка одна и называется так же; иначе (несколько точек, другое название) — подпись
+              const k = posKey(p.pos); const same = byKey.get(k);
+              if (same) { same.labels.push(p.label); same.need = true; continue; }
+              const [x, y] = api.toScr(p.pos.x, p.pos.y); const hw = (p.pos.w / 2 + 2) * api.view.s; const hh2 = (p.pos.h / 2 + 2) * api.view.s; frames.push([x - hw, y - hh2, x + hw, y + hh2]);
+              const t = { p, col, x, y, r: Math.max(hw, hh2), labels: [p.label], textPos: true, need: !!(p.pos.text && p.pos.text !== p.label) }; byKey.set(k, t); if (on && big) tags.push(t);
+            }
           }
-          placeTags(g, api, tags, circles, frames);
+          placeTags(g, api, tags.filter((t) => !t.textPos || t.need), circles, frames);
           const f = focusId && state.ctx.points.get(focusId);
           if (f?.pos && (f.pos.page || 0) === api.page && drawingFor(f)?.id === d.id) { outline(g, api, f.pos, '#e0007a', { width: 3, pad: 1.5 + 4 / api.view.s }); }
           if (temp && (temp.page || 0) === api.page) { g.setLineDash([5, 3]); outline(g, api, temp, '#e0007a', { width: 2.5, pad: 2 + 3 / api.view.s, fill: 'rgba(224,0,122,.12)' }); g.setLineDash([]); }
@@ -245,12 +251,12 @@ export function planModal({ point = null, placeFor = null } = {}) {
     if (tool === 'add') { const hit = nearest(all, (p) => p.pos, x, y, page); if (hit) { focusId = hit.id; viewer.draw(); existingCard(d, hit); return; } }
     let sn = null; try { sn = await wk.call('snap', { page, x, y, r: 14 / viewer.view.s }); } catch { /* без привязки */ }
     if (sn?.kind === 'text' && !labelLike(sn.label)) sn = null;  // посторонняя надпись (иврит, длинный текст) — не номер точки
-    if (sn?.kind === 'shape' && Math.max(sn.w || 0, sn.h || 0) > 24) sn = null;  // крупное (стена, линия, штриховка) — не значок: ставим, где нажали
+    if (tool !== 'icon' && sn?.kind === 'shape' && Math.max(sn.w || 0, sn.h || 0) > 24) sn = null;  // крупное (стена, линия, штриховка) — не значок: ставим, где нажали
     const pg = pages[page] || {}; const ic = (t) => currentProject()?.typeIcons?.[t];
     // icon — нарисовать значок типа (на чертеже значка нет): по умолчанию, если рядом ничего не нашлось
     const at = (t, icon = !sn) => {
       const tap = { page, x: +x.toFixed(1), y: +y.toFixed(1) };
-      const base = sn && !(icon && sn.kind === 'text') ? { page, x: sn.x, y: sn.y, w: sn.w, h: sn.h } : tap;
+      const base = sn && !(icon && sn.kind === 'text') ? { page, x: sn.x, y: sn.y, w: sn.w, h: sn.h, ...(sn.kind === 'text' ? { text: sn.label } : {}) } : tap;
       return icon ? { ...base, w: ic(t)?.w || base.w || 10, h: ic(t)?.h || base.h || 10, icon: true } : { ...base, w: base.w || 10, h: base.h || 10 };
     };
     const posFor = (t, icon) => ({ ...at(t, icon), pw: pg.w, ph: pg.h, sheet: d.name });
@@ -269,8 +275,9 @@ export function planModal({ point = null, placeFor = null } = {}) {
   // «➕ Точка на плане» по уже отмеченной точке: привязать это место к другой точке или нарисовать/убрать значок типа
   function existingCard(d, p) {
     const ic = currentProject()?.typeIcons?.[p.typeId];
-    const c = openModal(`«${p.label}» на плане`, h('div', {},
-      h('div', { class: 'mut' }, `${p.typeId}${p.cabinet ? ` · шкаф ${p.cabinet}` : ''}. Здесь уже стоит эта точка.`),
+    const group = sheetPts(d).filter((q) => posKey(q.pos) === posKey(p.pos)).sort(comparePoints);
+    const c = openModal(`«${combineLabels(group.map((q) => q.label)).join(', ')}» на плане`, h('div', {},
+      h('div', { class: 'mut' }, group.length > 1 ? `На этой отметке точек: ${group.length}.` : `${p.typeId}${p.cabinet ? ` · шкаф ${p.cabinet}` : ''}. Здесь уже стоит эта точка.`),
       h('div', { class: 'btns' },
         h('button', { class: 'sec', onclick: () => { c(); choosePoint({ title: `🔗 Какая точка здесь вместо «${p.label}»?`, exclude: p.id, onPick: (q) => {
           getRepo().save(currentProject().id, [{ coll: 'points', id: q.id, data: { pos: { ...p.pos } } }, { coll: 'points', id: p.id, data: { pos: null } }]);
@@ -283,15 +290,26 @@ export function planModal({ point = null, placeFor = null } = {}) {
           toast(on ? (ic ? 'Значок типа нарисован' : 'У типа значок не задан — «📌 Значки типов»') : 'Значок убран'); c(); setTimeout(() => viewer?.draw(), 300);
         } }, p.pos.icon ? '🖼 Убрать значок типа' : '🖼 Значок по типу точки'),
         h('button', { class: 'sec', onclick: async () => {
-          if (!(await confirmDialog(`Убрать «${p.label}» с плана? Точка останется в проекте (фильтр «📍 Нет на плане»), её можно будет отметить снова.`, { yes: 'Убрать' }))) return;
-          getRepo().save(currentProject().id, [{ coll: 'points', id: p.id, data: { pos: null } }]); toast(`«${p.label}» убрана с плана`); c(); setTimeout(() => viewer?.draw(), 300);
+          const list = await pickGroup(group, `Убрать с плана${group.length > 1 ? ' — какие точки этой отметки?' : ` «${p.label}»?`}`, 'Точки останутся в проекте (фильтр «📍 Нет на плане»), их можно будет отметить снова.', '🗑 Убрать'); if (!list) return;
+          getRepo().save(currentProject().id, list.map((q) => ({ coll: 'points', id: q.id, data: { pos: null } }))); toast(`Убрано с плана: ${combineLabels(list.map((q) => q.label)).join(', ')}`); c(); setTimeout(() => viewer?.draw(), 300);
         } }, '🗑 Убрать с плана'),
         h('button', { class: 'sec', onclick: async () => {
-          if (!(await confirmDialog(`Скрыть «${p.label}» на плане? Место закрасится белым, точка останется в проекте без места на плане. Вернуть — фильтр «🙈 Скрытые».`, { yes: '🙈 Скрыть' }))) return;
-          hideArea(d, { label: p.label, typeId: p.typeId, pos: { ...p.pos } });
-          getRepo().save(currentProject().id, [{ coll: 'points', id: p.id, data: { pos: null } }]); toast(`«${p.label}» скрыта`); c();
+          const list = await pickGroup(group, `Скрыть${group.length > 1 ? ' — какие точки этой отметки?' : ` «${p.label}»?`}`, 'Место закрасится белым, точки останутся в проекте без места на плане. Вернуть — фильтр «🙈 Скрытые».', '🙈 Скрыть'); if (!list) return;
+          if (list.length === group.length) hideArea(d, { label: combineLabels(list.map((q) => q.label)).join(', '), typeId: p.typeId, pos: { ...p.pos } });
+          getRepo().save(currentProject().id, list.map((q) => ({ coll: 'points', id: q.id, data: { pos: null } }))); toast(`Скрыто: ${combineLabels(list.map((q) => q.label)).join(', ')}`); c();
         } }, '🙈 Скрыть'),
         h('button', { class: 'sec', onclick: () => { c(); openCard?.(p); } }, '📋 Карточка точки'))), {});
+  }
+  // какие из точек отметки (по умолчанию все); одна точка — просто подтверждение
+  function pickGroup(group, title, note, yes) {
+    if (group.length === 1) return confirmDialog(`${title} ${note}`, { yes }).then((ok) => (ok ? group : null));
+    return new Promise((res) => {
+      const boxes = group.map((q) => ({ q, cb: h('input', { type: 'checkbox', checked: true }) })); let done = false;
+      const cc = openModal(title, h('div', {}, h('div', { class: 'mut' }, note),
+        h('div', { class: 'picklist' }, boxes.map((b) => h('label', { class: 'pickrow' }, b.cb, h('span', {}, b.q.label)))),
+        h('div', { class: 'btns' }, h('button', { onclick: () => { const l = boxes.filter((b) => b.cb.checked).map((b) => b.q); if (!l.length) { toast('Ничего не выбрано'); return; } done = true; cc(); res(l); } }, yes))),
+      { onClose: () => { if (!done) res(null); } });
+    });
   }
   // добавить место в «Скрытые» чертежа (и убрать из «Не размеченых», если оно там было)
   function hideArea(d, m) {
@@ -373,17 +391,25 @@ export function planModal({ point = null, placeFor = null } = {}) {
   // «📌 Значки типов»: нажатие на значок → его картинка (маленький PNG) хранится в проекте
   async function iconTap(d, sn, page, x, y, done) {
     if (!iconType) { toast('Сначала выберите тип'); done(); return; }
-    if (sn?.kind === 'text') { toast('Это надпись — нажмите на сам значок'); done(); return; }
-    const b = sn ? [sn.x - sn.w / 2, sn.y - sn.h / 2, sn.x + sn.w / 2, sn.y + sn.h / 2] : [x - 6, y - 6, x + 6, y + 6];
-    const w = b[2] - b[0]; const hh = b[3] - b[1]; const pad = Math.max(0.5, Math.max(w, hh) * 0.06);
-    const clip = [b[0] - pad, b[1] - pad, b[2] + pad, b[3] + pad];
-    let png = null;
-    for (const z of [6, 4, 3, 2]) { png = await wk.call('png', { page, clip, zoom: Math.min(z, 160 / (clip[2] - clip[0])) }); if (png.byteLength < 24000) break; }
+    let png = null; let size;
+    if (sn?.kind === 'text') {
+      // надпись в рамке (например, «TV-140»): берём надпись с рамкой вокруг; наклонную — разворачиваем горизонтально
+      const a = sn.angle || 0; const rad = a * Math.PI / 180; const c = Math.abs(Math.cos(rad)); const s = Math.abs(Math.sin(rad));
+      const H = sn.size ? sn.size * 1.1 : Math.min(sn.w, sn.h);
+      let L = c > 0.3 ? (sn.w - H * s) / c : (sn.h - H * c) / s; if (!(L > 0)) L = Math.max(sn.w, sn.h);
+      size = { w: L + H * 1.4, h: H * 2.6 };
+      for (const z of [6, 4, 3, 2]) { png = await wk.call('png', { page, rot: { cx: sn.x, cy: sn.y, w: size.w, h: size.h, angle: a }, zoom: Math.min(z, 200 / size.w) }); if (png.byteLength < 24000) break; }
+    } else {
+      const b = sn ? [sn.x - sn.w / 2, sn.y - sn.h / 2, sn.x + sn.w / 2, sn.y + sn.h / 2] : [x - 6, y - 6, x + 6, y + 6];
+      const w = b[2] - b[0]; const hh = b[3] - b[1]; const pad = Math.max(0.5, Math.max(w, hh) * 0.06);
+      const clip = [b[0] - pad, b[1] - pad, b[2] + pad, b[3] + pad]; size = { w: clip[2] - clip[0], h: clip[3] - clip[1] };
+      for (const z of [6, 4, 3, 2]) { png = await wk.call('png', { page, clip, zoom: Math.min(z, 160 / (clip[2] - clip[0])) }); if (png.byteLength < 24000) break; }
+    }
     const url = toDataUrl(png);
     const ok = await confirmDialog(h('div', {}, h('div', {}, `Значок для типа «${iconType}»:`), h('img', { src: url, style: { maxHeight: '80px', background: '#fff', border: '1px solid #ddd', margin: '8px 0' } }), h('div', { class: 'mut' }, sn ? '' : 'Рядом не нашёлся значок — взят кусок вокруг нажатия.')), { yes: 'Сохранить значок' });
     done();
     if (!ok) return;
-    const p = currentProject(); getRepo().saveProject(p.id, { typeIcons: { ...(p.typeIcons || {}), [iconType]: { png: url, w: +(clip[2] - clip[0]).toFixed(1), h: +(clip[3] - clip[1]).toFixed(1) } } });
+    const p = currentProject(); getRepo().saveProject(p.id, { typeIcons: { ...(p.typeIcons || {}), [iconType]: { png: url, w: +size.w.toFixed(1), h: +size.h.toFixed(1) } } });
     toast(`Значок типа «${iconType}» сохранён`); setTimeout(() => { toolBar(); viewer?.draw(); }, 300);
   }
 

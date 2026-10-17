@@ -52,7 +52,7 @@ export async function extractPdf(data, { maxPathSize = 80 } = {}) {
     // символы в порядке чтения; фрагмент = подряд идущие символы одного стиля и направления без большого разрыва
     // (границы строк MuPDF не важны: вертикальные подписи он режет на кусочки «32» + «A»)
     const spans = []; let cur = null; let dir = [1, 0];
-    const flush = () => { if (cur) { const t = cur.t.trim(); if (t) spans.push({ t, x0: cur.x0, y0: cur.y0, x1: cur.x1, y1: cur.y1, color: cur.color, font: cur.font, size: cur.size, page: pi }); } cur = null; };
+    const flush = () => { if (cur) { const t = cur.t.trim(); if (t) spans.push({ t, x0: cur.x0, y0: cur.y0, x1: cur.x1, y1: cur.y1, color: cur.color, font: cur.font, size: cur.size, page: pi, dir: cur.dir }); } cur = null; };
     page.toStructuredText('preserve-spans').walk({
       beginLine(bbox, wmode, d) { if (d) dir = [d[0] ?? d.x ?? 1, d[1] ?? d.y ?? 0]; },
       onChar(c, origin, font, size, quad, color) {
@@ -67,7 +67,7 @@ export async function extractPdf(data, { maxPathSize = 80 } = {}) {
           const gap = Math.max(lo - cur.hi, cur.lo - hi);
           if (cur.key !== key || (c.trim() && (gap > size * (cur.sp ? 0.9 : 0.3) || Math.abs(pm - cur.pm) > size * 0.5))) flush();  // без пробела — только вплотную
         }
-        if (!cur) cur = { key, t: '', x0: r[0], y0: r[1], x1: r[2], y1: r[3], color: colorHex(color), font: font.getName(), size: Math.round(size * 10) / 10 };
+        if (!cur) cur = { key, t: '', x0: r[0], y0: r[1], x1: r[2], y1: r[3], color: colorHex(color), font: font.getName(), size: Math.round(size * 10) / 10, dir: [+dir[0].toFixed(3), +dir[1].toFixed(3)] };
         cur.t += c; if (c.trim()) { cur.lo = lo; cur.hi = hi; cur.pm = pm; cur.sp = false; } else cur.sp = true;
         if (c.trim()) { cur.x0 = Math.min(cur.x0, r[0]); cur.y0 = Math.min(cur.y0, r[1]); cur.x1 = Math.max(cur.x1, r[2]); cur.y1 = Math.max(cur.y1, r[3]); }
       },

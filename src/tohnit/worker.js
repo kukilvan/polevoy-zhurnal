@@ -39,9 +39,17 @@ self.onmessage = async (e) => {
       scanned ??= scanPages(extracted.pages).spans; const hs = new Set(hiddenSet || []);
       res = snapAt(scanned, extracted.pages, a.page, a.x, a.y, { hidden: (l) => hs.has(l), r: a.r ?? 12 });
     } else if (cmd === 'png') {  // маленькая картинка куска листа (значок типа)
-      const mupdf = await loadMupdf(); const z = a.zoom || 4; const [x0, y0, x1, y1] = a.clip;
-      const pix = new mupdf.Pixmap(mupdf.ColorSpace.DeviceRGB, [Math.floor(x0 * z), Math.floor(y0 * z), Math.ceil(x1 * z), Math.ceil(y1 * z)], false);
-      pix.clear(255); const dev = new mupdf.DrawDevice(mupdf.Matrix.identity, pix); doc.loadPage(a.page).run(dev, mupdf.Matrix.scale(z, z)); dev.close(); res = pix.asPNG();
+      const mupdf = await loadMupdf(); const z = a.zoom || 4;
+      if (a.rot) {  // повёрнутый кусок (наклонная надпись в рамке): центр, длина, высота, угол → картинка горизонтально
+        const { cx, cy, w, h, angle } = a.rot; const W = Math.ceil(w * z); const H = Math.ceil(h * z);
+        let m = mupdf.Matrix.translate(-cx, -cy); m = mupdf.Matrix.concat(m, mupdf.Matrix.rotate(-angle)); m = mupdf.Matrix.concat(m, mupdf.Matrix.scale(z, z)); m = mupdf.Matrix.concat(m, mupdf.Matrix.translate(W / 2, H / 2));
+        const pix = new mupdf.Pixmap(mupdf.ColorSpace.DeviceRGB, [0, 0, W, H], false);
+        pix.clear(255); const dev = new mupdf.DrawDevice(mupdf.Matrix.identity, pix); doc.loadPage(a.page).run(dev, m); dev.close(); res = pix.asPNG();
+      } else {
+        const [x0, y0, x1, y1] = a.clip;
+        const pix = new mupdf.Pixmap(mupdf.ColorSpace.DeviceRGB, [Math.floor(x0 * z), Math.floor(y0 * z), Math.ceil(x1 * z), Math.ceil(y1 * z)], false);
+        pix.clear(255); const dev = new mupdf.DrawDevice(mupdf.Matrix.identity, pix); doc.loadPage(a.page).run(dev, mupdf.Matrix.scale(z, z)); dev.close(); res = pix.asPNG();
+      }
     } else if (cmd === 'texts') {  // все короткие надписи, похожие на обозначения (для связывания с точками проекта, даже если каталог их не знает)
       scanned ??= scanPages(extracted.pages).spans;
       res = scanned.filter((s) => !String(s.c || '').startsWith('sym:') && s.t.trim().length <= 30 && (labelish(s.t.trim()) || /\d/.test(s.t)))
