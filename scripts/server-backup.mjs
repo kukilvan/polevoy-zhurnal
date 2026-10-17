@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import admin from 'firebase-admin';
-import { isDeleted, readProject, writeProjectBackup, pruneOld, stamp } from './server-backup-lib.mjs';
+import { isDeleted, readProject, readProjectDelta, previousBackups, writeProjectBackup, pruneOld, stamp } from './server-backup-lib.mjs';
 
 const KEEP = 15;
 const root = process.argv[2];
@@ -22,9 +22,16 @@ const fail = (e) => { console.log(`::error::Копия не сделана: ${St
 try {
   const refs = await db.collection('projects').listDocuments();
   if (!refs.length) { console.error('В базе нет проектов: копия не создана'); process.exit(1); }
-  const done = [];
+  const done = []; let reads = 0;
+  const prevs = previousBackups(root);
+  const WEEK = 7 * 864e5; const full = process.env.FULL === '1';
   for (const ref of refs) {
-    const p = await readProject(ref);
+    const prev = prevs.get(ref.id);
+    const prevAt = prev ? Date.parse(prev.createdAt) : 0; const fullAt = prev ? Date.parse(prev.fullAt || prev.createdAt) : 0;
+    let p;
+    if (!full && prev && now - fullAt < WEEK) { p = await readProjectDelta(ref, prev, prevAt - 30 * 60e3, admin.firestore.Timestamp); p.fullAt = new Date(fullAt).toISOString(); }
+    else { p = await readProject(ref); p.reads = Object.values(p.data).reduce((n, v) => n + v.length, 1); }
+    reads += p.reads;
     if (isDeleted(p.project)) { console.log(`Пропущен удалённый проект: ${p.project.name}`); continue; }
     done.push(writeProjectBackup(dir, p, now));
     // отметка в проекте, чтобы приложение показывало дату последней автокопии
@@ -32,6 +39,6 @@ try {
   }
   fs.writeFileSync(path.join(dir, 'ИТОГ.json'), JSON.stringify({ at: now.toISOString(), projects: done }, null, 2));
   const dropped = pruneOld(root, KEEP);
-  console.log(`Скопировано проектов: ${done.length}. Удалено старых копий: ${dropped.length}.`);
+  console.log(`::notice::Скопировано проектов: ${done.length}. Прочитано документов из базы: ${reads}. Удалено старых копий: ${dropped.length}.`);
   done.forEach((d) => console.log(`::notice::${d.name}: ${Object.entries(d.counts).map(([k, v]) => `${k} ${v}`).join(', ')}`));
 } catch (e) { fail(e); }
