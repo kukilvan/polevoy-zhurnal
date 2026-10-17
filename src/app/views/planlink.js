@@ -21,6 +21,12 @@ export async function linkPoints(d, buf, { onDone } = {}) {
     const elsewhere = (p) => p.pos?.sheet && !onThis(p) && drawingFor(p);  // уже на другом чертеже проекта — не трогаем
     const cand = pts.filter((p) => !elsewhere(p));
     const { exact, similar, unlinked } = matchLabels(cand, r.data.points);
+    // подписи, которых не знает каталог (например, ответы на вопросы не запомнены): точное совпадение с названием точки проекта — тоже связываем
+    const usedIds = new Set([...exact, ...similar].map((x) => x.p.id));
+    const taken = new Set(r.data.points.map((f) => posKey(f.pos)));
+    const texts = (await wk.call('texts')).filter((t) => !taken.has(posKey(t.pos)));
+    const extra = matchLabels(cand.filter((p) => !usedIds.has(p.id)), texts).exact;
+    exact.push(...extra);
     const ops = []; let already = 0;
     for (const { p, f } of exact) { if (onThis(p)) { already++; continue; } ops.push({ coll: 'points', id: p.id, data: { pos: posOf(f, { sheet }) } }); }
     if (ops.length) getRepo().save(currentProject().id, ops);

@@ -2,7 +2,8 @@
 import { h, openModal, toast } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { newId } from '../repo.js';
-import { parsePointsFile, planPointsImport, pointsImportOps, typePool, UNSORTED_TYPE } from '../../domain/index.js';
+import { parsePointsFile, planPointsImport, pointsImportOps, typePool, UNSORTED_TYPE, posOf } from '../../domain/index.js';
+import { drawingsOf } from '../drawings.js';
 
 export function pointsFromFile() {
   const input = h('input', { type: 'file', accept: '.json,application/json,text/plain', style: { display: 'none' } });
@@ -24,12 +25,21 @@ export function importPreview(data, title, close) {
   const off = new Set(); // снятые точки
   const list = (title, items, cls) => (items.length ? h('div', { style: { margin: '8px 0' } }, h('b', { class: cls }, `${title} (${items.length})`),
     h('div', { style: { fontSize: '14px', maxHeight: '160px', overflow: 'auto' } }, items.map((x) => h('div', {}, x)))) : null);
+  // точки, которые уже есть в проекте, но без места на этом чертеже — отметить их место (связать с чертежом)
+  const sheetName = data?.sheet?.pdf || '';
+  const drawingNames = new Set(drawingsOf().flatMap((d) => [d.name, ...(d.aliases || [])]));
+  const byLabel = new Map([...state.ctx.points.values()].map((p) => [p.label, p]));
+  const toLink = sheetName ? data.points.filter((f) => f.pos && byLabel.has(String(f.label).trim())).map((f) => ({ f, p: byLabel.get(String(f.label).trim()) }))
+    .filter(({ p }) => p.pos?.sheet !== sheetName && !(p.pos?.sheet && drawingNames.has(p.pos.sheet) && p.pos.sheet !== sheetName)) : [];
+  const linkCb = h('input', { type: 'checkbox', checked: true, onchange: () => label() });
   const goBtn = h('button', {});
-  const label = () => { goBtn.textContent = `➕ Добавить точек: ${plan.add.length - off.size}`; goBtn.disabled = plan.add.length - off.size <= 0; };
+  const nLink = () => (linkCb.checked ? toLink.length : 0);
+  const label = () => { const n = plan.add.length - off.size; goBtn.textContent = n > 0 ? `➕ Добавить точек: ${n}${nLink() ? ` · отметить на чертеже: ${nLink()}` : ''}` : nLink() ? `📍 Отметить на чертеже: ${nLink()}` : '➕ Добавить точек: 0'; goBtn.disabled = n <= 0 && !nLink(); };
   goBtn.onclick = () => {
     const ops = pointsImportOps({ ...plan, add: plan.add.filter((p) => !off.has(p.label)) }, newId, data);
-    getRepo().save(currentProject().id, ops.map((o) => ({ ...o, data: { ...o.data, deleted: false } })));
-    toast(`Добавлено точек: ${ops.filter((o) => o.coll === 'points').length}`); close?.();
+    const linkOps = nLink() ? toLink.map(({ f, p }) => ({ coll: 'points', id: p.id, data: { pos: posOf(f, data) } })) : [];
+    getRepo().save(currentProject().id, [...ops.map((o) => ({ ...o, data: { ...o.data, deleted: false } })), ...linkOps]);
+    toast(`Добавлено точек: ${ops.filter((o) => o.coll === 'points').length}${linkOps.length ? `, отмечено на чертеже: ${linkOps.length}` : ''}`); close?.();
   };
   label();
   // все точки к добавлению — по группам (шкаф · тип), у каждой галочка: снять — не добавлять; у группы — снять/поставить всю группу
@@ -59,6 +69,7 @@ export function importPreview(data, title, close) {
     plan.newDevices.length ? list('Будут созданы устройства', plan.newDevices.map((d) => d.name || d.id)) : null,
     list('❌ Ошибки — эти строки не добавятся', plan.errors, 'l-error'),
     plan.warnings.length ? h('div', { class: 'l-warn', style: { margin: '8px 0' } }, `⚠️ Подозрительные обозначения: ${plan.warnings.length} — отмечены ⚠️ в группах выше; снимите галочку, если это не точка.`) : null,
+    toLink.length ? h('label', { class: 'pickrow', style: { margin: '8px 0' } }, linkCb, h('span', {}, `📍 Уже есть в проекте, но без места на этом чертеже: ${toLink.length} (${toLink.slice(0, 6).map((x) => x.p.label).join(', ')}${toLink.length > 6 ? '…' : ''}) — отметить их место на чертеже`)) : null,
     list('Уже есть в проекте — пропущены', plan.skipped),
     h('div', { class: 'btns' }, goBtn)].filter(Boolean);
   return h('div', {}, ...parts);

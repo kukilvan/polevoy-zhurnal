@@ -1,7 +1,7 @@
 // Фоновый разбор чертежа (Web Worker): тяжёлое чтение PDF не тормозит экран. Команды:
 // open {data} → {pages, ms}; parse {catalog, opts} → результат autoParse; crop {page, clip, zoom} → PNG (Uint8Array); pick {page, x, y} → такие же значки
 import { extractPdf, loadMupdf } from './extract.js';
-import { autoParse, scanPages } from './engine.js';
+import { autoParse, scanPages, labelish } from './engine.js';
 import { pickSimilar } from './icons.js';
 import { numberedPdf } from './numbered.js';
 
@@ -33,6 +33,10 @@ self.onmessage = async (e) => {
       scanned ??= scanPages(extracted.pages).spans;
       const hs = new Set(hiddenSet || []);
       res = pickSimilar(scanned, extracted.pages, a.page, a.x, a.y, { hidden: (l) => hs.has(l), pad: a.pad ?? 3 });
+    } else if (cmd === 'texts') {  // все короткие надписи, похожие на обозначения (для связывания с точками проекта, даже если каталог их не знает)
+      scanned ??= scanPages(extracted.pages).spans;
+      res = scanned.filter((s) => !String(s.c || '').startsWith('sym:') && s.t.trim().length <= 30 && (labelish(s.t.trim()) || /\d/.test(s.t)))
+        .map((s) => ({ label: s.t.trim(), pos: { page: s.page || 0, x: +((s.x0 + s.x1) / 2).toFixed(1), y: +((s.y0 + s.y1) / 2).toFixed(1), w: +(s.x1 - s.x0).toFixed(1), h: +(s.y1 - s.y0).toFixed(1) } }));
     } else if (cmd === 'layers') {  // слои чертежа (AutoCAD): [{ name, on }]
       const pdf = doc.asPDF?.() || doc; res = [];
       try { for (let i = 0; i < pdf.countLayers(); i++) res.push({ name: pdf.getLayerName(i), on: pdf.isLayerVisible(i) }); } catch { /* без слоёв */ }
