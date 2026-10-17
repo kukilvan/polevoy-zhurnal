@@ -143,6 +143,8 @@ export function planModal({ point = null, placeFor = null } = {}) {
         overlay: (g, api) => {
           const big = api.view.s > 0.6;
           if (fType === UNL || fType === HID) { for (const m of marks()) { if ((m.pos.page || 0) !== api.page) continue; if (fType === HID) { outline(g, api, m.pos, '#c7c7cc', { width: 1, fill: 'rgba(255,255,255,.9)' }); } else outline(g, api, m.pos, '#ff9500', { width: 2 }); } return; }
+          // скрытые подписи и значки — закрашены белым, чтобы не мешали
+          for (const m of hid()) { if ((m.pos.page || 0) === api.page) outline(g, api, m.pos, '#ffffff', { width: 2, pad: 2, fill: '#ffffff' }); }
           const icons = currentProject()?.typeIcons || {}; const tags = []; const circles = []; const frames = [];
           for (const p of pts()) {
             if ((p.pos.page || 0) !== api.page) continue;
@@ -270,7 +272,22 @@ export function planModal({ point = null, placeFor = null } = {}) {
           getRepo().save(currentProject().id, [{ coll: 'points', id: p.id, data: { pos } }]);
           toast(on ? (ic ? 'Значок типа нарисован' : 'У типа значок не задан — «📌 Значки типов»') : 'Значок убран'); c(); setTimeout(() => viewer?.draw(), 300);
         } }, p.pos.icon ? '🖼 Убрать значок типа' : '🖼 Значок по типу точки'),
+        h('button', { class: 'sec', onclick: async () => {
+          if (!(await confirmDialog(`Убрать «${p.label}» с плана? Точка останется в проекте (фильтр «📍 Нет на плане»), её можно будет отметить снова.`, { yes: 'Убрать' }))) return;
+          getRepo().save(currentProject().id, [{ coll: 'points', id: p.id, data: { pos: null } }]); toast(`«${p.label}» убрана с плана`); c(); setTimeout(() => viewer?.draw(), 300);
+        } }, '🗑 Убрать с плана'),
+        h('button', { class: 'sec', onclick: async () => {
+          if (!(await confirmDialog(`Скрыть «${p.label}» на плане? Место закрасится белым, точка останется в проекте без места на плане. Вернуть — фильтр «🙈 Скрытые».`, { yes: '🙈 Скрыть' }))) return;
+          hideArea(d, { label: p.label, typeId: p.typeId, pos: { ...p.pos } });
+          getRepo().save(currentProject().id, [{ coll: 'points', id: p.id, data: { pos: null } }]); toast(`«${p.label}» скрыта`); c();
+        } }, '🙈 Скрыть'),
         h('button', { class: 'sec', onclick: () => { c(); openCard?.(p); } }, '📋 Карточка точки'))), {});
+  }
+  // добавить место в «Скрытые» чертежа (и убрать из «Не размеченых», если оно там было)
+  function hideArea(d, m) {
+    const k = posKey(m.pos); const pos = { ...m.pos }; delete pos.icon;
+    updateDrawing(d.id, (x) => ({ unlinked: (x.unlinked || []).filter((y) => posKey(y.pos) !== k), hidden: [...(x.hidden || []).filter((y) => posKey(y.pos) !== k), { label: m.label, typeId: m.typeId || '', pos }] }));
+    setTimeout(() => viewer?.draw(), 300);
   }
 
   // «➕ Точка на плане»: оставить отметку / привязать к точке / новая точка
@@ -282,7 +299,8 @@ export function planModal({ point = null, placeFor = null } = {}) {
       h('div', { class: 'btns' },
         h('button', { class: 'sec', onclick: () => leaveMark() }, '❔ Оставить отметку'),
         h('button', { class: 'sec', onclick: () => bind() }, '🔗 Привязать к точке'),
-        h('button', { onclick: () => fresh() }, '➕ Новая точка')), area), { sticky: true, onClose: () => { if (!saved) done(); } });
+        h('button', { onclick: () => fresh() }, '➕ Новая точка'),
+        sn ? h('button', { class: 'sec', onclick: () => { const pos = posFor('', false); hideArea(d, { label: sn.label || '(значок)', typeId: '', pos }); toast('Скрыто — закрашено белым. Вернуть: фильтр «🙈 Скрытые»'); finish(); } }, '🙈 Скрыть') : null), area), { sticky: true, onClose: () => { if (!saved) done(); } });
     const finish = () => { saved = true; c(); done(); setTimeout(() => viewer?.draw(), 300); };
     function leaveMark() {
       const cap = h('input', { value: sn?.label || '', placeholder: 'Подпись отметки (например: «датчик над дверью?»)' });
