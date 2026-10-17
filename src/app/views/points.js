@@ -11,7 +11,7 @@ import { whoIs } from './journal.js';
 import { pointsFromFile } from './pointsfile.js';
 import { pointsFromDrawing, unsortedModal } from './tohnitview.js';
 import { cablesField, cablesPicker } from './cablespick.js';
-import { drawingFor } from '../drawings.js';
+import { drawingFor, drawingsOf } from '../drawings.js';
 import { planModal } from './planmodal.js';
 import { choosePoint } from './pointchooser.js';
 
@@ -278,6 +278,7 @@ export function pointCard(startPoint, { fromPlan = false } = {}) {
         h('button', { class: 'sec', onclick: () => { close(); setTimeout(() => meterForm(p), 60); } }, '📏 Длина'),
         h('button', { class: 'sec', onclick: () => { close(); setTimeout(() => pointForm(p), 60); } }, '✏️ Изменить'),
         !fromPlan && p.pos && drawingFor(p) ? h('button', { class: 'sec', onclick: () => { close(); setTimeout(() => planModal({ point: p }), 60); } }, '📍 На чертеже') : null,
+        !fromPlan && !(p.pos && drawingFor(p)) && drawingsOf().length ? h('button', { class: 'sec', onclick: () => { close(); setTimeout(() => planModal({ placeFor: p }), 60); } }, '📍 Отметить на плане') : null,
         fromPlan && p.pos && String(p.note || '').includes('значок без номера') ? h('button', { class: 'sec', onclick: () => bindToPoint(p, close) }, '🔗 Привязать к точке') : null),
       h('div', { class: 'group', style: { padding: '12px 0 6px' } }, `История работ (${rows.length})`),
       rows.length ? h('div', {}, rows.map((r) => {

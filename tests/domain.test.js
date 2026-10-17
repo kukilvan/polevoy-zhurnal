@@ -681,3 +681,13 @@ test('сортировка точек: числа в любом месте об�
   const pts = ['D2/10', 'D2/2', 'D2/1', 'D2/24', 'D2/3'].map((label) => ({ label, typeId: 'Дверь', cabinet: '' }));
   assert.deepEqual(pts.sort(comparePoints).map((p) => p.label), ['D2/1', 'D2/2', 'D2/3', 'D2/10', 'D2/24']);
 });
+
+test('название следующей точки: тот же формат, пары, ведущие нули', async () => {
+  const { nextLabel } = await import('../src/domain/index.js');
+  const P = (label, typeId = 'Камера', cabinet = 'GA1') => ({ label, typeId, cabinet });
+  assert.equal(nextLabel([P('GA1/C-82'), P('GA1/C-83'), P('GA1/C-9')], 'Камера', 'GA1'), 'GA1/C-84');
+  assert.equal(nextLabel([P('1A-17-18', 'Бакар', '1A'), P('1A-19-20', 'Бакар', '1A')], 'Бакар', '1A'), '1A-21-22');
+  assert.equal(nextLabel([P('C-083', 'Камера', '')], 'Камера', ''), 'C-084');
+  assert.equal(nextLabel([P('GA1/C-1')], 'Вайфай', 'GA1'), '');
+  assert.equal(nextLabel([P('GA1/AP-01', 'Вайфай'), P('GA1/AP-02', 'X')], 'Вайфай', 'GA1'), 'GA1/AP-03');
+});

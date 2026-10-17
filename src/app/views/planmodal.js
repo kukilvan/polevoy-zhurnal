@@ -2,7 +2,10 @@
 import { h, openModal, toast, confirmDialog } from '../ui.js';
 import { state, currentProject, infoOf, getRepo, subscribe } from '../store.js';
 import { drawingsOf, drawingFor, loadDrawing, addDrawing, pushDrawing, removeDrawing, updateDrawing, posKey } from '../drawings.js';
-import { missingStages, comparePoints } from '../../domain/index.js';
+import { missingStages, comparePoints, nextLabel } from '../../domain/index.js';
+import { newId } from '../repo.js';
+import { typePicker } from './tohnitview.js';
+import { cablesPicker } from './cablespick.js';
 import { addWorkForPoints } from './doh.js';
 import { makeWorker, pointsFromDrawing } from './tohnitview.js';
 import { createViewer } from './planview.js';
@@ -27,15 +30,25 @@ function outline(g, api, pos, color, { width = 1.5, pad = 1.5, fill = null } = {
   if (fill) { g.fillStyle = fill; g.fill(); }
   g.stroke();
 }
+const labelLike = (t = '') => /\d/.test(t) && !/[\u0590-\u05FF]/.test(t) && t.length <= 24 && !/\s{2,}/.test(t);
 const UNL = '__unlinked'; const HID = '__hidden';
 // «Что осталось»: показать ярко только точки, где этот этап ещё не сделан
 const STAGE_FILTERS = [['Длина', 'Осталось: длина (не померяно)'], ['Протяжка', 'Осталось: протяжка'], ['Дотянуть', 'Осталось: дотянуть'], ['Хивут', 'Осталось: хивут'], ['Установка', 'Осталось: установка'], ['Проверка', 'Осталось: проверка']];
 
-export function planModal({ point = null } = {}) {
+// значки типов (картинка с чертежа): ими рисуются точки, добавленные на объекте, — на плане и в «PDF с номерами»
+const iconImgs = new Map();
+function iconImg(t, png, redraw) {
+  const k = `${t}|${png.length}`; if (iconImgs.has(k)) return iconImgs.get(k);
+  const im = new Image(); im.onload = redraw; im.src = png; iconImgs.set(k, im); return im;
+}
+const toDataUrl = (bytes) => { let s = ''; const u = new Uint8Array(bytes); for (let i = 0; i < u.length; i += 0x8000) s += String.fromCharCode(...u.subarray(i, i + 0x8000)); return `data:image/png;base64,${btoa(s)}`; };
+
+export function planModal({ point = null, placeFor = null } = {}) {
   const box = h('div', {});
   let wk = null; let viewer = null; let current = null; let focusId = point?.id || null; let fType = ''; let fCab = ''; let fStage = '';
   let dimDrawing = false; let selMode = false; let rectSel = false; const sel = new Set(); let selBar = () => {};
   let openCard = null;
+  let tool = placeFor ? 'place' : null; let iconType = ''; let temp = null; let toolBar = () => {};  // tool: add — «➕ Точка на плане», icon — «📌 Значки типов», place — «📍 Отметить на плане»
   let updateInfo = () => {}; const unsub = subscribe(() => { viewer?.draw(); updateInfo(); });  // статусы и номера меняются — план следом
   const close = openModal('🗺 План', box, { sticky: true, wide: true, onClose: () => { unsub(); wk?.stop(); } });
   const sheetPts = (d) => [...state.ctx.points.values()].filter((p) => p.pos && drawingFor(p)?.id === d.id);
@@ -71,7 +84,7 @@ export function planModal({ point = null } = {}) {
   }
 
   async function show(d) {
-    current = d; wk?.stop(); wk = makeWorker(); sel.clear(); selMode = false;
+    current = d; wk?.stop(); wk = makeWorker(); sel.clear(); selMode = false; temp = null;
     const status = h('div', { class: 'mut', style: { margin: '6px 0' } }, 'Открываю чертёж…');
     const holder = h('div', {}); body.replaceChildren(status, holder);
     try {
@@ -93,6 +106,7 @@ export function planModal({ point = null } = {}) {
       viewer = createViewer({ wk, pages: o.pages, height: '62vh', dim: () => (dimDrawing ? 0.35 : 1), rectMode: () => selMode && rectSel,
         onRect: (b, page) => { pts().filter((p) => stageOk(p) && (p.pos.page || 0) === page && p.pos.x >= b[0] && p.pos.x <= b[2] && p.pos.y >= b[1] && p.pos.y <= b[3]).forEach((p) => sel.add(p.id)); selBar(); viewer.draw(); },
         onTap: (x, y, page) => {
+          if (tool) { toolTap(d, o.pages, x, y, page, nearest); return; }
           if (fType === UNL || fType === HID) { const m = nearest(marks(), (it) => it.pos, x, y, page); if (m) markCard(d, m, fType === HID); return; }
           const best = nearest(pts().filter(stageOk), (p) => p.pos, x, y, page); if (!best) return;
           if (selMode) { sel.has(best.id) ? sel.delete(best.id) : sel.add(best.id); selBar(); viewer.draw(); return; }
@@ -101,15 +115,19 @@ export function planModal({ point = null } = {}) {
         overlay: (g, api) => {
           const big = api.view.s > 0.6;
           if (fType === UNL || fType === HID) { for (const m of marks()) { if ((m.pos.page || 0) !== api.page) continue; if (fType === HID) { outline(g, api, m.pos, '#c7c7cc', { width: 1, fill: 'rgba(255,255,255,.9)' }); } else outline(g, api, m.pos, '#ff9500', { width: 2 }); } return; }
+          const icons = currentProject()?.typeIcons || {};
           for (const p of pts()) {
             if ((p.pos.page || 0) !== api.page) continue;
             const on = stageOk(p); const col = on ? statusColor(infoOf(p).status) : '#d0d0d0';
+            const ic = p.pos.icon && icons[p.typeId];
+            if (ic) { const im = iconImg(p.typeId, ic.png, () => viewer?.draw()); if (im.complete && im.naturalWidth) { const [sx, sy] = api.toScr(p.pos.x, p.pos.y); const w = (ic.w || 12) * api.view.s; const hh = (ic.h || 12) * api.view.s; g.globalAlpha = on ? 1 : 0.4; g.drawImage(im, sx - w / 2, sy - hh / 2, w, hh); g.globalAlpha = 1; } }
             outline(g, api, p.pos, col, { width: on ? (big ? 1.5 : 2) : 1 });
             if (sel.has(p.id)) outline(g, api, p.pos, '#00b7ff', { width: 3, pad: 1.5 + 3 / api.view.s });
             if (on && big && !isText(p.pos)) { const [x, y] = api.toScr(p.pos.x, p.pos.y); const r = Math.max(5, (Math.max(p.pos.w || 8, p.pos.h || 8) / 2 + 1.5) * api.view.s); g.font = 'bold 12px system-ui'; const w = g.measureText(p.label).width; g.fillStyle = 'rgba(255,255,255,.85)'; g.fillRect(x + r, y - r - 12, w + 4, 14); g.fillStyle = col; g.fillText(p.label, x + r + 2, y - r); }
           }
           const f = focusId && state.ctx.points.get(focusId);
           if (f?.pos && (f.pos.page || 0) === api.page && drawingFor(f)?.id === d.id) { outline(g, api, f.pos, '#e0007a', { width: 3, pad: 1.5 + 4 / api.view.s }); }
+          if (temp && (temp.page || 0) === api.page) { g.setLineDash([5, 3]); outline(g, api, temp, '#e0007a', { width: 2.5, pad: 2 + 3 / api.view.s, fill: 'rgba(224,0,122,.12)' }); g.setLineDash([]); }
         } });
       const types = [...new Set(sheetPts(d).map((p) => p.typeId))].sort((a, b) => a.localeCompare(b, 'ru'));
       const cabs = [...new Set(sheetPts(d).map((p) => p.cabinet || ''))].filter(Boolean).sort((a, b) => a.localeCompare(b, 'ru', { numeric: true }));
@@ -124,7 +142,27 @@ export function planModal({ point = null } = {}) {
       const cabSel = cabs.length ? h('select', { onchange: (e) => { fCab = e.target.value; viewer.draw(); } }, h('option', { value: '' }, 'Все шкафы'), ...cabs.map((c) => h('option', { value: c, selected: c === fCab }, `Шкаф ${c}`))) : null;
       const stageSel = h('select', { onchange: (e) => { fStage = e.target.value; viewer.draw(); } }, h('option', { value: '' }, 'Все этапы'),
         ...STAGE_FILTERS.map(([v, t]) => h('option', { value: v, selected: v === fStage }, t)));
-      const selBtn = h('button', { class: 'sec', onclick: () => { selMode = !selMode; rectSel = false; if (!selMode) sel.clear(); selBar(); viewer.draw(); } });
+      const selBtn = h('button', { class: 'sec', onclick: () => { selMode = !selMode; rectSel = false; if (!selMode) sel.clear(); if (selMode) tool = null; toolBar(); selBar(); viewer.draw(); } });
+      const addBtn = h('button', { class: 'sec', onclick: () => { tool = tool === 'add' ? null : 'add'; if (tool) { selMode = false; sel.clear(); selBar(); } temp = null; toolBar(); viewer.draw(); } });
+      const iconBtn = h('button', { class: 'sec', onclick: () => { tool = tool === 'icon' ? null : 'icon'; if (tool) { selMode = false; sel.clear(); selBar(); } temp = null; toolBar(); viewer.draw(); } });
+      const tbar = h('div', { class: 'card', style: { display: 'none', margin: '6px 0', padding: '8px', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } });
+      toolBar = () => {
+        addBtn.textContent = tool === 'add' ? '✔ Точка на плане: нажмите место' : '➕ Точка на плане'; addBtn.className = tool === 'add' ? '' : 'sec';
+        iconBtn.textContent = tool === 'icon' ? '✔ Значки типов' : '📌 Значки типов'; iconBtn.className = tool === 'icon' ? '' : 'sec';
+        tbar.style.display = tool ? 'flex' : 'none';
+        if (tool === 'add') tbar.replaceChildren(h('span', {}, 'Нажмите на значок, надпись или свободное место — приложение прицепится к ближайшему значку/надписи. Потом: оставить отметку, привязать к точке или создать новую.'));
+        else if (tool === 'place') tbar.replaceChildren(h('span', {}, h('b', {}, `📍 Где точка «${placeFor?.label}»? `), drawingsOf().length > 1 ? 'Выберите чертёж сверху, если не этот, и ' : '', 'нажмите на её значок или надпись.'),
+          h('button', { class: 'sec', onclick: () => { tool = null; placeFor = null; temp = null; toolBar(); viewer.draw(); } }, 'Отмена'));
+        else if (tool === 'icon') {
+          const icons = currentProject()?.typeIcons || {};
+          const tp = typePicker({ onChange: (t) => { iconType = t; } }); const s = tp.querySelector('select'); if (iconType) s.value = iconType;
+          tbar.replaceChildren(h('div', { style: { flexBasis: '100%' } }, 'Выберите тип и нажмите на его значок на чертеже. Этим значком будут нарисованы точки этого типа, добавленные на объекте (на плане и в «📄 PDF с номерами»).'),
+            h('div', { style: { flex: 1, minWidth: '200px' } }, tp),
+            ...Object.entries(icons).map(([t, ic]) => h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '4px', border: '1px solid #ddd', borderRadius: '6px', padding: '2px 6px' } },
+              h('img', { src: ic.png, style: { height: '22px', background: '#fff' } }), t,
+              h('button', { class: 'sec', style: { padding: '0 6px' }, title: 'Убрать значок', onclick: async () => { if (!(await confirmDialog(`Убрать значок типа «${t}»?`, { yes: 'Убрать' }))) return; const p = currentProject(); const n = { ...(p.typeIcons || {}) }; delete n[t]; getRepo().saveProject(p.id, { typeIcons: n }); setTimeout(() => { toolBar(); viewer.draw(); }, 300); } }, '✕'))));
+        } else tbar.replaceChildren();
+      };
       selBar = () => {
         selBtn.textContent = selMode ? '✔ Выбор: нажимайте точки' : '☑ Выбрать на плане'; selBtn.className = selMode ? '' : 'sec';
         bar.style.display = selMode ? 'flex' : 'none';
@@ -145,7 +183,7 @@ export function planModal({ point = null } = {}) {
       updateInfo();
       holder.replaceChildren(
         h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '0 0 6px' } }, search, typeSel, cabSel, stageSel),
-        h('div', { class: 'btns', style: { marginTop: 0 } }, ...viewer.zoomBtns(), selBtn, dimBtn, layersBtn), bar, viewer.el,
+        h('div', { class: 'btns', style: { marginTop: 0 } }, ...viewer.zoomBtns(), selBtn, addBtn, iconBtn, dimBtn, layersBtn), bar, tbar, viewer.el,
         h('div', { style: { display: 'flex', gap: '12px', flexWrap: 'wrap', margin: '6px 2px', fontSize: '13px' } }, ...STATUS_COLORS.map(([c, t]) => h('span', {}, h('span', { style: { color: c } }, '■ '), t))),
         h('div', { class: 'btns' },
           h('button', { class: 'sec', onclick: () => linkPoints(d, buf, { onDone: () => draw(d.id) }).catch((e) => toast(e.message)) }, '🔗 Связать точки'),
@@ -153,11 +191,111 @@ export function planModal({ point = null } = {}) {
           h('button', { class: 'sec', onclick: () => pointsFromDrawing({ drawing: d, buf }) }, '✏️ Редактировать'),
           d.fileId ? null : h('button', { class: 'sec', onclick: async () => { try { toast('Отправляю на Диск…'); await pushDrawing(d); toast('Чертёж на Диске — откроется и на других устройствах'); draw(d.id); } catch (e) { toast(`Не получилось: ${e.message}`); } } }, '⬆ На Диск'),
           h('button', { class: 'sec', onclick: async () => { if (await confirmDialog(`Убрать чертёж «${d.name}» из проекта? Точки останутся, файл на Диске — тоже.`, { yes: 'Убрать', danger: true })) { removeDrawing(d); setTimeout(() => draw(), 300); } } }, '🗑 Убрать чертёж')));
-      selBar();
+      selBar(); toolBar();
       await viewer.start();
       const f = focusId && state.ctx.points.get(focusId);
       if (f?.pos && drawingFor(f)?.id === d.id) await viewer.focus(f.pos.x, f.pos.y, f.pos.page || 0);
     } catch (e) { status.textContent = e.message; }
+  }
+
+  // нажатие в режиме инструмента: прицепиться к ближайшей надписи/значку, дальше — по инструменту
+  async function toolTap(d, pages, x, y, page, nearest) {
+    const all = sheetPts(d);
+    if (tool === 'add') { const hit = nearest(all, (p) => p.pos, x, y, page); if (hit) { toast(`Здесь уже точка «${hit.label}»`); focusId = hit.id; viewer.draw(); openCard?.(hit); return; } }
+    let sn = null; try { sn = await wk.call('snap', { page, x, y, r: 14 / viewer.view.s }); } catch { /* без привязки */ }
+    if (sn?.kind === 'text' && !labelLike(sn.label)) sn = null;  // посторонняя надпись (иврит, длинный текст) — не номер точки
+    const pg = pages[page] || {}; const ic = (t) => currentProject()?.typeIcons?.[t];
+    const at = (t) => (sn ? { page, x: sn.x, y: sn.y, w: sn.w, h: sn.h } : { page, x: +x.toFixed(1), y: +y.toFixed(1), w: ic(t)?.w || 10, h: ic(t)?.h || 10, icon: true });
+    const posFor = (t) => ({ ...at(t), pw: pg.w, ph: pg.h, sheet: d.name });
+    temp = at(''); viewer.draw();
+    const done = () => { temp = null; viewer?.draw(); };
+    if (tool === 'icon') return iconTap(d, sn, page, x, y, done);
+    if (tool === 'place') {
+      const p = placeFor; const ok = await confirmDialog(`Поставить «${p.label}» сюда${sn?.kind === 'text' ? ` (надпись «${sn.label}»)` : sn ? ' (значок)' : ''}?`, { yes: '📍 Сюда' });
+      if (!ok) { done(); return; }
+      getRepo().save(currentProject().id, [{ coll: 'points', id: p.id, data: { pos: posFor(p.typeId) } }]);
+      toast(`«${p.label}» на чертеже`); focusId = p.id; tool = null; placeFor = null; temp = null; toolBar(); setTimeout(() => viewer?.draw(), 300); return;
+    }
+    addCard(d, sn, posFor, done);
+  }
+
+  // «➕ Точка на плане»: оставить отметку / привязать к точке / новая точка
+  function addCard(d, sn, posFor, done) {
+    const what = sn?.kind === 'text' ? `Надпись «${sn.label}»` : sn ? 'Значок на чертеже' : 'Свободное место (рядом нет значка или надписи)';
+    const area = h('div', {});
+    let saved = false;
+    const c = openModal('➕ Точка на плане', h('div', {}, h('div', { class: 'mut', style: { marginBottom: '6px' } }, what),
+      h('div', { class: 'btns' },
+        h('button', { class: 'sec', onclick: () => leaveMark() }, '❔ Оставить отметку'),
+        h('button', { class: 'sec', onclick: () => bind() }, '🔗 Привязать к точке'),
+        h('button', { onclick: () => fresh() }, '➕ Новая точка')), area), { sticky: true, onClose: () => { if (!saved) done(); } });
+    const finish = () => { saved = true; c(); done(); setTimeout(() => viewer?.draw(), 300); };
+    function leaveMark() {
+      const cap = h('input', { value: sn?.label || '', placeholder: 'Подпись отметки (например: «датчик над дверью?»)' });
+      area.replaceChildren(h('div', { class: 'mut', style: { margin: '8px 0 4px' } }, 'Отметка попадёт в «❔ Не размеченые» (фильтр типов в плане) — потом её можно связать с точкой или скрыть.'), cap,
+        h('div', { class: 'btns' }, h('button', { onclick: () => {
+          const pos = posFor(''); delete pos.icon;
+          updateDrawing(d.id, (x) => ({ unlinked: [...(x.unlinked || []), { label: cap.value.trim() || '(без подписи)', typeId: '', pos }] }));
+          toast('Отметка сохранена — «❔ Не размеченые»'); finish();
+        } }, 'Сохранить отметку')));
+      cap.focus();
+    }
+    function bind() {
+      choosePoint({ title: '🔗 Какая это точка?', renameLabel: sn?.kind === 'text' ? sn.label : '', onPick: (p, { rename }) => {
+        if (rename && [...state.ctx.points.values()].some((x) => x.id !== p.id && x.label === sn.label)) { toast(`«${sn.label}» уже есть в проекте — переименовать нельзя`); return false; }
+        const data = { pos: posFor(p.typeId) };
+        if (rename) { data.label = sn.label; data.planName = p.label; } else if (sn?.kind === 'text' && p.label !== sn.label) data.planName = sn.label;
+        getRepo().save(currentProject().id, [{ coll: 'points', id: p.id, data }]);
+        toast(`«${rename ? sn.label : p.label}» на чертеже`); focusId = p.id; finish(); return true;
+      } });
+    }
+    function fresh() {
+      const pts = [...state.ctx.points.values()];
+      const cabs = [...new Set(pts.map((p) => p.cabinet || ''))].filter(Boolean).sort((a, b) => a.localeCompare(b, 'ru', { numeric: true }));
+      const near = sheetPts(d).filter((p) => p.cabinet).sort((a, b) => Math.hypot(a.pos.x - temp.x, a.pos.y - temp.y) - Math.hypot(b.pos.x - temp.x, b.pos.y - temp.y))[0];
+      let tid = ''; let cab = fCab || near?.cabinet || ''; let edited = false;
+      const name = h('input', { placeholder: 'Название точки', oninput: () => { edited = true; hint.textContent = ''; } });
+      const hint = h('small', { class: 'mut' });
+      const cabSel = h('select', { onchange: () => { cab = cabSel.value; cp.setType(tid, cab); suggest(); } }, h('option', { value: '' }, '— без шкафа —'), ...cabs.map((x) => h('option', { value: x, selected: x === cab }, `Шкаф ${x}`)));
+      const cp = cablesPicker({ compact: true });
+      const tp = typePicker({ onChange: (t) => { tid = t; cp.setType(t, cab); suggest(); } });
+      function suggest() {
+        if (edited) return;
+        if (sn?.kind === 'text') { name.value = sn.label; hint.textContent = 'Как надпись на чертеже'; return; }
+        const n = tid ? nextLabel(pts, tid, cab) : '';
+        name.value = n; hint.textContent = n ? `Предложено: следующий номер после последней точки этого типа${cab ? ` в шкафу ${cab}` : ''}. Можно исправить.` : (tid ? 'Таких точек ещё нет — впишите название.' : '');
+      }
+      area.replaceChildren(h('div', { class: 'form', style: { marginTop: '8px' } },
+        h('label', {}, 'Шкаф'), cabSel, h('label', {}, 'Тип'), tp, h('label', {}, 'Название'), name, hint,
+        h('label', {}, 'Кабели'), cp.el,
+        h('div', { class: 'btns' }, h('button', { onclick: () => {
+          const label = name.value.trim();
+          if (!tid) { toast('Выберите тип'); return; } if (!label) { toast('Впишите название'); return; }
+          if (pts.some((p) => p.label === label)) { toast(`«${label}» уже есть в проекте`); return; }
+          const data = { label, typeId: tid, pos: posFor(tid), note: 'добавлено на плане' };
+          if (cab) data.cabinet = cab; if (d.floor) data.floor = d.floor; const ov = cp.override(); if (ov) data.cableOverride = ov;
+          const id = newId(); getRepo().save(currentProject().id, [{ coll: 'points', id, data }]);
+          toast(`Точка «${label}» добавлена${data.pos.icon && !currentProject()?.typeIcons?.[tid] ? ' — значок этого типа можно задать в «📌 Значки типов»' : ''}`); focusId = id; finish();
+        } }, '✔ Создать точку'))));
+      suggest();
+    }
+  }
+
+  // «📌 Значки типов»: нажатие на значок → его картинка (маленький PNG) хранится в проекте
+  async function iconTap(d, sn, page, x, y, done) {
+    if (!iconType) { toast('Сначала выберите тип'); done(); return; }
+    if (sn?.kind === 'text') { toast('Это надпись — нажмите на сам значок'); done(); return; }
+    const b = sn ? [sn.x - sn.w / 2, sn.y - sn.h / 2, sn.x + sn.w / 2, sn.y + sn.h / 2] : [x - 6, y - 6, x + 6, y + 6];
+    const w = b[2] - b[0]; const hh = b[3] - b[1]; const pad = Math.max(0.5, Math.max(w, hh) * 0.06);
+    const clip = [b[0] - pad, b[1] - pad, b[2] + pad, b[3] + pad];
+    let png = null;
+    for (const z of [6, 4, 3, 2]) { png = await wk.call('png', { page, clip, zoom: Math.min(z, 160 / (clip[2] - clip[0])) }); if (png.byteLength < 24000) break; }
+    const url = toDataUrl(png);
+    const ok = await confirmDialog(h('div', {}, h('div', {}, `Значок для типа «${iconType}»:`), h('img', { src: url, style: { maxHeight: '80px', background: '#fff', border: '1px solid #ddd', margin: '8px 0' } }), h('div', { class: 'mut' }, sn ? '' : 'Рядом не нашёлся значок — взят кусок вокруг нажатия.')), { yes: 'Сохранить значок' });
+    done();
+    if (!ok) return;
+    const p = currentProject(); getRepo().saveProject(p.id, { typeIcons: { ...(p.typeIcons || {}), [iconType]: { png: url, w: +(clip[2] - clip[0]).toFixed(1), h: +(clip[3] - clip[1]).toFixed(1) } } });
+    toast(`Значок типа «${iconType}» сохранён`); setTimeout(() => { toolBar(); viewer?.draw(); }, 300);
   }
 
   // слои чертежа (AutoCAD): выключить лишнее — мебель, штриховки, размеры; запоминается на этом устройстве
@@ -205,7 +343,7 @@ export function planModal({ point = null } = {}) {
   const body = h('div', {});
   function draw(selectId) {
     const list = drawingsOf();
-    const want = selectId || (point && drawingFor(point)?.id) || current?.id || list[0]?.id;
+    const want = selectId || (point && drawingFor(point)?.id) || (placeFor && list.find((x) => x.floor && x.floor === placeFor.floor)?.id) || current?.id || list[0]?.id;
     const d = list.find((x) => x.id === want) || list[0];
     const sel = list.length > 1 ? h('select', { onchange: (e) => show(list.find((x) => x.id === e.target.value)) }, list.map((x) => h('option', { value: x.id, selected: x.id === d?.id }, `${x.name}${x.floor ? ` (этаж ${x.floor})` : ''}`))) : null;
     box.replaceChildren(

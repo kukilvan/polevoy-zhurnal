@@ -5,7 +5,8 @@ import { autoParse, scanPages, labelish } from './engine.js';
 import { pickSimilar, snapAt } from './icons.js';
 import { numberedPdf } from './numbered.js';
 
-let extracted = null; let doc = null; let hiddenSet = null; let scanned = null;
+let extracted = null; let doc = null; let hiddenSet = null; let scanned = null; let raw = null;
+const ensureExtracted = async () => { if (!extracted && raw) extracted = await extractPdf(raw.slice()); };  // план открыт без разбора — текст и линии по требованию
 let lists = new Map();  // страница → готовый «список рисования» (рисовать куски листа в 2–3 раза быстрее)
 
 self.onmessage = async (e) => {
@@ -19,7 +20,7 @@ self.onmessage = async (e) => {
       doc = mupdf.Document.openDocument(bytes, 'application/pdf'); hiddenSet = null; scanned = null; lists = new Map();
       res = { pages: extracted.pages.map((p) => ({ w: p.w, h: p.h })), ms: Date.now() - t0 };
     } else if (cmd === 'openDoc') {  // только показать (план): без разбора текста
-      const mupdf = await loadMupdf(); doc = mupdf.Document.openDocument(new Uint8Array(a.data), 'application/pdf'); extracted = null; scanned = null; hiddenSet = null; lists = new Map();
+      const mupdf = await loadMupdf(); raw = new Uint8Array(a.data); doc = mupdf.Document.openDocument(raw.slice(), 'application/pdf'); extracted = null; scanned = null; hiddenSet = null; lists = new Map();
       res = { pages: Array.from({ length: doc.countPages() }, (_, i) => { const b = doc.loadPage(i).getBounds(); return { w: b[2] - b[0], h: b[3] - b[1] }; }) };
     } else if (cmd === 'parse') {
       res = autoParse(extracted, a.catalog, a.opts);
@@ -34,8 +35,13 @@ self.onmessage = async (e) => {
       const hs = new Set(hiddenSet || []);
       res = pickSimilar(scanned, extracted.pages, a.page, a.x, a.y, { hidden: (l) => hs.has(l), pad: a.pad ?? 3 });
     } else if (cmd === 'snap') {  // ближайшая надпись или значок под пальцем
+      await ensureExtracted();
       scanned ??= scanPages(extracted.pages).spans; const hs = new Set(hiddenSet || []);
       res = snapAt(scanned, extracted.pages, a.page, a.x, a.y, { hidden: (l) => hs.has(l), r: a.r ?? 12 });
+    } else if (cmd === 'png') {  // маленькая картинка куска листа (значок типа)
+      const mupdf = await loadMupdf(); const z = a.zoom || 4; const [x0, y0, x1, y1] = a.clip;
+      const pix = new mupdf.Pixmap(mupdf.ColorSpace.DeviceRGB, [Math.floor(x0 * z), Math.floor(y0 * z), Math.ceil(x1 * z), Math.ceil(y1 * z)], false);
+      pix.clear(255); const dev = new mupdf.DrawDevice(mupdf.Matrix.identity, pix); doc.loadPage(a.page).run(dev, mupdf.Matrix.scale(z, z)); dev.close(); res = pix.asPNG();
     } else if (cmd === 'texts') {  // все короткие надписи, похожие на обозначения (для связывания с точками проекта, даже если каталог их не знает)
       scanned ??= scanPages(extracted.pages).spans;
       res = scanned.filter((s) => !String(s.c || '').startsWith('sym:') && s.t.trim().length <= 30 && (labelish(s.t.trim()) || /\d/.test(s.t)))
@@ -48,7 +54,7 @@ self.onmessage = async (e) => {
       try { for (let i = 0; i < pdf.countLayers(); i++) pdf.setLayerVisible(i, !off.has(pdf.getLayerName(i))); } catch { /* без слоёв */ }
       lists = new Map(); res = true;
     } else if (cmd === 'numbered') {  // PDF с номерами
-      res = numberedPdf(await loadMupdf(), new Uint8Array(a.data), a.points, { title: a.title });
+      res = numberedPdf(await loadMupdf(), new Uint8Array(a.data), a.points, { title: a.title, icons: a.icons || {} });
     } else if (cmd === 'crop') {
       const mupdf = await loadMupdf(); const z = a.zoom || 4;
       if (!lists.has(a.page)) lists.set(a.page, doc.loadPage(a.page).toDisplayList());

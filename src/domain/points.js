@@ -90,3 +90,21 @@ export function parseCables(text) {
 }
 // Метраж = длина на 1 кабель × число кабелей (всех видов); без длины — 0
 export const metrageOf = (point, ctx) => round2((Number(point.length) || 0) * cablesCountOf(point, ctx));
+
+// Название следующей точки: последняя (по номеру) точка этого типа в этом шкафу + 1 в том же формате.
+// Пары «17-18» → «19-20»; ведущие нули сохраняются (C-083 → C-084); нет таких точек — ''.
+export function nextLabel(points, typeId, cabinet = '') {
+  const same = [...points].filter((p) => p.typeId === typeId && (p.cabinet || '') === (cabinet || '') && !/#\d+$/.test(p.label)).sort((a, b) => compareLabels(a.label, b.label));
+  const last = same[same.length - 1]?.label; if (!last) return '';
+  const used = new Set([...points].map((p) => p.label));
+  const pad = (n, w) => String(n).padStart(w, '0');
+  const bump = (l) => {
+    const pair = l.match(/^(.*?)(\d+)([-_/])(\d+)$/);
+    if (pair && +pair[4] === +pair[2] + 1) { const st = +pair[4] - +pair[2] + 1; return `${pair[1]}${pad(+pair[2] + st, pair[2].length)}${pair[3]}${pad(+pair[4] + st, pair[4].length)}`; }
+    const m = l.match(/^(.*?)(\d+)(\D*)$/); if (!m) return '';
+    return `${m[1]}${pad(+m[2] + 1, m[2].length)}${m[3]}`;
+  };
+  let next = bump(last); let guard = 0;
+  while (next && used.has(next) && guard++ < 500) next = bump(next);
+  return next;
+}
