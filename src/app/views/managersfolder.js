@@ -10,8 +10,8 @@ import { memberNameByUid } from './members.js';
 import { drawingsOf, drawingTitle, loadDrawing, putNumbered, shareWithServer } from '../drawings.js';
 import { build } from './plannumbers.js';
 
-// Легенда на иврите — включится после проверки переводов Иваном
-export const HE_LEGEND = false;
+// Легенда на иврите для папки руководства
+export const HE_LEGEND = true;  // переводы проверены Иваном 2026-10-17
 const D = 'https://www.googleapis.com/drive/v3/files';
 const mgr = (p) => p.managers || {};
 const when = (iso) => new Date(iso).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
