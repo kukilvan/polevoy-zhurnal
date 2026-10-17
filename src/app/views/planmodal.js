@@ -8,6 +8,7 @@ import { makeWorker, pointsFromDrawing } from './tohnitview.js';
 import { createViewer } from './planview.js';
 import { exportNumberedPdf } from './plannumbers.js';
 import { linkPoints } from './planlink.js';
+import { choosePoint } from './pointchooser.js';
 
 // Цвет по статусу: померяно — синий, протянуто — жёлтый, дальше от жёлтого к зелёному: установлено не всё → установлено → проверено; проблема — красный
 export const STATUS_COLORS = [['#9e9e9e', 'новая'], ['#2979ff', 'померяно'], ['#ffb300', 'протянуто частично'], ['#ffd600', 'протянуто'], ['#e4e000', 'захивучено'],
@@ -182,7 +183,7 @@ export function planModal({ point = null } = {}) {
       h('div', { class: 'btns' },
         isHidden ? h('button', { class: 'sec', onclick: () => { moveMark(d, m, 'hidden', 'unlinked'); c(); } }, '👁 Вернуть в «Не размеченые»')
           : h('button', { class: 'sec', onclick: () => { moveMark(d, m, 'unlinked', 'hidden'); c(); } }, '🙈 Скрыть'),
-        h('button', { onclick: () => { c(); chooseFor(d, m, isHidden); } }, '🔗 Связать с точкой'))), {});
+        h('button', { onclick: () => { c(); chooseFor(d, m); } }, '🔗 Связать с точкой'))), {});
   }
   function moveMark(d, m, from, to) {
     const k = posKey(m.pos);
@@ -190,36 +191,15 @@ export function planModal({ point = null } = {}) {
     setTimeout(() => viewer?.draw(), 300);
   }
   // выбор точки проекта для подписи: поиск, тип, шкаф; по умолчанию — точки без места на чертеже
-  function chooseFor(d, m, fromHidden) {
-    const all = [...state.ctx.points.values()];
-    const q = h('input', { type: 'search', placeholder: 'Поиск по названию', style: { flex: 1 } });
-    const tSel = h('select', {}, h('option', { value: '' }, 'Все типы'), ...[...new Set(all.map((p) => p.typeId))].sort((a, b) => a.localeCompare(b, 'ru')).map((t) => h('option', { value: t, selected: t === m.typeId }, t)));
-    const cSel = h('select', {}, h('option', { value: '' }, 'Все шкафы'), ...[...new Set(all.map((p) => p.cabinet || ''))].filter(Boolean).sort((a, b) => a.localeCompare(b, 'ru', { numeric: true })).map((x) => h('option', { value: x }, `Шкаф ${x}`)));
-    const noPos = h('input', { type: 'checkbox', checked: true });
-    const ren = h('input', { type: 'checkbox', checked: false });
-    const listEl = h('div', { class: 'card', style: { padding: 0, maxHeight: '45vh', overflow: 'auto' } });
-    const fill = () => {
-      const s = q.value.trim().toLowerCase();
-      const rows = all.filter((p) => (!s || `${p.label} ${p.planName || ''}`.toLowerCase().includes(s)) && (!tSel.value || p.typeId === tSel.value) && (!cSel.value || (p.cabinet || '') === cSel.value) && (!noPos.checked || !drawingFor(p)))
-        .sort(comparePoints).slice(0, 200);
-      listEl.replaceChildren(...(rows.length ? rows.map((p) => h('div', { class: 'item', onclick: () => pick(p) }, h('div', { class: 'name' }, p.label, h('div', { class: 'sub' }, `${p.typeId}${p.cabinet ? ` · шкаф ${p.cabinet}` : ''}${drawingFor(p) ? ' · уже на чертеже' : ''}`)))) : [h('div', { class: 'empty' }, 'Ничего не найдено')]));
-    };
-    [q, tSel, cSel, noPos].forEach((el) => el.addEventListener('input', fill));
-    const pick = (p) => {
-      const taken = all.some((x) => x.id !== p.id && x.label === m.label);
-      if (ren.checked && taken) { toast(`«${m.label}» уже есть в проекте — переименовать нельзя`); return; }
+  function chooseFor(d, m) {
+    choosePoint({ title: `🔗 Точка для «${m.label}»`, typeId: m.typeId, renameLabel: m.label, onPick: (p, { rename }) => {
+      if (rename && [...state.ctx.points.values()].some((x) => x.id !== p.id && x.label === m.label)) { toast(`«${m.label}» уже есть в проекте — переименовать нельзя`); return false; }
       const data = { pos: { ...m.pos, sheet: d.name } };
-      if (ren.checked) { data.label = m.label; data.planName = p.label; } else if (p.label !== m.label) data.planName = m.label;
+      if (rename) { data.label = m.label; data.planName = p.label; } else if (p.label !== m.label) data.planName = m.label;
       getRepo().save(currentProject().id, [{ coll: 'points', id: p.id, data }]);
       const k = posKey(m.pos); updateDrawing(d.id, (x) => ({ unlinked: (x.unlinked || []).filter((y) => posKey(y.pos) !== k), hidden: (x.hidden || []).filter((y) => posKey(y.pos) !== k) }));
-      toast(`«${ren.checked ? m.label : p.label}» связана с чертежом`); c(); void fromHidden;
-    };
-    const c = openModal(`🔗 Точка для «${m.label}»`, h('div', {},
-      h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap' } }, q, tSel, cSel),
-      h('label', { class: 'pickrow' }, noPos, h('span', {}, 'Только точки без места на чертеже')),
-      h('label', { class: 'pickrow' }, ren, h('span', {}, `Переименовать выбранную точку в «${m.label}» (как на чертеже)`)),
-      listEl), { sticky: true });
-    fill();
+      toast(`«${rename ? m.label : p.label}» связана с чертежом`); return true;
+    } });
   }
 
   const body = h('div', {});

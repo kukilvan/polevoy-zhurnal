@@ -13,6 +13,7 @@ import { pointsFromDrawing, unsortedModal } from './tohnitview.js';
 import { cablesField, cablesPicker } from './cablespick.js';
 import { drawingFor } from '../drawings.js';
 import { planModal } from './planmodal.js';
+import { choosePoint } from './pointchooser.js';
 
 const typeOptions = () => [...state.ctx.types.values()].filter((t) => !isSystemType(t)).map((t) => ({ value: t.id, label: t.id }));
 const hasIdType = (id) => hasDeviceId(state.ctx.types.get(id));
@@ -227,6 +228,20 @@ export function meterForm(startPoint) {
   show(point);
 }
 
+// Значок, отмеченный на плане (✋/👆), — на самом деле уже существующая точка проекта: перенести ей место на чертеже, значок удалить
+function bindToPoint(src, closeCard) {
+  choosePoint({ title: `🔗 Чья это отметка «${src.label}»?`, typeId: src.typeId, exclude: src.id, onPick: async (p) => {
+    const rows = state.data.journal.filter((r) => r.pointId === src.id && !r.deleted);
+    const msg = `Место «${src.label}» на чертеже перейдёт точке «${p.label}», а «${src.label}» будет удалена${rows.length ? `; её записи работ (${rows.length}) перейдут к «${p.label}»` : ''}.${drawingFor(p) ? ` Сейчас «${p.label}» уже стоит на чертеже — её место заменится.` : ''}`;
+    if (!(await confirmDialog(msg, { yes: 'Привязать' }))) return false;
+    const repo = getRepo(); const pid = currentProject().id;
+    repo.save(pid, [{ coll: 'points', id: p.id, data: { pos: { ...src.pos } } },
+      ...rows.map((r) => ({ coll: 'journal', id: r.id, data: { pointId: p.id } }))]);
+    repo.remove(pid, 'points', src.id);
+    toast(`«${p.label}» — теперь на чертеже на месте «${src.label}»`); closeCard?.(); return true;
+  } });
+}
+
 // Карточка точки: сведения, история работ (что, когда, кто) и действия
 export function pointCard(startPoint, { fromPlan = false } = {}) {
   const proj = currentProject();
@@ -262,7 +277,8 @@ export function pointCard(startPoint, { fromPlan = false } = {}) {
       h('div', { class: 'btns' },
         h('button', { class: 'sec', onclick: () => { close(); setTimeout(() => meterForm(p), 60); } }, '📏 Длина'),
         h('button', { class: 'sec', onclick: () => { close(); setTimeout(() => pointForm(p), 60); } }, '✏️ Изменить'),
-        !fromPlan && p.pos && drawingFor(p) ? h('button', { class: 'sec', onclick: () => { close(); setTimeout(() => planModal({ point: p }), 60); } }, '📍 На чертеже') : null),
+        !fromPlan && p.pos && drawingFor(p) ? h('button', { class: 'sec', onclick: () => { close(); setTimeout(() => planModal({ point: p }), 60); } }, '📍 На чертеже') : null,
+        fromPlan && p.pos && String(p.note || '').includes('значок без номера') ? h('button', { class: 'sec', onclick: () => bindToPoint(p, close) }, '🔗 Привязать к точке') : null),
       h('div', { class: 'group', style: { padding: '12px 0 6px' } }, `История работ (${rows.length})`),
       rows.length ? h('div', {}, rows.map((r) => {
         const who = whoIs(proj, r.by);
@@ -333,14 +349,15 @@ function bulkEditForm(ids, done) {
   });
 }
 
-let searchText = ''; let fCab = ''; let fType = '';
+let searchText = ''; let fCab = ''; let fType = ''; let fPlan = '';
+const planOk = (p) => !fPlan || (fPlan === 'off' ? !drawingFor(p) : !!drawingFor(p));  // «Нет на плане» / «На плане»
 export function meterView(ui) {
   const list = h('div', { class: 'card', style: { padding: 0 } });
   const total = pointsSorted();
   const withLen = total.filter((p) => p.length !== undefined && p.length !== null && p.length !== '').length;
   const bar = h('div', { class: 'card selbar', style: { position: 'sticky', top: '53px', zIndex: 6, margin: '8px 0 0' } });
   const shown = () => pointsSorted().filter((p) => { const q = searchText.trim().toLowerCase();
-    return (!q || `${p.label} ${p.planName ?? ''}`.toLowerCase().includes(q)) && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && (!fType || p.typeId === fType); });
+    return (!q || `${p.label} ${p.planName ?? ''}`.toLowerCase().includes(q)) && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && (!fType || p.typeId === fType) && planOk(p); });
   function updateBar() {
     for (const id of [...selected]) if (!state.ctx.points.has(id)) selected.delete(id);
     bar.style.display = selMode ? '' : 'none';
@@ -362,7 +379,7 @@ export function meterView(ui) {
     updateBar();
     const q = searchText.trim().toLowerCase();
     const pts = pointsSorted().filter((p) => (!q || `${p.label} ${p.planName ?? ''}`.toLowerCase().includes(q))
-      && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && (!fType || p.typeId === fType));
+      && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && (!fType || p.typeId === fType) && planOk(p));
     list.replaceChildren();
     if (!pts.length) { list.append(total.length ? h('div', { class: 'empty' }, 'Ничего не найдено') : hint(ui, 'Точек пока нет. Добавьте их пачкой («Точки пачкой») или по одной. Нажмите точку: откроется её карточка с историей работ, там же кнопка «📏 Длина».', 'meter', '📖 Как вносить метраж')); return; }
     let lastKey = null;
@@ -388,9 +405,10 @@ export function meterView(ui) {
   if (!types.includes(fType)) fType = '';
   const sel = (all, opts, cur, set) => h('select', { onchange: (e) => { set(e.target.value); fill(); } },
     h('option', { value: '' }, all), ...opts.map(([v, t]) => h('option', { value: v, selected: v === cur }, t)));
-  const filters = h('div', { style: { display: 'flex', gap: '8px', marginTop: '8px' } },
+  const filters = h('div', { style: { display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' } },
     sel('Все шкафы', cabs.map((c) => (c ? [c, `Шкаф ${c}`] : ['__none', 'Без шкафа'])), fCab, (v) => { fCab = v; }),
-    sel('Все типы', types.map((t) => [t, t]), fType, (v) => { fType = v; }));
+    sel('Все типы', types.map((t) => [t, t]), fType, (v) => { fType = v; }),
+    sel('План: все', [['off', '📍 Нет на плане'], ['on', '🗺 На плане']], fPlan, (v) => { fPlan = v; }));
   fill();
   return h('div', {},
     h('div', { class: 'btns', style: { marginTop: 0 } },

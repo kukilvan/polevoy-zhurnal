@@ -99,3 +99,28 @@ export function regionOrder(items, start = null) {
   }
   return out;
 }
+
+/** Что под пальцем (для «➕ Вручную»): ближайшая короткая надпись (рамка) или значок из линий (круг); ничего рядом — null */
+export function snapAt(spans, pages, page, x, y, { hidden = () => false, r = 12 } = {}) {
+  const dRect = (s) => Math.hypot(Math.max(0, s.x0 - x, x - s.x1), Math.max(0, s.y0 - y, y - s.y1));
+  const txt = spans.filter((s) => s.page === page && !String(s.c || '').startsWith('sym:') && s.t.trim().length <= 30 && dRect(s) <= r)
+    .sort((a, b) => dRect(a) - dRect(b) || (a.x1 - a.x0) * (a.y1 - a.y0) - (b.x1 - b.x0) * (b.y1 - b.y0))[0];
+  // значок: связные линии одного цвета, не больше 60 pt, в которые попал палец (или рядом)
+  const pg = pages[page]; let shp = null;
+  if (pg) {
+    const cand = pg.paths.filter((p) => !hidden(p.layer) && Math.max(p.bbox[2] - p.bbox[0], p.bbox[3] - p.bbox[1]) <= 60 && p.bbox[0] <= x + r && p.bbox[2] >= x - r && p.bbox[1] <= y + r && p.bbox[3] >= y - r);
+    const par = cand.map((_, i) => i); const f = (i) => { while (par[i] !== i) { par[i] = par[par[i]]; i = par[i]; } return i; };
+    for (let i = 0; i < cand.length; i++) for (let j = i + 1; j < cand.length; j++) { const a = cand[i].bbox; const b = cand[j].bbox; if (cand[i].color === cand[j].color && b[0] <= a[2] + 1.5 && a[0] <= b[2] + 1.5 && b[1] <= a[3] + 1.5 && a[1] <= b[3] + 1.5) par[f(i)] = f(j); }
+    const comps = new Map(); cand.forEach((p, i) => { const k = f(i); if (!comps.has(k)) comps.set(k, []); comps.get(k).push(p); });
+    const boxes = [...comps.values()].map((c) => [Math.min(...c.map((q) => q.bbox[0])), Math.min(...c.map((q) => q.bbox[1])), Math.max(...c.map((q) => q.bbox[2])), Math.max(...c.map((q) => q.bbox[3]))])
+      .filter((b) => Math.max(b[2] - b[0], b[3] - b[1]) <= 60 && Math.max(b[2] - b[0], b[3] - b[1]) >= 3);
+    const d = (b) => Math.hypot(Math.max(0, b[0] - x, x - b[2]), Math.max(0, b[1] - y, y - b[3]));
+    shp = boxes.filter((b) => d(b) <= r).sort((a, b) => d(a) - d(b) || (a[2] - a[0]) * (a[3] - a[1]) - (b[2] - b[0]) * (b[3] - b[1]))[0] || null;
+  }
+  // надпись важнее, если палец на ней (или она ближе значка)
+  if (txt && (!shp || dRect(txt) <= Math.hypot(Math.max(0, shp[0] - x, x - shp[2]), Math.max(0, shp[1] - y, y - shp[3])))) {
+    return { kind: 'text', label: txt.t.trim(), page, x: +((txt.x0 + txt.x1) / 2).toFixed(1), y: +((txt.y0 + txt.y1) / 2).toFixed(1), w: +(txt.x1 - txt.x0).toFixed(1), h: +(txt.y1 - txt.y0).toFixed(1) };
+  }
+  if (shp) { const s = Math.max(shp[2] - shp[0], shp[3] - shp[1]); return { kind: 'shape', page, x: +((shp[0] + shp[2]) / 2).toFixed(1), y: +((shp[1] + shp[3]) / 2).toFixed(1), w: +s.toFixed(1), h: +s.toFixed(1) }; }
+  return null;
+}

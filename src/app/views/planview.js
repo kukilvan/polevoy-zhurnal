@@ -93,7 +93,9 @@ export function createViewer({ wk, pages, height = '58vh', onTap, onRect, rectMo
 // Отметка на плане: кружок + подпись
 export function mark(g, api, it, color, label, { crossed = false, fill = false, minR = 6, rPt = null } = {}) {
   const [x, y] = api.toScr(it.x, it.y); const r = Math.max(minR, (rPt ?? (Math.max(it.w || 8, it.h || 8) / 2 + 2)) * api.view.s);
-  g.lineWidth = 2; g.strokeStyle = color; g.beginPath(); g.arc(x, y, r, 0, Math.PI * 2);
+  const w0 = it.w || 0; const h0 = it.h || 0; const text = !rPt && w0 && h0 && Math.max(w0, h0) / Math.min(w0, h0) > 1.6;  // надпись — рамка
+  g.lineWidth = 2; g.strokeStyle = color; g.beginPath();
+  if (text) { const hw = Math.max(4, (w0 / 2 + 2) * api.view.s); const hh = Math.max(3, (h0 / 2 + 2) * api.view.s); g.rect(x - hw, y - hh, 2 * hw, 2 * hh); } else g.arc(x, y, r, 0, Math.PI * 2);
   if (fill) { g.fillStyle = `${color}33`; g.fill(); }
   g.stroke();
   if (crossed) { g.beginPath(); g.moveTo(x - r, y - r); g.lineTo(x + r, y + r); g.moveTo(x + r, y - r); g.lineTo(x - r, y + r); g.stroke(); }

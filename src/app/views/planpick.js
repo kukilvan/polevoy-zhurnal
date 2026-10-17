@@ -106,10 +106,13 @@ export function iconsPicker({ wk, pages, floor = '', sheet = '', groups = [], on
     const nearest = () => { let best = -1; let bd = Infinity; found.items.forEach((it, i) => { if ((it.page || 0) !== page) return; const d = Math.hypot(it.x - x, it.y - y) * viewer.view.s; if (d < bd) { bd = d; best = i; } }); return bd < 30 ? best : -1; };
     if (mode === 'off' && found) { const i = nearest(); if (i >= 0) { off.has(i) ? off.delete(i) : off.add(i); refresh(); } return; }
     if (mode === 'start' && found) { const i = nearest(); if (i >= 0) { start = found.items[i]; off.delete(i); refresh(); setMode('off'); } return; }
-    if (mode === 'add') {  // пропущенный значок: поставить отметку вручную (размер — как у найденных)
+    if (mode === 'add') {  // пропущенный значок: ближайшая надпись (рамка) или значок (круг его размера); рядом ничего — маленькая отметка
+      let snap = null; try { snap = await wk.call('snap', { page, x, y, r: 14 / viewer.view.s }); } catch { /* без привязки */ }
       const w = found?.items[0]?.w || 12; const hh = found?.items[0]?.h || 12;
+      const it = snap ? { page, x: snap.x, y: snap.y, w: snap.w, h: snap.h } : { page, x: +x.toFixed(1), y: +y.toFixed(1), w, h: hh };
+      if (found?.items.some((f) => (f.page || 0) === page && Math.hypot(f.x - it.x, f.y - it.y) < 2)) { toast('Здесь уже отмечено'); return; }
       if (!found) found = { what: 'отмечено вручную', items: [] };
-      found.items.push({ page, x: +x.toFixed(1), y: +y.toFixed(1), w, h: hh }); refresh(); return;
+      found.items.push(it); refresh(); if (snap) toast(snap.kind === 'text' ? `Надпись «${snap.label}»` : 'Значок'); return;
     }
     if (mode !== 'pick') return;
     info.textContent = 'Ищу такие же…';

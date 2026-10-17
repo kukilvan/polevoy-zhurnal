@@ -2,7 +2,7 @@
 // open {data} → {pages, ms}; parse {catalog, opts} → результат autoParse; crop {page, clip, zoom} → PNG (Uint8Array); pick {page, x, y} → такие же значки
 import { extractPdf, loadMupdf } from './extract.js';
 import { autoParse, scanPages, labelish } from './engine.js';
-import { pickSimilar } from './icons.js';
+import { pickSimilar, snapAt } from './icons.js';
 import { numberedPdf } from './numbered.js';
 
 let extracted = null; let doc = null; let hiddenSet = null; let scanned = null;
@@ -33,6 +33,9 @@ self.onmessage = async (e) => {
       scanned ??= scanPages(extracted.pages).spans;
       const hs = new Set(hiddenSet || []);
       res = pickSimilar(scanned, extracted.pages, a.page, a.x, a.y, { hidden: (l) => hs.has(l), pad: a.pad ?? 3 });
+    } else if (cmd === 'snap') {  // ближайшая надпись или значок под пальцем
+      scanned ??= scanPages(extracted.pages).spans; const hs = new Set(hiddenSet || []);
+      res = snapAt(scanned, extracted.pages, a.page, a.x, a.y, { hidden: (l) => hs.has(l), r: a.r ?? 12 });
     } else if (cmd === 'texts') {  // все короткие надписи, похожие на обозначения (для связывания с точками проекта, даже если каталог их не знает)
       scanned ??= scanPages(extracted.pages).spans;
       res = scanned.filter((s) => !String(s.c || '').startsWith('sym:') && s.t.trim().length <= 30 && (labelish(s.t.trim()) || /\d/.test(s.t)))
