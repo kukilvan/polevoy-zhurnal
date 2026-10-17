@@ -80,6 +80,11 @@ export function createMemoryBackend() {
     },
     async loadSettings() { return { ...settings }; },
     async saveSettings(patch) { settings = { ...settings, ...patch }; },
+    // общий пул и входящие (в памяти — для тестов)
+    listenPool(kind, cb) { const run = () => cb([...bucket('_pool', kind).values()].map((d) => ({ ...d }))); listeners.add(run); run(); return () => listeners.delete(run); },
+    async commitPool(writes) { writes.forEach((w) => { const b = bucket('_pool', w.coll); if (w.remove) b.delete(docKey(w.id)); else b.set(docKey(w.id), { ...(b.get(docKey(w.id)) || {}), ...w.data }); }); notify(); },
+    listenInbox(cb) { const run = () => cb([...bucket('_pool', 'inbox').values()].map((d) => ({ ...d }))); listeners.add(run); run(); return () => listeners.delete(run); },
+    async setInbox(list) { const b = bucket('_pool', 'inbox'); list.forEach((x) => b.set(x.key, { ...(b.get(x.key) || {}), ...x.data })); notify(); },
     dump: () => ({ projects: [...projects.values()], colls: [...colls.entries()].map(([k, v]) => [k, [...v.values()]]) }),
   };
 }
@@ -203,6 +208,26 @@ export function createFirestoreBackend(db, uid) {
       }
       return Promise.all(chunks.map((b) => b.commit())); // порядок отправки сохраняется
     },
+    // Общий пул: коллекции pool_types, pool_devices, pool_cables, pool_catalog (читают все, пишет только администратор пула)
+    listenPool(kind, cb) {
+      return onSnapshot(collection(db, `pool_${kind}`), (snap) => { if (!snap.metadata.fromCache) addReads(snap.docChanges().length); cb(snap.docs.map((d) => d.data())); },
+        (e) => error(`Чтение общего пула (${kind})`, `${e.code || ''} ${e.message || e}`));
+    },
+    commitPool(writes) {
+      const batch = writeBatch(db);
+      writes.forEach((w) => { const ref = doc(db, `pool_${w.coll}`, docKey(w.id)); if (w.remove) batch.delete(ref); else batch.set(ref, { ...w.data, updatedAtServer: serverTimestamp() }, { merge: true }); });
+      return batch.commit();
+    },
+    // Входящие администратора пула: новое и изменённое из проектов (пишут все, читает только администратор)
+    listenInbox(cb) {
+      return onSnapshot(collection(db, 'pool_inbox'), (snap) => { if (!snap.metadata.fromCache) addReads(snap.docChanges().length); cb(snap.docs.map((d) => ({ ...d.data(), key: d.id }))); },
+        (e) => error('Чтение входящих пула', `${e.code || ''} ${e.message || e}`));
+    },
+    setInbox(list) {
+      const batch = writeBatch(db);
+      list.forEach((x) => batch.set(doc(db, 'pool_inbox', x.key), { ...x.data, updatedAtServer: serverTimestamp() }, { merge: true }));
+      return batch.commit();
+    },
     // Личные настройки пользователя (например, привязки установки по умолчанию для новых проектов)
     listenUserPrefs(_uid, cb) {
       return onSnapshot(doc(db, 'users', uid, 'prefs', 'main'), (snap) => cb(snap.data() || {}),
@@ -278,13 +303,7 @@ export function createRepo(backend, user) {
       const add = (coll, items, idOf = (x) => x.id) => items.forEach((x) => seed.push({ coll, id: idOf(x), data: { ...x, projectId: pid, id: idOf(x), createdBy: by.uid, createdAt: now, updatedBy: by.uid, updatedAt: now } }));
       const inst = api.prefs?.installDefaults || {}; // личные привязки установки по умолчанию
       const types = composedTypes(POINT_TYPES.map((t) => (inst[t.id] ? { ...t, installMode: inst[t.id].mode, installWorkIds: inst[t.id].workIds || [] } : t)));
-      // мой общий пул типов (личные настройки): эти типы тоже стандартные для новых проектов — вместе с устройствами, кабелями, работами
       const merged = { catalog: [...CATALOG], types: [...types], cables: [...CABLES], devices: [...DEVICES] };
-      (api.prefs?.typeLib || []).forEach((b) => {
-        if (!b?.type?.id) return;
-        merged.types = [...merged.types.filter((t) => t.id !== b.type.id), b.type];
-        [['catalog', b.catalog], ['cables', b.cables], ['devices', b.devices]].forEach(([c, list]) => (list || []).forEach((x) => { if (!merged[c].some((y) => y.id === x.id)) merged[c].push(x); }));
-      });
       add('catalog', merged.catalog); add('types', merged.types); add('cables', merged.cables); add('devices', merged.devices); add('configs', CONFIGS);
       add('units', UNITS); add('culprits', CULPRITS); add('delayReasons', DELAY_REASONS);
       info(`Создаю проект «${data.name}», справочников: ${seed.length}`);
@@ -309,6 +328,16 @@ export function createRepo(backend, user) {
       api.save(pid, [{ coll, id: docId, action: 'rollback', data }]);
     },
     cacheGet: (pid, coll, id) => cache.get(keyOf(pid, coll, id)),
+    // общий пул
+    listenPool: (kind, cb) => backend.listenPool?.(kind, cb) || (() => {}),
+    savePool(ops) {
+      const now = Date.now();
+      const writes = ops.map((o) => (o.remove ? { coll: o.coll, id: o.id, remove: true } : { coll: o.coll, id: o.id, data: clean({ ...o.data, id: o.id, updatedBy: by.uid, updatedByName: by.name, updatedAt: now }) }));
+      info(`Общий пул: ${ops.map((o) => `${o.coll}${o.remove ? '(удал.)' : ''}`).join(', ')}`);
+      return track(backend.commitPool(writes), ops.length)?.catch?.((e) => error('Запись в общий пул отклонена', `${e.code || ''} ${e.message || e}`));
+    },
+    listenInbox: (cb) => backend.listenInbox?.(cb) || (() => {}),
+    setInbox: (list) => backend.setInbox(list.map((x) => ({ key: x.key, data: clean(x.data) })))?.catch?.((e) => error('Входящие пула', `${e.code || ''} ${e.message || e}`)),
     // Приглашения по почте Google: приглашённый видит проект и сам вступает (правила базы это проверяют)
     listenInvitations: (cb) => backend.listenInvitations(emailOf(user), user.uid, cb),
     invite(project, email) {

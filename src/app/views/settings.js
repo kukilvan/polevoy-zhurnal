@@ -1,4 +1,6 @@
 // Вкладка «Настройки»: все справочники (выпадающие списки), привязка установки и служебные действия проекта в одном месте.
+import { POOL_KINDS } from '../../domain/index.js';
+import { poolButton } from './poolview.js';
 import { allGroups } from '../typegroups.js';
 import { h, formModal, confirmDialog, toast, qtyList, openModal } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
@@ -60,7 +62,10 @@ const taskWorks = () => [...ctx().catalog.values()].filter((w) => ['Хивут',
 const nameOf = (coll, id) => ctx()[coll].get(id)?.name || id;
 const compText = (list) => (list || []).map((d) => `${nameOf('devices', d.deviceId)}${d.count > 1 ? ` ×${d.count}` : ''}`).join(' + ');
 
-const ctx = () => state.ctx;
+// Формы справочников пишут в проект; администратор пула открывает те же формы для общего пула (target: свой ctx и куда сохранять)
+let formTarget = null;
+export const setFormTarget = (t) => { formTarget = t; };
+const ctx = () => formTarget?.ctx || state.ctx;
 const opts = (map, label) => [...map.values()].map((x) => ({ value: x.id, label: label(x) }));
 
 // ---- описание справочников ----
@@ -188,15 +193,15 @@ export const REFS = {
 });
 
 export function itemForm(key, existing, { onSaved } = {}) {  // onSaved(id) — для создания «на лету» из другого окна
-  const def = REFS[key]; const repo = getRepo(); const pid = currentProject().id;
+  const def = REFS[key]; const repo = getRepo(); const pid = currentProject().id; const tgt = formTarget;
   const fields = []; const created = new Map(); // работы, созданные из этой формы (id → их «для каких типов»)
   if (!existing && def.idMode === 'name') fields.push({ key: '_name', label: def.nameLabel, required: true, hint: 'Название потом изменить нельзя — только удалить и создать заново.' });
   fields.push(...def.fields({ existing, created }));
-  const live = def.items();
+  const live = tgt ? [...tgt.ctx[def.coll].values()] : def.items();
   formModal({
     title: existing ? (existing.name || existing.id) : `Новый пункт — ${def.title}`,
     fields, values: existing ? (def.toForm ? def.toForm(existing) : existing) : { ...def.defaults },
-    extra: existing ? [...(key === 'types' ? [{ label: '⭐ В общий пул', onClick: () => { saveToPool([existing.id]); return false; } }] : []), { label: 'Удалить', kind: 'danger', onClick: async () => {
+    extra: existing && !tgt ? [{ label: 'Удалить', kind: 'danger', onClick: async () => {
       const n = def.usage?.(existing) || 0;
       const msg = n ? `«${existing.name || existing.id}» используется (${n}). Удалить из списка? Старые записи сохранятся, но выбрать пункт будет нельзя.` : `Удалить «${existing.name || existing.id}»?`;
       if (!(await confirmDialog(msg, { yes: 'Удалить', danger: true }))) return false;
@@ -215,6 +220,7 @@ export function itemForm(key, existing, { onSaved } = {}) {  // onSaved(id) — 
       const ops = [{ coll: def.coll, id, data: { ...data, deleted: false } }];
       // новые работы, созданные из формы типа, — отметить этот тип в «Для каких типов точек»
       if (key === 'types') created.forEach((ft, wid) => { if (!ft.includes(id)) ops.push({ coll: 'catalog', id: wid, data: { forTypes: [...ft, id] } }); });
+      if (tgt) { tgt.save(ops); tgt.ctx[def.coll].set(id, { ...(existing || {}), ...data, id }); toast('Сохранено в общем пуле'); onSaved?.(id, data); return; }
       repo.save(pid, ops);
       def.after?.(v, id);
       toast('Сохранено'); onSaved?.(id, data);
@@ -278,49 +284,6 @@ function groupModal() {
   mark();
 }
 
-// ---- Общий пул типов: стандартные + мой пул (личные настройки, видны во всех моих проектах) ----
-const myLib = () => getRepo().prefs?.typeLib || [];
-function saveToPool(ids) {
-  const bundles = ids.map((id) => bundleFrom(state.ctx, id)).filter(Boolean);
-  getRepo().saveUserPrefs({ typeLib: libWith(myLib(), bundles) });
-  toast(bundles.length === 1 ? `«${bundles[0].type.id}» — в общем пуле` : `В общий пул сохранено типов: ${bundles.length}`);
-}
-export function poolModal(ui) {
-  const pool = typePool(myLib()); const ctx = state.ctx; const pid = currentProject().id;
-  const picked = new Set();
-  const rows = [...pool.values()].sort((a, b) => a.type.id.localeCompare(b.type.id, 'ru')).map((b) => {
-    const inProj = ctx.types.has(b.type.id);
-    const cb = h('input', { type: 'checkbox', disabled: inProj, onchange: () => { cb.checked ? picked.add(b.type.id) : picked.delete(b.type.id); go.textContent = `➕ Добавить в проект: ${picked.size}`; go.disabled = !picked.size; } });
-    const comp = (b.devices || []).map((d) => d.name).join(' + ') || (b.type.cables || []).map((c) => `${c.cable}×${c.count}`).join(' + ') || 'состав пуст';
-    const del = b.source === 'mine' ? h('button', { class: 'sec', style: { padding: '2px 8px' }, onclick: (e) => {
-      e.preventDefault(); getRepo().saveUserPrefs({ typeLib: myLib().filter((x) => x.type.id !== b.type.id) }); toast(`«${b.type.id}» убран из пула`); close(); poolModal(ui);
-    } }, '✖') : null;
-    return h('label', { class: 'pickrow' }, cb, h('span', { style: { flex: 1 } }, h('b', {}, b.type.id), ` · ${comp}`,
-      h('div', { class: 'sub mut' }, `${b.source === 'mine' ? 'мой пул' : 'стандартный'}${inProj ? ' · уже в проекте' : ''}`)), del);
-  });
-  const go = h('button', { disabled: true, onclick: () => {
-    const ops = [];
-    picked.forEach((id) => addBundleOps(ctx, pool.get(id), ops));
-    getRepo().save(pid, ops.map((o) => ({ ...o, data: { ...o.data, deleted: false } })));
-    toast(`Добавлено типов: ${picked.size}`); close(); ui?.render?.();
-  } }, '➕ Добавить в проект: 0');
-  const close = openModal('Общий пул типов точек', h('div', {},
-    h('div', { class: 'mut' }, 'Стандартные типы и ваш пул — типы, сохранённые из любого вашего проекта (кнопка «⭐ В общий пул»). Тип добавляется вместе с его устройствами, кабелями и работами; то, что в проекте уже есть, не меняется. Типы из пула получают и новые проекты. Убрать тип из этого проекта — «Удалить» в карточке типа (вернуть можно отсюда).'),
-    h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => { saveToPool([...ctx.types.values()].filter((t) => !isSystemType(t)).map((t) => t.id)); close(); poolModal(ui); } }, `⭐ Все типы проекта → в пул (${[...ctx.types.values()].filter((t) => !isSystemType(t)).length})`)),
-    h('div', { class: 'picklist', style: { maxHeight: '50vh' } }, rows),
-    h('div', { class: 'btns' }, go)));
-}
-
-// Стандартная библиотека: добавить в проект недостающее (то, что вы удаляли, не возвращается)
-async function addLibrary() {
-  const ops = libraryOps(state.ctx, knownIds());
-  if (!ops.length) { toast('Добавлять нечего: всё стандартное есть или было удалено вами'); return; }
-  const names = (c) => ops.filter((o) => o.coll === c).map((o) => o.data.name || o.id);
-  const what = [['devices', 'Устройства'], ['types', 'Типы точек'], ['catalog', 'Работы'], ['cables', 'Кабели (работы кабеля)']].filter(([c]) => names(c).length).map(([c, t]) => `${t}: ${names(c).join(', ')}`).join('. ');
-  if (!(await confirmDialog(`Добавить из стандартной библиотеки? ${what}. То, что уже есть или было удалено, не изменится.`, { yes: 'Добавить' }))) return;
-  getRepo().save(currentProject().id, ops.map((o) => ({ ...o, data: { ...o.data, deleted: false } })));
-  toast('Добавлено');
-}
 
 // Перевод типов старой схемы на устройства: подробный предпросмотр и проверка «как будет после»
 function migrateTypes() {
@@ -362,8 +325,7 @@ export function refView() {
   return h('div', {},
     h('div', { class: 'mut', style: { marginBottom: '10px' } }, def.hint),
     h('div', { class: 'btns', style: { marginTop: 0 } }, h('button', { onclick: () => itemForm(key, null) }, '➕ Добавить пункт'),
-      ['devices', 'types', 'cables'].includes(key) ? h('button', { class: 'sec', onclick: addLibrary }, '📚 Добавить стандартные') : null,
-      key === 'types' ? h('button', { class: 'sec', onclick: () => poolModal({ render: () => {} }) }, '🗂 Общий пул типов') : null,
+      POOL_KINDS.includes(key) ? poolButton(key) : null,
       key === 'types' ? h('button', { class: 'sec', onclick: () => groupModal() }, '📂 Общая группа') : null,
       key === 'types' ? h('button', { class: 'sec', onclick: () => dupWorksModal() }, '🧹 Убрать повторы работ') : null,
       key === 'types' && migrateProject(state.ctx, knownIds()).converted.length ? h('button', { class: 'wide', onclick: migrateTypes }, '🔄 Перевести старые типы на устройства') : null),

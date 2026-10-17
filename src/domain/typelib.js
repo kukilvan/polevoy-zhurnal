@@ -4,7 +4,7 @@ import { POINT_TYPES, DEVICES, CABLES, CATALOG, composedTypes } from './seed.js'
 
 const META = ['createdAt', 'createdBy', 'createdByName', 'updatedAt', 'updatedBy', 'updatedByName', 'projectId', 'deleted',
   'deletedAt', 'deletedBy', 'deletedByName', 'updatedAtServer', '_pending'];
-const bare = (x) => { const c = { ...x }; META.forEach((k) => delete c[k]); return JSON.parse(JSON.stringify(c)); };
+export const bare = (x) => { const c = { ...x }; META.forEach((k) => delete c[k]); return JSON.parse(JSON.stringify(c)); };
 
 // Комплект типа: { type, devices, cables, catalog } — из справочников (Map'ов) проекта или библиотеки
 export function bundleFrom(maps, typeId) {

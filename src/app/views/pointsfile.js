@@ -2,7 +2,8 @@
 import { h, openModal, toast } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { newId } from '../repo.js';
-import { parsePointsFile, planPointsImport, pointsImportOps, typePool, UNSORTED_TYPE, posOf } from '../../domain/index.js';
+import { parsePointsFile, planPointsImport, pointsImportOps, UNSORTED_TYPE, posOf } from '../../domain/index.js';
+import { poolBundles } from '../pool.js';
 import { drawingsOf } from '../drawings.js';
 
 export function pointsFromFile() {
@@ -21,7 +22,7 @@ export function pointsFromFile() {
 
 // Предпросмотр добавления точек (общий для файла и для разбора чертежа в приложении)
 export function importPreview(data, title, close) {
-  const plan = planPointsImport(state.ctx, data, typePool(getRepo().prefs?.typeLib));
+  const plan = planPointsImport(state.ctx, data, poolBundles());
   const off = new Set(); // снятые точки
   const list = (title, items, cls) => (items.length ? h('div', { style: { margin: '8px 0' } }, h('b', { class: cls }, `${title} (${items.length})`),
     h('div', { style: { fontSize: '14px', maxHeight: '160px', overflow: 'auto' } }, items.map((x) => h('div', {}, x)))) : null);

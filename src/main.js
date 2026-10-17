@@ -59,7 +59,7 @@ function startSession(user) {
 }
 
 async function boot() {
-  if (memoryMode) { startSession({ uid: 'test-user', displayName: 'Тестовый пользователь', email: 'test@example.com' }); window.__pz = { store, repo: window.__pzRepo }; return; }
+  if (memoryMode) { startSession({ uid: 'test-user', displayName: 'Тестовый пользователь', email: new URLSearchParams(location.search).get('memEmail') || 'test@example.com' }); window.__pz = { store, repo: window.__pzRepo }; return; }
   showMessage('Проверяю вход…');
   fb = await import('./firebase.js');
   fb.watchAuth((user) => {

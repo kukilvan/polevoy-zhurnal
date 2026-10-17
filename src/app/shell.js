@@ -1,4 +1,5 @@
 // Оболочка: верхняя панель, нижняя панель из 5 экранов, меню, переключение экранов.
+import { startPool } from './pool.js';
 import { h, openModal, toast } from './ui.js';
 import { state, subscribe, currentProject, ready, getRepo, setCurrentProject, pendingCount } from './store.js';
 import { projectsView, projectForm } from './views/projects.js';
@@ -123,6 +124,7 @@ export function createShell({ user, onLogout, diag }) {
   window.addEventListener('online', () => { state.online = true; render(); });
   window.addEventListener('offline', () => { state.online = false; render(); });
   const unsub = subscribe(() => { render(); if (ready()) maybeWelcome(ui, user); });
+  startPool();  // общий пул: слушать, входящие администратора, отправка нового из проекта
   render();
 
   // Возврат с Google после выдачи доступа (iPhone): дожидаемся загрузки проекта и запускаем обновление таблицы руководства

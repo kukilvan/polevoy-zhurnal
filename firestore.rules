@@ -4,6 +4,20 @@ service cloud.firestore {
 
     function signedIn() { return request.auth != null; }
 
+    // Общий пул (типы точек, устройства, кабели, работы): видят все, меняет только администратор пула
+    function poolAdmin() { return signedIn() && request.auth.token.email == 'erudit199867@gmail.com'; }
+    match /pool_types/{id} { allow read: if signedIn(); allow write: if poolAdmin(); }
+    match /pool_devices/{id} { allow read: if signedIn(); allow write: if poolAdmin(); }
+    match /pool_cables/{id} { allow read: if signedIn(); allow write: if poolAdmin(); }
+    match /pool_catalog/{id} { allow read: if signedIn(); allow write: if poolAdmin(); }
+    // Входящие пула: приложение каждого пользователя присылает новое и изменённое; читает и решает только администратор
+    match /pool_inbox/{id} {
+      allow read, delete: if poolAdmin();
+      allow create: if signedIn();
+      allow update: if poolAdmin() || (signedIn()
+        && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'seenHash', 'seenItem', 'seenAt']));
+    }
+
     // Личные данные и тест синхронизации: только владелец
     match /users/{uid}/{document=**} {
       allow read, write: if signedIn() && request.auth.uid == uid;

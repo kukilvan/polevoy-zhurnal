@@ -749,3 +749,15 @@ test('повторы работ не трогают количества: 2 ма
   assert.equal(t.filter((x) => x.stage === 'Протяжка' && x.cable === '6005').reduce((n, x) => n + x.qty, 0), 5);         // 2 от магнитов + 3 кабеля точки
   assert.equal(t.filter((x) => x.workId === 'W_CHK').length, 1);
 });
+
+test('общий пул: кандидаты во входящие и «взять в проект» без перезаписи', async () => {
+  const { buildContext, inboxCandidates, takeFromPoolOps, poolMaps, poolHash } = await import('../src/domain/index.js');
+  const pool = poolMaps({ types: [{ id: 'Камера', nameHe: 'מצלמה', devices: [{ deviceId: 'DV_C', count: 1 }] }], devices: [{ id: 'DV_C', name: 'Камера', cables: [{ cable: 'cat7', count: 1 }], workIds: ['W_I'] }], cables: [{ id: 'cat7', workIds: [] }], catalog: [{ id: 'W_I', name: 'Установка камеры', workType: 'Установка' }] });
+  const ctx = buildContext({ types: [{ id: 'Камера', nameHe: 'מצלמה', devices: [{ deviceId: 'DV_C', count: 2 }], updatedAt: 5 }, { id: 'Новый', devices: [] }], devices: [{ id: 'DV_C', name: 'Камера', cables: [{ cable: 'cat7', count: 1 }], workIds: ['W_I'], updatedAt: 9 }], cables: [{ id: 'cat7', workIds: [] }], catalog: [{ id: 'W_I', name: 'Установка камеры', workType: 'Установка' }] });
+  const c = inboxCandidates(ctx, pool);
+  assert.deepEqual(c.map((x) => `${x.kind}:${x.id}`).sort(), ['types:Камера', 'types:Новый']);  // служебные поля не считаются отличием
+  assert.equal(poolHash({ a: 1, updatedAt: 1 }), poolHash({ a: 1, updatedAt: 2 }));
+  const empty = buildContext({ types: [], devices: [], cables: [], catalog: [] });
+  assert.deepEqual(takeFromPoolOps(empty, pool, 'types', 'Камера').map((o) => `${o.coll}:${o.id}`), ['catalog:W_I', 'cables:cat7', 'devices:DV_C', 'types:Камера']);
+  assert.deepEqual(takeFromPoolOps(ctx, pool, 'types', 'Камера'), []);  // уже есть в проекте — не трогаем
+});
