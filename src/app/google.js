@@ -14,7 +14,7 @@ export function captureTokenFromUrl() {
     const p = new URLSearchParams(location.hash.replace(/^#/, ''));
     if (p.get('state') !== 'pz_gsync') return;
     const token = p.get('access_token');
-    if (token) localStorage.setItem('pz_gtoken', JSON.stringify({ token, exp: Date.now() + (Number(p.get('expires_in')) || 3000) * 700 }));
+    if (token) localStorage.setItem('pz_gtoken', JSON.stringify({ token, exp: Date.now() + (Number(p.get('expires_in')) || 3000) * 920 }));
     history.replaceState(null, '', location.pathname + location.search);
   } catch { /* ok */ }
 }
@@ -29,7 +29,8 @@ export async function getToken(action = 'managers') {
   const st = stored(); if (st) { cached = st; return st.token; }
   const provider = new GoogleAuthProvider();
   SCOPES.forEach((s) => provider.addScope(s));
-  provider.setCustomParameters({ prompt: 'consent', login_hint: auth.currentUser?.email || '' });
+  // без prompt: 'consent' — если доступ уже дан, Google не показывает экран согласия, окно закрывается само
+  provider.setCustomParameters({ login_hint: auth.currentUser?.email || '' });
   if (useRedirect()) { // iPhone: окна Google закрываются, а результат Firebase-перехода Safari теряет — идём напрямую в Google и читаем токен из адреса
     try { localStorage.setItem(PENDING, action); } catch { /* ok */ }
     const q = new URLSearchParams({
@@ -42,7 +43,8 @@ export async function getToken(action = 'managers') {
   const res = await reauthenticateWithPopup(auth.currentUser, provider);
   const token = GoogleAuthProvider.credentialFromResult(res)?.accessToken;
   if (!token) throw new Error('Google не выдал разрешение на Диск и Таблицы');
-  cached = { token, exp: Date.now() + 40 * 60 * 1000 };
+  cached = { token, exp: Date.now() + 55 * 60 * 1000 };  // токен Google живёт час
+  try { localStorage.setItem('pz_gtoken', JSON.stringify(cached)); } catch { /* ok */ }  // и после перезагрузки страницы не спрашивать снова
   return token;
 }
 
