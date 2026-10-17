@@ -2,13 +2,14 @@
 import { makeWorker } from './tohnitview.js';
 import { toast } from '../ui.js';
 import { currentProject } from '../store.js';
+import { drawingTitle } from '../drawings.js';
 
 export async function exportNumberedPdf(drawing, buf, points) {
   if (!points.length) { toast('На этом чертеже нет точек'); return; }
   const wk = makeWorker();
   try {
-    const out = await wk.call('numbered', { data: buf.slice(0), title: drawing.name, points: points.map((p) => ({ label: p.label, typeId: p.typeId, pos: p.pos })), icons: currentProject()?.typeIcons || {} });
-    const name = `${drawing.name.replace(/\.pdf$/i, '')}_с_номерами.pdf`;
+    const out = await wk.call('numbered', { data: buf.slice(0), title: drawingTitle(drawing), points: points.map((p) => ({ label: p.label, typeId: p.typeId, pos: p.pos })), icons: currentProject()?.typeIcons || {} });
+    const name = `${drawingTitle(drawing).replace(/\.pdf$/i, '').replace(/[\\/:*?"<>|]/g, '_')}_с_номерами.pdf`;
     const url = URL.createObjectURL(new Blob([out], { type: 'application/pdf' }));
     const a = document.createElement('a'); a.href = url; a.download = name; document.body.append(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 60000);

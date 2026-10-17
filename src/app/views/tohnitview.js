@@ -72,7 +72,7 @@ export function pointsFromDrawing({ drawing = null, buf: preBuf = null } = {}) {
   const out = h('div', {});
   let wk = null; let fileName = ''; let theFile = null;
   const keepPdf = h('input', { type: 'checkbox', checked: true });
-  const close = openModal(drawing ? `✏️ ${drawing.name}` : 'Точки из чертежа (PDF)', h('div', {},
+  const close = openModal(drawing ? `✏️ ${drawing.title || drawing.name}` : 'Точки из чертежа (PDF)', h('div', {},
     h('div', { class: 'mut' }, drawing ? 'Чертёж разобран заново по каталогу: новые подписи можно добавить (существующие точки пропускаются); значки без номеров — поправить: добавить пропущенные, убрать лишние, номера пересчитаются.'
       : 'Тохнит в PDF (из AutoCAD, с текстом). Приложение само найдёт подписи точек по каталогу; что не знает — спросит. Чертёж никуда не отправляется. Первый раз загружается модуль чтения PDF (≈4 МБ).'),
     h('label', { class: 'field' }, h('span', {}, 'Этаж'), floorIn),

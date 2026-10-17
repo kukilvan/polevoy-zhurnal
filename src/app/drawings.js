@@ -17,7 +17,10 @@ async function tx(mode, fn) { const db = await idb(); return new Promise((res, r
 export const cacheGet = (id) => tx('readonly', (s) => s.get(id)).catch(() => null);
 export const cachePut = (id, buf) => tx('readwrite', (s) => s.put(buf, id)).catch(() => null);
 
-export const drawingsOf = (p = currentProject()) => (p?.drawings || []).filter((d) => !d.deleted);
+// порядок — поле order (задаётся в «✏️ Названия и порядок»); без него — в порядке добавления
+export const drawingsOf = (p = currentProject()) => (p?.drawings || []).filter((d) => !d.deleted).map((d, i) => [d, i]).sort((a, b) => (a[0].order ?? 1e6 + a[1]) - (b[0].order ?? 1e6 + b[1])).map(([d]) => d);
+// название для человека: своё (title) или имя файла; имя файла (name) остаётся для связи точек и поиска дубликатов
+export const drawingTitle = (d) => (d?.title || d?.name || '');
 export const drawingFor = (point, p = currentProject()) => (point?.pos?.sheet ? drawingsOf(p).find((d) => d.name === point.pos.sheet || (d.aliases || []).includes(point.pos.sheet)) : null);
 
 // ---- Google Диск ----

@@ -1,7 +1,7 @@
 // «🗺 План»: чертёж проекта с точками по статусу. Нажал на точку — её карточка; из карточки точки «📍 На чертеже» — сюда же, к ней.
 import { h, openModal, toast, confirmDialog } from '../ui.js';
 import { state, currentProject, infoOf, getRepo, subscribe } from '../store.js';
-import { drawingsOf, drawingFor, loadDrawing, addDrawing, pushDrawing, removeDrawing, updateDrawing, posKey } from '../drawings.js';
+import { drawingsOf, drawingTitle, drawingFor, loadDrawing, addDrawing, pushDrawing, removeDrawing, updateDrawing, posKey } from '../drawings.js';
 import { missingStages, comparePoints, nextLabel } from '../../domain/index.js';
 import { newId } from '../repo.js';
 import { typePicker } from './tohnitview.js';
@@ -82,6 +82,8 @@ export function planModal({ point = null, placeFor = null } = {}) {
     const input = h('input', { type: 'file', accept: '.pdf,application/pdf', style: { display: 'none' } });
     input.addEventListener('change', async () => {
       const f = input.files?.[0]; if (!f) return;
+      const dup = drawingsOf().find((x) => x.name === f.name);
+      if (dup && !(await confirmDialog(`Этот файл уже добавлен: «${drawingTitle(dup)}» (файл ${f.name}). Заменить чертёж новым файлом? Точки и отметки останутся.`, { yes: 'Заменить' }))) return;
       const buf = await f.arrayBuffer();
       // точки, чей чертёж ещё не добавлен: предложить связать с этим файлом
       const orphan = [...new Set([...state.ctx.points.values()].filter((p) => p.pos?.sheet && !drawingFor(p)).map((p) => p.pos.sheet))];
@@ -202,7 +204,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
       const dimBtn = h('button', { class: 'sec', onclick: () => { dimDrawing = !dimDrawing; dimBtn.textContent = dimDrawing ? '🌕 Чертёж ярче' : '🌗 Чертёж бледнее'; viewer.draw(); } }, dimDrawing ? '🌕 Чертёж ярче' : '🌗 Чертёж бледнее');
       updateInfo = () => {
         const n = sheetPts(d).length;
-        status.textContent = `${d.name}${d.floor ? ` · этаж ${d.floor}` : ''} · точек на чертеже: ${n}${unl().length ? ` · не размеченых: ${unl().length}` : ''}`;
+        status.textContent = `${drawingTitle(d)}${d.title ? ` (файл ${d.name})` : ''}${d.floor ? ` · этаж ${d.floor}` : ''} · точек на чертеже: ${n}${unl().length ? ` · не размеченых: ${unl().length}` : ''}`;
         const ou = typeSel.querySelector(`option[value="${UNL}"]`); if (ou) ou.textContent = `❔ Не размеченые (${unl().length})`;
         const oh = typeSel.querySelector(`option[value="${HID}"]`); if (oh) oh.textContent = `🙈 Скрытые (${hid().length})`;
       };
@@ -216,7 +218,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
           h('button', { class: 'sec', onclick: async () => { try { toast('Готовлю PDF…'); await exportNumberedPdf(d, buf, sheetPts(d)); } catch (e) { toast(`Не получилось: ${e.message}`); } } }, '📄 PDF с номерами'),
           h('button', { class: 'sec', onclick: () => pointsFromDrawing({ drawing: d, buf }) }, '✏️ Редактировать'),
           d.fileId ? null : h('button', { class: 'sec', onclick: async () => { try { toast('Отправляю на Диск…'); await pushDrawing(d); toast('Чертёж на Диске — откроется и на других устройствах'); draw(d.id); } catch (e) { toast(`Не получилось: ${e.message}`); } } }, '⬆ На Диск'),
-          h('button', { class: 'sec', onclick: async () => { if (await confirmDialog(`Убрать чертёж «${d.name}» из проекта? Точки останутся, файл на Диске — тоже.`, { yes: 'Убрать', danger: true })) { removeDrawing(d); setTimeout(() => draw(), 300); } } }, '🗑 Убрать чертёж')));
+          h('button', { class: 'sec', onclick: async () => { if (await confirmDialog(`Убрать чертёж «${drawingTitle(d)}» из проекта? Точки останутся, файл на Диске — тоже.`, { yes: 'Убрать', danger: true })) { removeDrawing(d); setTimeout(() => draw(), 300); } } }, '🗑 Убрать чертёж')));
       selBar(); toolBar();
       await viewer.start();
       const f = focusId && state.ctx.points.get(focusId);
@@ -371,12 +373,31 @@ export function planModal({ point = null, placeFor = null } = {}) {
     const list = drawingsOf();
     const want = selectId || (point && drawingFor(point)?.id) || (placeFor && list.find((x) => x.floor && x.floor === placeFor.floor)?.id) || current?.id || list[0]?.id;
     const d = list.find((x) => x.id === want) || list[0];
-    const sel = list.length > 1 ? h('select', { onchange: (e) => show(list.find((x) => x.id === e.target.value)) }, list.map((x) => h('option', { value: x.id, selected: x.id === d?.id }, `${x.name}${x.floor ? ` (этаж ${x.floor})` : ''}`))) : null;
+    const sel = list.length > 1 ? h('select', { onchange: (e) => show(list.find((x) => x.id === e.target.value)) }, list.map((x) => h('option', { value: x.id, selected: x.id === d?.id }, `${drawingTitle(x)}${x.floor ? ` (этаж ${x.floor})` : ''}`))) : null;
     box.replaceChildren(
-      h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } }, sel, h('button', { class: list.length ? 'sec' : '', onclick: addPdf }, '➕ Чертёж (PDF)')),
+      h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } }, sel, h('button', { class: list.length ? 'sec' : '', onclick: addPdf }, '➕ Чертёж (PDF)'),
+        list.length ? h('button', { class: 'sec', onclick: () => namesModal() }, '✏️ Названия и порядок') : null),
       list.length ? body : h('div', { class: 'empty', style: { marginTop: '10px' } }, 'Чертежей пока нет. Добавьте PDF тохнита — точки с местом на чертеже (после разбора «📐 Из чертежа» или из файла) появятся на нём. Чертёж хранится на вашем Google Диске и открыт участникам проекта.'));
     if (d) show(d);
   }
+  // свои названия чертежей и порядок в списке (имя файла не меняется — по нему связаны точки и ищутся дубликаты)
+  function namesModal() {
+    const rows = drawingsOf().map((d) => ({ d, inp: h('input', { value: d.title || '', placeholder: d.name }) }));
+    const list = h('div', {});
+    const paint = () => list.replaceChildren(...rows.map((r, i) => h('div', { class: 'card', style: { margin: '6px 0', padding: '8px', display: 'flex', gap: '6px', alignItems: 'center' } },
+      h('div', { style: { flex: 1, minWidth: 0 } }, r.inp, h('small', { class: 'mut' }, `Файл: ${r.d.name}${r.d.floor ? ` · этаж ${r.d.floor}` : ''}`)),
+      h('button', { class: 'sec', style: { padding: '6px 10px' }, disabled: i === 0, title: 'Выше', onclick: () => { [rows[i - 1], rows[i]] = [rows[i], rows[i - 1]]; paint(); } }, '↑'),
+      h('button', { class: 'sec', style: { padding: '6px 10px' }, disabled: i === rows.length - 1, title: 'Ниже', onclick: () => { [rows[i + 1], rows[i]] = [rows[i], rows[i + 1]]; paint(); } }, '↓'))));
+    paint();
+    const c = openModal('✏️ Названия и порядок чертежей', h('div', {},
+      h('div', { class: 'mut' }, 'Впишите удобное название (пусто — как имя файла). Стрелками — порядок в списке чертежей. Имя файла остаётся: по нему приложение узнаёт этот же файл при повторном добавлении.'),
+      list, h('div', { class: 'btns' }, h('button', { onclick: () => {
+        const p = currentProject(); const pos = new Map(rows.map((r, i) => [r.d.id, { order: i, title: r.inp.value.trim() }]));
+        getRepo().saveProject(p.id, { drawings: (p.drawings || []).map((d) => (pos.has(d.id) ? { ...d, ...pos.get(d.id) } : d)) });
+        c(); toast('Сохранено'); setTimeout(() => draw(current?.id), 300);
+      } }, 'Сохранить'))), { sticky: true });
+  }
+
   openCard = (p) => import('./points.js').then((m) => m.pointCard(p, { fromPlan: true }));
   draw();
   void close;
