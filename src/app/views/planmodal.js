@@ -31,6 +31,31 @@ function outline(g, api, pos, color, { width = 1.5, pad = 1.5, fill = null } = {
   g.stroke();
 }
 const labelLike = (t = '') => /\d/.test(t) && !/[\u0590-\u05FF]/.test(t) && t.length <= 24 && !/\s{2,}/.test(t);
+// подписи значков (точки без надписи на чертеже): растут вместе с приближением, в рамке цвета статуса,
+// ставятся туда, где не закрывают значки и другие подписи
+function placeTags(g, api, tags, circles, frames = []) {
+  const fs = Math.round(Math.min(26, Math.max(12, 5.5 * api.view.s)));
+  g.font = `bold ${fs}px system-ui`; g.textBaseline = 'middle';
+  const placed = [...frames]; const padX = 4; const hh = fs + 6;
+  const hitsBox = (b) => placed.some((q) => b[0] < q[2] && b[2] > q[0] && b[1] < q[3] && b[3] > q[1]);
+  const hitsCircle = (b) => circles.some(([cx, cy, cr]) => { const dx = Math.max(b[0] - cx, 0, cx - b[2]); const dy = Math.max(b[1] - cy, 0, cy - b[3]); return dx * dx + dy * dy < cr * cr; });
+  for (const t of tags.sort((a, b) => a.y - b.y || a.x - b.x)) {
+    const w = g.measureText(t.p.label).width + 2 * padX; const gap = 3; const r = t.r;
+    const opts = [[t.x + r + gap, t.y - r - hh + 4], [t.x + r + gap, t.y - hh / 2], [t.x + r + gap, t.y + r - 4], [t.x - w / 2, t.y - r - hh - gap], [t.x - w / 2, t.y + r + gap],
+      [t.x - r - gap - w, t.y - r - hh + 4], [t.x - r - gap - w, t.y - hh / 2], [t.x - r - gap - w, t.y + r - 4],
+      [t.x + r + gap, t.y - r - 2 * hh], [t.x - w / 2, t.y + r + gap + hh], [t.x - w / 2, t.y - r - 2 * hh - gap], [t.x + r + gap, t.y + r + hh]];
+    const box = ([x0, y0]) => [x0, y0, x0 + w, y0 + hh];
+    const best = opts.map(box).find((b) => !hitsBox(b) && !hitsCircle(b)) || opts.map(box).find((b) => !hitsCircle(b)) || box(opts[0]);
+    placed.push(best);
+    // линия от значка к подписи, если подпись отодвинута
+    const cx = Math.max(best[0], Math.min(t.x, best[2])); const cy = Math.max(best[1], Math.min(t.y, best[3]));
+    if (Math.hypot(cx - t.x, cy - t.y) > r + gap + 4) { g.strokeStyle = t.col; g.lineWidth = 1; g.beginPath(); g.moveTo(t.x, t.y); g.lineTo(cx, cy); g.stroke(); }
+    g.fillStyle = 'rgba(255,255,255,.92)'; g.fillRect(best[0], best[1], w, hh);
+    g.strokeStyle = t.col; g.lineWidth = 2; g.strokeRect(best[0], best[1], w, hh);
+    g.fillStyle = '#111'; g.fillText(t.p.label, best[0] + padX, best[1] + hh / 2 + 1);
+  }
+  g.textBaseline = 'alphabetic';
+}
 const UNL = '__unlinked'; const HID = '__hidden';
 // «Что осталось»: показать ярко только точки, где этот этап ещё не сделан
 const STAGE_FILTERS = [['Длина', 'Осталось: длина (не померяно)'], ['Протяжка', 'Осталось: протяжка'], ['Дотянуть', 'Осталось: дотянуть'], ['Хивут', 'Осталось: хивут'], ['Установка', 'Осталось: установка'], ['Проверка', 'Осталось: проверка']];
@@ -115,7 +140,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
         overlay: (g, api) => {
           const big = api.view.s > 0.6;
           if (fType === UNL || fType === HID) { for (const m of marks()) { if ((m.pos.page || 0) !== api.page) continue; if (fType === HID) { outline(g, api, m.pos, '#c7c7cc', { width: 1, fill: 'rgba(255,255,255,.9)' }); } else outline(g, api, m.pos, '#ff9500', { width: 2 }); } return; }
-          const icons = currentProject()?.typeIcons || {};
+          const icons = currentProject()?.typeIcons || {}; const tags = []; const circles = []; const frames = [];
           for (const p of pts()) {
             if ((p.pos.page || 0) !== api.page) continue;
             const on = stageOk(p); const col = on ? statusColor(infoOf(p).status) : '#d0d0d0';
@@ -123,8 +148,9 @@ export function planModal({ point = null, placeFor = null } = {}) {
             if (ic) { const im = iconImg(p.typeId, ic.png, () => viewer?.draw()); if (im.complete && im.naturalWidth) { const [sx, sy] = api.toScr(p.pos.x, p.pos.y); const w = (ic.w || 12) * api.view.s; const hh = (ic.h || 12) * api.view.s; g.globalAlpha = on ? 1 : 0.4; g.drawImage(im, sx - w / 2, sy - hh / 2, w, hh); g.globalAlpha = 1; } }
             outline(g, api, p.pos, col, { width: on ? (big ? 1.5 : 2) : 1 });
             if (sel.has(p.id)) outline(g, api, p.pos, '#00b7ff', { width: 3, pad: 1.5 + 3 / api.view.s });
-            if (on && big && !isText(p.pos)) { const [x, y] = api.toScr(p.pos.x, p.pos.y); const r = Math.max(5, (Math.max(p.pos.w || 8, p.pos.h || 8) / 2 + 1.5) * api.view.s); g.font = 'bold 12px system-ui'; const w = g.measureText(p.label).width; g.fillStyle = 'rgba(255,255,255,.85)'; g.fillRect(x + r, y - r - 12, w + 4, 14); g.fillStyle = col; g.fillText(p.label, x + r + 2, y - r); }
+            if (!isText(p.pos)) { const [x, y] = api.toScr(p.pos.x, p.pos.y); const r = Math.max(5, (Math.max(p.pos.w || 8, p.pos.h || 8) / 2 + 1.5) * api.view.s); circles.push([x, y, r]); if (on && big) tags.push({ p, col, x, y, r }); } else { const [x, y] = api.toScr(p.pos.x, p.pos.y); const hw = (p.pos.w / 2 + 2) * api.view.s; const hh2 = (p.pos.h / 2 + 2) * api.view.s; frames.push([x - hw, y - hh2, x + hw, y + hh2]); }
           }
+          placeTags(g, api, tags, circles, frames);
           const f = focusId && state.ctx.points.get(focusId);
           if (f?.pos && (f.pos.page || 0) === api.page && drawingFor(f)?.id === d.id) { outline(g, api, f.pos, '#e0007a', { width: 3, pad: 1.5 + 4 / api.view.s }); }
           if (temp && (temp.page || 0) === api.page) { g.setLineDash([5, 3]); outline(g, api, temp, '#e0007a', { width: 2.5, pad: 2 + 3 / api.view.s, fill: 'rgba(224,0,122,.12)' }); g.setLineDash([]); }
