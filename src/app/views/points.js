@@ -12,6 +12,7 @@ import { pointsFromFile } from './pointsfile.js';
 import { pointsFromDrawing, unsortedModal } from './tohnitview.js';
 import { cablesField, cablesPicker } from './cablespick.js';
 import { drawingFor, drawingsOf } from '../drawings.js';
+import { typeMatch, typeFilterOptions, typeFilterValid } from '../typegroups.js';
 import { planModal } from './planmodal.js';
 import { choosePoint } from './pointchooser.js';
 
@@ -358,7 +359,7 @@ export function meterView(ui) {
   const withLen = total.filter((p) => p.length !== undefined && p.length !== null && p.length !== '').length;
   const bar = h('div', { class: 'card selbar', style: { position: 'sticky', top: '53px', zIndex: 6, margin: '8px 0 0' } });
   const shown = () => pointsSorted().filter((p) => { const q = searchText.trim().toLowerCase();
-    return (!q || `${p.label} ${p.planName ?? ''}`.toLowerCase().includes(q)) && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && (!fType || p.typeId === fType) && planOk(p); });
+    return (!q || `${p.label} ${p.planName ?? ''}`.toLowerCase().includes(q)) && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && typeMatch(fType, p.typeId) && planOk(p); });
   function updateBar() {
     for (const id of [...selected]) if (!state.ctx.points.has(id)) selected.delete(id);
     bar.style.display = selMode ? '' : 'none';
@@ -380,7 +381,7 @@ export function meterView(ui) {
     updateBar();
     const q = searchText.trim().toLowerCase();
     const pts = pointsSorted().filter((p) => (!q || `${p.label} ${p.planName ?? ''}`.toLowerCase().includes(q))
-      && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && (!fType || p.typeId === fType) && planOk(p));
+      && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && typeMatch(fType, p.typeId) && planOk(p));
     list.replaceChildren();
     if (!pts.length) { list.append(total.length ? h('div', { class: 'empty' }, 'Ничего не найдено') : hint(ui, 'Точек пока нет. Добавьте их пачкой («Точки пачкой») или по одной. Нажмите точку: откроется её карточка с историей работ, там же кнопка «📏 Длина».', 'meter', '📖 Как вносить метраж')); return; }
     let lastKey = null;
@@ -403,12 +404,12 @@ export function meterView(ui) {
   const cabs = [...new Set(total.map((p) => p.cabinet || ''))].sort((a, b) => a.localeCompare(b, 'ru', { numeric: true }));
   const types = [...new Set(total.map((p) => p.typeId))].sort((a, b) => String(a).localeCompare(String(b), 'ru'));
   if (!cabs.includes(fCab) && fCab !== '__none') fCab = '';
-  if (!types.includes(fType)) fType = '';
+  if (!typeFilterValid(fType, types)) fType = '';
   const sel = (all, opts, cur, set) => h('select', { onchange: (e) => { set(e.target.value); fill(); } },
     h('option', { value: '' }, all), ...opts.map(([v, t]) => h('option', { value: v, selected: v === cur }, t)));
   const filters = h('div', { style: { display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' } },
     sel('Все шкафы', cabs.map((c) => (c ? [c, `Шкаф ${c}`] : ['__none', 'Без шкафа'])), fCab, (v) => { fCab = v; }),
-    sel('Все типы', types.map((t) => [t, t]), fType, (v) => { fType = v; }),
+    sel('Все типы', typeFilterOptions(types), fType, (v) => { fType = v; }),
     sel('План: все', [['off', '📍 Нет на плане'], ['on', '🗺 На плане']], fPlan, (v) => { fPlan = v; }));
   fill();
   return h('div', {},

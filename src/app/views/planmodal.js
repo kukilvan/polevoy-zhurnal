@@ -12,6 +12,7 @@ import { createViewer } from './planview.js';
 import { exportNumberedPdf } from './plannumbers.js';
 import { linkPoints } from './planlink.js';
 import { choosePoint } from './pointchooser.js';
+import { typeMatch, typeFilterOptions } from '../typegroups.js';
 
 // Цвет по статусу: померяно — синий, протянуто — жёлтый, дальше от жёлтого к зелёному: установлено не всё → установлено → проверено; проблема — красный
 export const STATUS_COLORS = [['#9e9e9e', 'новая'], ['#2979ff', 'померяно'], ['#ffb300', 'протянуто частично'], ['#ffd600', 'протянуто'], ['#e4e000', 'захивучено'],
@@ -123,7 +124,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
       const unl = () => (cur().unlinked || []); const hid = () => (cur().hidden || []);
       const stageOk = (p) => { if (!fStage) return true; if (fStage === 'Длина') return p.length === undefined || p.length === null || p.length === ''; const info = infoOf(p);
         if (fStage === 'Протяжка') return !info.pulled && !info.pullDone; return missingStages(p, state.ctx).includes(fStage); };
-      const pts = () => (fType === UNL || fType === HID ? [] : sheetPts(d).filter((p) => (!fType || p.typeId === fType) && (!fCab || (p.cabinet || '') === fCab)));
+      const pts = () => (fType === UNL || fType === HID ? [] : sheetPts(d).filter((p) => typeMatch(fType, p.typeId) && (!fCab || (p.cabinet || '') === fCab)));
       const marks = () => (fType === UNL ? unl() : fType === HID ? hid() : []);
       // попадание: внутри рамки/круга с запасом 10 px; из нескольких — ближайший край
       const hitDist = (pos, x, y) => { const s = viewer.view.s; const pad = 2 + 10 / s;
@@ -165,7 +166,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
         if (!p) { toast('Такой точки на этом чертеже нет'); return; }
         focusId = p.id; viewer.focus(p.pos.x, p.pos.y, p.pos.page || 0);
       } });
-      const typeSel = h('select', { onchange: (e) => { fType = e.target.value; sel.clear(); selBar(); viewer.draw(); } }, h('option', { value: '' }, 'Все типы'), ...types.map((t) => h('option', { value: t, selected: t === fType }, t)),
+      const typeSel = h('select', { onchange: (e) => { fType = e.target.value; sel.clear(); selBar(); viewer.draw(); } }, h('option', { value: '' }, 'Все типы'), ...typeFilterOptions(types).map(([v, t]) => h('option', { value: v, selected: v === fType }, t)),
         h('option', { value: UNL, selected: fType === UNL }, `❔ Не размеченые (${unl().length})`), h('option', { value: HID, selected: fType === HID }, `🙈 Скрытые (${hid().length})`));
       const cabSel = cabs.length ? h('select', { onchange: (e) => { fCab = e.target.value; viewer.draw(); } }, h('option', { value: '' }, 'Все шкафы'), ...cabs.map((c) => h('option', { value: c, selected: c === fCab }, `Шкаф ${c}`))) : null;
       const stageSel = h('select', { onchange: (e) => { fStage = e.target.value; viewer.draw(); } }, h('option', { value: '' }, 'Все этапы'),

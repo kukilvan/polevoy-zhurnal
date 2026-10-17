@@ -1,4 +1,5 @@
 // Вкладка «Настройки»: все справочники (выпадающие списки), привязка установки и служебные действия проекта в одном месте.
+import { allGroups } from '../typegroups.js';
 import { h, formModal, confirmDialog, toast, qtyList, openModal } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { newId } from '../repo.js';
@@ -89,6 +90,7 @@ export const REFS = {
       const old = (f) => ({ ...f, visible: (v) => legacy(v) && (!f.visible || f.visible(v)) });
       return [
         { key: 'nameHe', label: 'Название (иврит)', required: true },
+        { key: 'group', label: 'Общая группа (для фильтров)', placeholder: 'например: Дверь', hint: `Типы с одной группой можно выбрать в фильтрах точек все вместе («▸ Все: Дверь»), каждый тип тоже остаётся в фильтре отдельно.${allGroups().length ? ` Уже есть: ${allGroups().join(', ')}.` : ''}` },
         qtyField('devices', 'Состав точки (устройства)', opts(ctx().devices, (d) => d.name), 'deviceId',
           { addLabel: '➕ Добавить устройство', empty: legacyType ? 'Пусто — точка по старой схеме (кабель и установка ниже)' : 'Пусто — состав можно дописать потом', ...creator('devices', '🆕 Новое устройство'),
             hint: 'Из каких устройств состоит точка этого типа по умолчанию. При добавлении точек состав можно поменять. Устройства — в «Настройки → Устройства».' }),
@@ -107,8 +109,8 @@ export const REFS = {
     },
     defaults: { defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Проверка'], mode: 'none' },
     toForm: (x) => ({ ...x, scanId: hasDeviceId(x), mode: installBinding(x).mode, workIds: installBinding(x).workIds, pointWorks: x.workIds || [], devices: Array.isArray(x.devices) ? x.devices : [], cables: Array.isArray(x.cables) ? x.cables : [] }),
-    prepare: (v, { existing } = {}) => (v.devices?.length || v.cables?.length || !(existing && !Array.isArray(existing.devices)) ? { scanId: !!v.scanId, nameHe: v.nameHe, devices: v.devices || [], cables: v.cables || [], workIds: v.pointWorks || [] } : {
-      scanId: !!v.scanId, nameHe: v.nameHe, defaultCable: v.defaultCable, defaultCables: v.defaultCables, stages: v.stages || [], devices: null, cables: [], workIds: [],
+    prepare: (v, { existing } = {}) => (v.devices?.length || v.cables?.length || !(existing && !Array.isArray(existing.devices)) ? { scanId: !!v.scanId, nameHe: v.nameHe, group: String(v.group || '').trim(), devices: v.devices || [], cables: v.cables || [], workIds: v.pointWorks || [] } : {
+      scanId: !!v.scanId, nameHe: v.nameHe, group: String(v.group || '').trim(), defaultCable: v.defaultCable, defaultCables: v.defaultCables, stages: v.stages || [], devices: null, cables: [], workIds: [],
       installMode: v.mode, installWorkIds: v.mode === 'works' ? (v.workIds || []) : [], isDoor: v.mode === 'config' }),
     after: (v, id) => {
       if (v.asDefault) getRepo().saveUserPrefs({ installDefaults: { ...(getRepo().prefs.installDefaults || {}), [id]: { mode: v.mode, workIds: v.mode === 'works' ? (v.workIds || []) : [] } } });
@@ -231,6 +233,28 @@ export function auditModal() {
     auditBox(auditRefs(state.ctx))));
 }
 
+// ---- Общая группа для нескольких типов сразу (например, все двери) ----
+function groupModal() {
+  const types = [...ctx().types.values()].filter((t) => !isSystemType(t)).sort((a, b) => a.id.localeCompare(b.id, 'ru'));
+  const name = h('input', { placeholder: 'Название группы, например: Дверь', value: allGroups()[0] || '' });
+  const boxes = types.map((t) => ({ t, cb: h('input', { type: 'checkbox' }) }));
+  const mark = () => { const g = name.value.trim(); boxes.forEach((b) => { b.cb.checked = !!g && String(b.t.group || '').trim() === g; }); };
+  name.addEventListener('input', mark);
+  const guess = h('button', { class: 'sec', onclick: () => { const w = name.value.trim().toLowerCase().slice(0, 4); if (!w) return; boxes.forEach((b) => { if (b.t.id.toLowerCase().includes(w)) b.cb.checked = true; }); } }, '🔎 Отметить похожие по названию');
+  const c = openModal('📂 Общая группа типов', h('div', {},
+    h('div', { class: 'mut' }, 'Отметьте типы, которые в фильтрах точек можно выбрать все вместе (например, все двери с разными устройствами). Отдельные типы в фильтрах остаются.'),
+    name, h('div', { class: 'btns' }, guess),
+    h('div', { class: 'picklist', style: { maxHeight: '45vh' } }, boxes.map((b) => h('label', { class: 'pickrow' }, b.cb, h('span', {}, b.t.id, b.t.group ? h('small', { class: 'mut' }, `  · группа: ${b.t.group}`) : null)))),
+    h('div', { class: 'btns' }, h('button', { onclick: () => {
+      const g = name.value.trim(); if (!g) { toast('Впишите название группы'); return; }
+      const ops = [];
+      boxes.forEach((b) => { const was = String(b.t.group || '').trim(); if (b.cb.checked && was !== g) ops.push({ coll: 'types', id: b.t.id, data: { group: g } }); else if (!b.cb.checked && was === g) ops.push({ coll: 'types', id: b.t.id, data: { group: '' } }); });
+      if (ops.length) getRepo().save(currentProject().id, ops);
+      toast(`Группа «${g}»: ${boxes.filter((b) => b.cb.checked).length} типов`); c();
+    } }, 'Сохранить'))), { sticky: true });
+  mark();
+}
+
 // ---- Общий пул типов: стандартные + мой пул (личные настройки, видны во всех моих проектах) ----
 const myLib = () => getRepo().prefs?.typeLib || [];
 function saveToPool(ids) {
@@ -317,6 +341,7 @@ export function refView() {
     h('div', { class: 'btns', style: { marginTop: 0 } }, h('button', { onclick: () => itemForm(key, null) }, '➕ Добавить пункт'),
       ['devices', 'types', 'cables'].includes(key) ? h('button', { class: 'sec', onclick: addLibrary }, '📚 Добавить стандартные') : null,
       key === 'types' ? h('button', { class: 'sec', onclick: () => poolModal({ render: () => {} }) }, '🗂 Общий пул типов') : null,
+      key === 'types' ? h('button', { class: 'sec', onclick: () => groupModal() }, '📂 Общая группа') : null,
       key === 'types' && migrateProject(state.ctx, knownIds()).converted.length ? h('button', { class: 'wide', onclick: migrateTypes }, '🔄 Перевести старые типы на устройства') : null),
     h('div', { class: 'card', style: { padding: 0, marginTop: '12px' } }, rows.length ? rows : h('div', { class: 'empty' }, 'Список пуст.')));
 }
