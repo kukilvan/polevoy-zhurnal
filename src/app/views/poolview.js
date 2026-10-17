@@ -3,13 +3,12 @@
 // Администратор пула (почта Ивана): правит и удаляет в пуле, разбирает «новое из проектов» — смотрит, правит перед добавлением, добавляет или «больше не показывать».
 import { h, openModal, toast, confirmDialog } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
-import { POOL_TITLES, POOL_KINDS, poolMaps, takeFromPoolOps, depsOf, changedFields, buildContext, isSystemType } from '../../domain/index.js';
+import { POOL_TITLES, POOL_KINDS, poolMaps, takeFromPoolOps, buildContext, isSystemType, candidateChanges, changedParts, poolHash } from '../../domain/index.js';
 import { bare } from '../../domain/typelib.js';
-import { pool, onPool, isPoolAdmin, inboxOf, inboxCount, poolSentReset } from '../pool.js';
+import { pool, onPool, isPoolAdmin, inboxOf, inboxCount, poolSentReset, inbox } from '../pool.js';
 import { itemForm, setFormTarget } from './settings.js';
 
 const nameOf = (kind, x) => (kind === 'types' || kind === 'cables' ? x.id : x.name || x.id);
-const FIELD_RU = { name: 'название', nameHe: 'иврит', devices: 'состав (устройства)', cables: 'кабели', workIds: 'работы', group: 'группа', workType: 'тип работы', unit: 'единица', forTypes: 'для типов', accounting: 'учёт протяжки', scanId: 'серийник/MAC' };
 
 // Кнопка у справочника: «🗂 Общий пул» (+ «• N новых» администратору)
 export function poolButton(kind) {
@@ -48,8 +47,6 @@ function poolCtx(extra = null) {
   return buildContext({ ...state.data, ...lists, projects: [currentProject()] });
 }
 const savePool = (ops) => getRepo().savePool(ops);
-// недостающее в пуле из зависимостей кандидата
-const missingDeps = (deps) => ['catalog', 'cables', 'devices'].flatMap((k) => (deps?.[k] || []).filter((x) => !pool[k].has(x.id)).map((x) => ({ coll: k, id: x.id, data: bare(x) })));
 
 export function poolModal(kind) {
   const admin = isPoolAdmin(); const box = h('div', {}); let q = '';
@@ -77,21 +74,29 @@ export function poolModal(kind) {
     const btns = [];
     if (admin && candidate) {
       btns.push(h('button', { onclick: () => { c(); editCandidate(candidate); } }, '✏️ Изменить и добавить'));
-      btns.push(h('button', { class: 'sec', onclick: () => { savePool([...missingDeps(candidate.deps), { coll: kind, id: candidate.itemId, data: candidate.item }]); mark([candidate], 'added'); toast('Добавлено в общий пул'); c(); } }, '➕ В общий пул'));
+      btns.push(h('button', { class: 'sec', onclick: () => { accept(candidate); toast('Добавлено в общий пул — вместе со всеми частями'); c(); } }, '➕ В общий пул'));
       btns.push(h('button', { class: 'sec', onclick: () => { mark([candidate], 'ignored'); toast('Больше не будет в уведомлениях'); c(); } }, '🚫 Больше не показывать'));
     } else if (admin) {
       btns.push(h('button', { onclick: () => { c(); setFormTarget({ ctx: poolCtx(), save: savePool }); itemForm(kind, x); } }, '✏️ Изменить в пуле'));
       btns.push(h('button', { class: 'danger', onclick: async () => { if (!(await confirmDialog(`Удалить «${nameOf(kind, x)}» из общего пула у всех? В проектах, где он уже взят, останется.`, { yes: 'Удалить', danger: true }))) return; savePool([{ coll: kind, id: x.id, remove: true }]); toast('Удалено из пула'); c(); } }, '🗑 Удалить из пула'));
     }
-    const diff = candidate?.seenItem && candidate.seenHash !== candidate.hash ? changedFields(candidate.seenItem, candidate.item) : null;
+    const diff = candidate ? candidateChanges(candidate, poolMaps(pool)) : null;
     const c = openModal(nameOf(kind, it), h('div', {},
       candidate ? h('div', { class: 'mut', style: { marginBottom: '6px' } }, `От ${candidate.owner?.name || candidate.owner?.email || '—'}${candidate.owner?.email ? ` (${candidate.owner.email})` : ''} · проект «${candidate.project?.name || '—'}»`) : null,
-      diff ? h('div', { class: 'card', style: { margin: '6px 0' } }, h('b', {}, 'Что изменилось: '), diff.map((f) => FIELD_RU[f] || f).join(', ') || '—') : null,
+      diff ? h('div', { class: 'card', style: { margin: '6px 0' } }, h('b', {}, 'Что изменится в пуле:'), diff.length ? h('ul', { style: { margin: '4px 0 0', paddingInlineStart: '18px' } }, diff.map((s) => h('li', {}, s))) : h('div', { class: 'mut' }, 'Отличий нет')) : null,
       describe(kind, it, maps), h('div', { class: 'btns' }, ...btns)), {});
   };
   // правка кандидата перед добавлением: те же формы, сохраняется в пул (у хозяина ничего не меняется)
+  // принять кандидата: сам элемент + все его новые и изменённые части; закрыть и отдельные уведомления этих частей
+  const partOps = (cand) => changedParts(cand, poolMaps(pool)).map((p) => ({ coll: p.kind, id: p.item.id, data: p.item }));
+  const markWithParts = (cand) => {
+    const parts = changedParts(cand, poolMaps(pool));
+    const rel = inbox.filter((x) => x !== cand && x.owner?.uid === cand.owner?.uid && parts.some((p) => p.kind === x.kind && p.item.id === x.itemId && poolHash(p.item) === poolHash(x.item)));
+    mark([cand, ...rel], 'added');
+  };
+  const accept = (cand) => { const ops = [...partOps(cand), { coll: kind, id: cand.itemId, data: cand.item }]; markWithParts(cand); savePool(ops); };
   const editCandidate = (cand) => {
-    setFormTarget({ ctx: poolCtx(cand), save: (ops) => { savePool([...missingDeps(cand.deps), ...ops]); mark([cand], 'added'); } });
+    setFormTarget({ ctx: poolCtx(cand), save: (ops) => { const po = partOps(cand); markWithParts(cand); savePool([...po.filter((o) => !ops.some((x) => x.coll === o.coll && x.id === o.id)), ...ops]); } });
     itemForm(kind, cand.item);
   };
   const row = (x, { candidate = null } = {}) => {

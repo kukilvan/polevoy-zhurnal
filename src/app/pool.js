@@ -1,7 +1,7 @@
 // Общий пул в приложении: слушает пул (все пользователи), входящие (только администратор пула)
 // и отправляет администратору новое/изменённое из текущего проекта.
 import { state, getRepo, subscribe, currentProject } from './store.js';
-import { POOL_ADMIN, POOL_KINDS, poolMaps, inboxCandidates, poolHash, bundleFrom } from '../domain/index.js';
+import { POOL_ADMIN, POOL_KINDS, poolMaps, inboxCandidates, deepHash, bundleFrom, coveredBy, candidateChanges } from '../domain/index.js';
 import { docKey } from './repo.js';
 
 export const pool = Object.fromEntries(POOL_KINDS.map((k) => [k, new Map()]));
@@ -44,8 +44,13 @@ function pushCandidates() {
 }
 
 // Входящие по разделу: новые (без решения), изменённые после решения, отклонённые
+// открыт: в пуле нет или есть отличия (по отпечатку; на всякий случай — и по списку изменений, чтобы старые записи без отличий не висели)
+const openItem = (x) => { const m = poolMaps(pool); if (!m[x.kind]?.get(x.itemId)) return true; if (deepHash(m, x.kind, x.itemId) === x.hash) return false; return candidateChanges(x, m).length > 0; };
+const decided = (x) => x.status && x.seenHash === x.hash;
 export function inboxOf(kind) {
-  const live = inbox.filter((x) => x.kind === kind && !(pool[kind].get(x.itemId) && poolHash(pool[kind].get(x.itemId)) === x.hash));
+  // часть (работа, кабель, устройство), которая входит в открытый кандидат уровнем выше, принимается вместе с ним — отдельно не показываем
+  const open = inbox.filter((x) => openItem(x) && !decided(x));
+  const live = inbox.filter((x) => x.kind === kind && openItem(x) && !(!decided(x) && coveredBy(x, open)));
   return {
     fresh: live.filter((x) => !x.status),
     changed: live.filter((x) => x.status && x.seenHash && x.seenHash !== x.hash),
@@ -61,3 +66,4 @@ export function poolBundles() {
   return m;
 }
 export const poolSentReset = () => { try { localStorage.removeItem(sentKey); } catch { /* ok */ } };
+if (typeof window !== 'undefined' && new URLSearchParams(location.search).has('mem')) window.__pzPool = { pool, get inbox() { return inbox; }, poolMaps, deepHash, inboxCandidates, state };

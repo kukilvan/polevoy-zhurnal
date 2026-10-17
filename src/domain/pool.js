@@ -9,7 +9,7 @@ export const POOL_KINDS = ['types', 'devices', 'cables', 'catalog'];
 export const POOL_TITLES = { types: 'Типы точек', devices: 'Устройства', cables: 'Кабели', catalog: 'Работы' };
 
 const stable = (v) => (Array.isArray(v) ? `[${v.map(stable).join(',')}]` : v && typeof v === 'object'
-  ? `{${Object.keys(v).filter((k) => v[k] !== undefined && v[k] !== null && k !== 'id').sort().map((k) => `${k}:${stable(v[k])}`).join(',')}}` : JSON.stringify(v ?? null));
+  ? `{${Object.keys(v).filter((k) => v[k] !== undefined && v[k] !== null && v[k] !== '' && k !== 'id').sort().map((k) => `${k}:${stable(v[k])}`).join(',')}}` : JSON.stringify(v ?? null));
 /** Отпечаток содержимого (без служебных полей) — для «изменилось ли» */
 export function poolHash(item) {
   const s = stable(bare(item)); let h = 2166136261;
@@ -40,15 +40,17 @@ export function takeFromPoolOps(ctx, maps, kind, id, ops = []) {
   return ops;
 }
 
-/** Что из проекта стоит показать администратору: нет в пуле или отличается от пула */
+/** Отпечаток элемента вместе с частями (изменилась работа внутри типа — изменился и тип) */
+export const deepHash = (maps, kind, id) => { const x = maps[kind].get(id); return x ? poolHash({ item: bare(x), deps: depsOf(maps, kind, id) }) : ''; };
+/** Что из проекта стоит показать администратору: нет в пуле или отличается от пула (сам элемент или его части) */
 export function inboxCandidates(ctx, maps) {
   const out = [];
   const projMaps = { types: ctx.types, devices: ctx.devices, cables: ctx.cables, catalog: ctx.catalog };
   for (const kind of POOL_KINDS) {
     for (const x of ctx[kind].values()) {
       if (kind === 'types' && isSystemType(x)) continue;
-      const hash = poolHash(x); const inPool = maps[kind].get(x.id);
-      if (inPool && poolHash(inPool) === hash) continue;
+      const hash = deepHash(projMaps, kind, x.id); const inPool = maps[kind].get(x.id);
+      if (inPool && deepHash(maps, kind, x.id) === hash) continue;
       out.push({ kind, id: x.id, item: bare(x), deps: depsOf(projMaps, kind, x.id), hash, changedFromPool: !!inPool });
     }
   }
@@ -59,4 +61,73 @@ export function inboxCandidates(ctx, maps) {
 export function changedFields(a = {}, b = {}) {
   const keys = new Set([...Object.keys(bare(a)), ...Object.keys(bare(b))]); keys.delete('id');
   return [...keys].filter((k) => stable(a[k]) !== stable(b[k]));
+}
+
+// ---- понятный список изменений относительно пула ----
+const KIND_ONE = { types: 'Тип', devices: 'Устройство', cables: 'Кабель', catalog: 'Работа' };
+const NEW_ONE = { types: 'Новый тип', devices: 'Новое устройство', cables: 'Новый кабель', catalog: 'Новая работа' };
+const FIELD = { name: 'Название', nameHe: 'Иврит', group: 'Группа', workType: 'Тип работы', unit: 'Единица', accounting: 'Учёт протяжки', scanId: 'Серийник/MAC',
+  active: 'Активна', defaultCable: 'Кабель по умолчанию', defaultCables: 'Кабелей на точку', installMode: 'Установка', stages: 'Этапы' };
+const show = (v) => (v === undefined || v === null || v === '' ? '—' : Array.isArray(v) ? (v.length ? v.join(', ') : '—') : v === true ? 'да' : v === false ? 'нет' : String(v));
+
+/** Имя элемента по картам (кандидат + пул) */
+const nameIn = (maps, kind, id) => { const x = maps[kind]?.get(id); return x ? (kind === 'types' || kind === 'cables' ? x.id : x.name || x.id) : id; };
+// поля одного элемента: строки «что стало иначе» (nm — имена из карт)
+export function fieldChanges(kind, a = {}, b = {}, maps) {
+  const out = []; const nm = (k, id) => nameIn(maps, k, id);
+  const listDiff = (label, xa = [], xb = [], fmt) => {
+    const ma = new Map((xa || []).map((x) => [fmt.key(x), x])); const mb = new Map((xb || []).map((x) => [fmt.key(x), x]));
+    mb.forEach((x, k) => { if (!ma.has(k)) out.push(`${label}: + ${fmt.text(x)}`); else if (fmt.cnt && fmt.cnt(ma.get(k)) !== fmt.cnt(x)) out.push(`${label}: ${fmt.text(ma.get(k))} → ${fmt.text(x)}`); });
+    ma.forEach((x, k) => { if (!mb.has(k)) out.push(`${label}: − ${fmt.text(x)}`); });
+  };
+  const works = { key: (w) => w, text: (w) => nm('catalog', w) };
+  const qtyDev = { key: (d) => d.deviceId, cnt: (d) => Number(d.count) || 1, text: (d) => `${nm('devices', d.deviceId)} ×${Number(d.count) || 1}` };
+  const qtyCab = { key: (c) => c.cable, cnt: (c) => Number(c.count) || 1, text: (c) => `${c.cable} ×${Number(c.count) || 1}` };
+  const done = new Set(['id']);
+  if (kind === 'types') { listDiff('Состав', a.devices, b.devices, qtyDev); listDiff('Кабели точки', a.cables, b.cables, qtyCab); listDiff('Работы на точку', a.workIds, b.workIds, works); ['devices', 'cables', 'workIds'].forEach((k) => done.add(k)); }
+  if (kind === 'devices') { listDiff('Кабели', a.cables, b.cables, qtyCab); listDiff('Работы', a.workIds, b.workIds, works); ['cables', 'workIds'].forEach((k) => done.add(k)); }
+  if (kind === 'cables') { listDiff('Работы кабеля', a.workIds, b.workIds, works); done.add('workIds'); }
+  if (kind === 'catalog') { listDiff('Для типов', a.forTypes, b.forTypes, { key: (t) => t, text: (t) => t }); done.add('forTypes'); }
+  const A = bare(a); const B = bare(b);
+  [...new Set([...Object.keys(A), ...Object.keys(B)])].filter((k) => !done.has(k) && stable(A[k]) !== stable(B[k]))
+    .filter((k) => !(k === 'scanId' && !A[k] && !B[k])).forEach((k) => { if (show(A[k]) !== show(B[k])) out.push(`${FIELD[k] || k}: ${show(A[k])} → ${show(B[k])}`); });
+  return out;
+}
+const describeNew = (kind, x, maps) => {
+  const nm = (k, id) => nameIn(maps, k, id);
+  if (kind === 'catalog') return `${x.workType || '—'}${x.unit ? `, ${x.unit}` : ''}`;
+  if (kind === 'cables') return (x.workIds || []).length ? `работы: ${x.workIds.map((w) => nm('catalog', w)).join(', ')}` : 'без работ';
+  if (kind === 'devices') return `${(x.cables || []).map((c) => `${c.cable}×${c.count}`).join(' + ') || 'без кабеля'}${(x.workIds || []).length ? `; работы: ${x.workIds.map((w) => nm('catalog', w)).join(', ')}` : ''}`;
+  return (x.devices || []).map((d) => `${nm('devices', d.deviceId)} ×${d.count}`).join(' + ') || '—';
+};
+/** Части кандидата, которых в пуле нет или которые отличаются: [{ kind, item, isNew }] */
+export function changedParts(cand, maps) {
+  const out = [];
+  ['catalog', 'cables', 'devices'].forEach((k) => (cand.deps?.[k] || []).forEach((x) => {
+    const p = maps[k].get(x.id);
+    if (!p) out.push({ kind: k, item: x, isNew: true }); else if (poolHash(p) !== poolHash(x)) out.push({ kind: k, item: x, isNew: false });
+  }));
+  return out;
+}
+/** Все изменения кандидата относительно пула словами (сам элемент + его части) */
+export function candidateChanges(cand, maps) {
+  const lists = Object.fromEntries(POOL_KINDS.map((k) => [k, new Map(maps[k])]));
+  ['catalog', 'cables', 'devices'].forEach((k) => (cand.deps?.[k] || []).forEach((x) => lists[k].set(x.id, x)));
+  lists[cand.kind].set(cand.item.id, cand.item);
+  const out = [];
+  const inPool = maps[cand.kind].get(cand.item.id);
+  if (!inPool) out.push(`${NEW_ONE[cand.kind]}: ${describeNew(cand.kind, cand.item, lists)}`);
+  else out.push(...fieldChanges(cand.kind, inPool, cand.item, lists));
+  changedParts(cand, maps).forEach(({ kind, item, isNew }) => {
+    const nm = nameIn(lists, kind, item.id);
+    if (isNew) out.push(`${NEW_ONE[kind]} «${nm}»: ${describeNew(kind, item, lists)}`);
+    else fieldChanges(kind, maps[kind].get(item.id), item, lists).forEach((s) => out.push(`${KIND_ONE[kind]} «${nm}» — ${s}`));
+  });
+  return out;
+}
+// Какие кандидаты «накрыты» кандидатом уровнем выше (тип включает свои устройства, кабели, работы — их принимают вместе с ним)
+const LEVEL = { types: 3, devices: 2, cables: 1, catalog: 0 };
+export function coveredBy(cand, others) {
+  return others.find((o) => o !== cand && o.owner?.uid === cand.owner?.uid && LEVEL[o.kind] > LEVEL[cand.kind]
+    && (o.deps?.[cand.kind] || []).some((x) => x.id === cand.itemId && poolHash(x) === poolHash(cand.item))) || null;
 }

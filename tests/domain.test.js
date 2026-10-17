@@ -761,3 +761,21 @@ test('общий пул: кандидаты во входящие и «взят�
   assert.deepEqual(takeFromPoolOps(empty, pool, 'types', 'Камера').map((o) => `${o.coll}:${o.id}`), ['catalog:W_I', 'cables:cat7', 'devices:DV_C', 'types:Камера']);
   assert.deepEqual(takeFromPoolOps(ctx, pool, 'types', 'Камера'), []);  // уже есть в проекте — не трогаем
 });
+
+test('общий пул: изменения части видны и принимаются на уровне типа', async () => {
+  const { buildContext, inboxCandidates, poolMaps, candidateChanges, coveredBy, changedParts } = await import('../src/domain/index.js');
+  const pool = poolMaps({ types: [{ id: 'Телефон', devices: [], cables: [{ cable: 'Телефон', count: 1 }], workIds: ['W_A'] }], devices: [], cables: [{ id: 'Телефон', workIds: [] }],
+    catalog: [{ id: 'W_A', name: 'Хивут метаэма', workType: 'Хивут', unit: 'шт' }, { id: 'W_S', name: 'Хивут в шкафу', workType: 'Хивут', unit: 'шт' }] });
+  const ctx = buildContext({ types: [{ id: 'Телефон', devices: [], cables: [{ cable: 'Телефон', count: 1 }], workIds: ['W_A', 'W_B'] }], devices: [], cables: [{ id: 'Телефон', workIds: ['W_S'] }],
+    catalog: [{ id: 'W_A', name: 'Хивут метаэма', workType: 'Хивут', unit: 'шт' }, { id: 'W_B', name: 'Хивут кроны', workType: 'Хивут', unit: 'шт' }, { id: 'W_S', name: 'Хивут в шкафу', workType: 'Хивут', unit: 'мин' }] });
+  const own = { uid: 'u1' };
+  const c = inboxCandidates(ctx, pool).map((x) => ({ ...x, itemId: x.id, owner: own }));
+  const type = c.find((x) => x.kind === 'types'); const work = c.find((x) => x.kind === 'catalog' && x.id === 'W_B');
+  assert.ok(type && work); assert.ok(coveredBy(work, c));                 // новая работа принимается вместе с типом
+  const ch = candidateChanges(type, pool);
+  assert.ok(ch.includes('Работы на точку: + Хивут кроны'), ch.join(' | '));
+  assert.ok(ch.some((s) => s.startsWith('Новая работа «Хивут кроны»')));
+  assert.ok(ch.includes('Кабель «Телефон» — Работы кабеля: + Хивут в шкафу'));
+  assert.ok(ch.includes('Работа «Хивут в шкафу» — Единица: шт → мин'));
+  assert.deepEqual(changedParts(type, pool).map((p) => p.item.id).sort(), ['W_B', 'W_S', 'Телефон']);
+});
