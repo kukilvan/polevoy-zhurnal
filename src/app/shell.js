@@ -10,7 +10,6 @@ import { onPendingChange } from './repo.js';
 import { themeLabel, setTheme, nextTheme } from './theme.js';
 import { projectView, updateManagerTable, updateTable, backupNow, organizeDrive } from './views/project.js';
 import { meterView } from './views/points.js';
-import { cabinetsView } from './views/cabinets.js';
 import { logView } from './views/log.js';
 import { dohView } from './views/doh.js';
 import { todosView } from './views/todos.js';
@@ -25,7 +24,7 @@ import { soonView } from './views/soon.js';
 const TABS = [
   ['project', 'Проект', '🏗'], ['meter', 'Точки', '📏'], ['todos', 'Дела', '✅'], ['journal', 'Журнал', '📒'], ['doh', 'Дохот', '📝'], ['settings', 'Настройки', '⚙️'],
 ];
-const SCREEN_TITLES = { projects: 'Все проекты', cabinets: 'Настройки шкафа', month: 'Месяц', history: 'История', import: 'Импорт', install: 'Привязка установки', ref: 'Справочник', members: 'Участники', tables: 'Для руководства', guide: 'Как пользоваться', log: 'Журнал событий' };
+const SCREEN_TITLES = { projects: 'Все проекты', month: 'Месяц', history: 'История', import: 'Импорт', install: 'Привязка установки', ref: 'Справочник', members: 'Участники', tables: 'Для руководства', guide: 'Как пользоваться', log: 'Журнал событий' };
 
 export function createShell({ user, onLogout, diag }) {
   const root = document.getElementById('app');
@@ -65,7 +64,6 @@ export function createShell({ user, onLogout, diag }) {
     if (ui.screen === 'projects') return projectsView(ui);
     if (!currentProject()) return projectView(ui); // «Создать проект»
     if (!ready()) return h('div', { class: 'empty' }, 'Загрузка данных проекта…');
-    if (ui.screen === 'cabinets') return cabinetsView(ui);
     if (ui.screen === 'install') return installView();
     if (ui.screen === 'ref') return refView();
     if (ui.screen === 'members') return membersView(ui);
