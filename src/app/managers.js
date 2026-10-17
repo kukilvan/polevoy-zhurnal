@@ -76,6 +76,8 @@ export async function syncTable(api, project, ctx, table, { force = false, uid =
   }
   if (!file) { file = await api.create(rep.title); fileId = file.id; oldHash = ''; if (uid) patch.by = uid; }
   if (uid && !table.by && !patch.by) patch.by = uid;
+  // таблица — в папке проекта на Диске (один раз; сервер не перекладывает)
+  if (api.placeIn && (!table.placed || patch.by)) { try { await api.placeIn(fileId, project); patch.placed = true; } catch (e) { console.warn('placeIn', e); } }
   const link = `https://docs.google.com/spreadsheets/d/${fileId}/edit`;
   if (fileId !== table.fileId) patch.fileId = fileId;
   if (link !== table.link) patch.link = link;

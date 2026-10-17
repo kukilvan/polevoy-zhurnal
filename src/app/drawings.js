@@ -4,6 +4,7 @@
 import { getRepo, currentProject } from './store.js';
 import { getToken, clearToken, useRedirect, storedTokenValid } from './google.js';
 import { newId } from './repo.js';
+import { projectFolder, moveInto } from './drivefolders.js';
 
 export const DRAWINGS_FOLDER = 'Полевой журнал — чертежи';
 const mem = () => new URLSearchParams(location.search).get('mem');
@@ -32,15 +33,10 @@ async function drive(method, url, { body, headers = {}, raw = false } = {}, retr
   return raw ? r : r.json();
 }
 const D = 'https://www.googleapis.com/drive/v3/files';
-async function folderId() {
-  const q = encodeURIComponent(`name='${DRAWINGS_FOLDER}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
-  const f = (await drive('GET', `${D}?q=${q}&fields=files(id)`)).files?.[0];
-  if (f) return f.id;
-  return (await drive('POST', `${D}?fields=id`, { body: JSON.stringify({ name: DRAWINGS_FOLDER, mimeType: 'application/vnd.google-apps.folder' }), headers: { 'Content-Type': 'application/json' } })).id;
-}
 // Загрузка большого файла по частям не нужна: возобновляемая загрузка одним куском (до сотен МБ)
+const dreq = (method, url, body) => drive(method, url, body ? { body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } } : {});
 async function uploadPdf(name, buf) {
-  const parent = await folderId();
+  const parent = await projectFolder(dreq, currentProject(), 'drawings');
   const init = await drive('POST', 'https://www.googleapis.com/upload/drive/v3/files?uploadType=resumable&fields=id', {
     body: JSON.stringify({ name, parents: [parent], mimeType: 'application/pdf' }), headers: { 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': 'application/pdf' }, raw: true });
   const loc = init.headers.get('Location'); if (!loc) throw new Error('Диск не дал адрес для загрузки');
@@ -98,3 +94,11 @@ export function updateDrawing(id, patch) {
 }
 // Подписи на чертеже, которые не связаны с точками проекта («Не размеченые») и скрытые человеком — хранятся в записи чертежа
 export const posKey = (pos) => `${pos.page || 0}|${Math.round(pos.x)}|${Math.round(pos.y)}`;
+
+/** Переложить файлы чертежей проекта в папку проекта на Диске (свои файлы; чужие Диск не даст) */
+export async function placeDrawings(p = currentProject()) {
+  const list = drawingsOf(p).filter((d) => d.fileId); if (!list.length) return 0;
+  const parent = await projectFolder(dreq, p, 'drawings'); let n = 0;
+  for (const d of list) if (await moveInto(dreq, d.fileId, parent)) n++;
+  return n;
+}

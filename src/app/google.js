@@ -60,7 +60,10 @@ async function call(token, method, url, body) {
 }
 
 // Тот же набор операций, что нужен синхронизации; в тестах подменяется заглушкой.
+import { projectFolder, moveInto } from './drivefolders.js';
+
 export function realApi(token) {
+  const req = (m, u, b) => call(token, m, u, b);
   const D = 'https://www.googleapis.com/drive/v3/files';
   const S = 'https://sheets.googleapis.com/v4/spreadsheets';
   return {
@@ -92,6 +95,10 @@ export function realApi(token) {
       if (!r.ok) { const e = new Error(`HTTP ${r.status}`); e.status = r.status; throw e; }
       return (await r.json()).id;
     },
+    // папки проекта на Диске (см. drivefolders.js)
+    projectFolder: (project, kind) => projectFolder(req, project, kind),
+    placeIn: async (fileId, project, kind) => moveInto(req, fileId, await projectFolder(req, project, kind)),
+    req,
     write: (id, data) => call(token, 'POST', `${S}/${id}/values:batchUpdate`, { valueInputOption: 'RAW', data }),
   };
 }

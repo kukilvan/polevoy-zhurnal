@@ -7,7 +7,7 @@ import { installBinding, tablesOf, mainTable, hasDeviceId, libraryOps, migratePr
 import { installFields, describeBinding } from './install.js';
 import { projectForm } from './projects.js';
 import { themeLabel, setTheme, nextTheme } from '../theme.js';
-import { updateManagerTable, backupNow } from './project.js';
+import { updateManagerTable, backupNow, organizeDrive } from './project.js';
 import { exportExcel } from '../excel.js';
 import { pointsFromFile } from './pointsfile.js';
 import { catalogModal } from './catalogview.js';
@@ -378,6 +378,7 @@ export function settingsView(ui) {
       row('🔄', 'Обновить таблицу для руководства', mainTable(p).syncedAt ? `Основная обновлена: ${new Date(mainTable(p).syncedAt).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}` : null, updateManagerTable),
       mainTable(p).link ? row('📊', 'Открыть таблицу руководства', null, () => window.open(mainTable(p).link, '_blank')) : null,
       row('💾', 'Резервная копия на Диск', p.backupAt ? `Последняя: ${new Date(p.backupAt).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}` : null, backupNow),
+      row('📁', 'Разложить файлы на Диске по папкам', 'Полевой журнал → папка проекта → Чертежи, Резервные копии; таблицы — в папке проекта', organizeDrive),
       row('📊', 'Выгрузить всё в Excel', 'Файл .xlsx: точки, журнал, дни, справочники', exportExcel),
       row('📥', 'Точки из файла', 'Добавить точки из JSON (после разбора тохнита), без замены', pointsFromFile),
       row('📥', 'Импорт данных (замена всего проекта)', null, () => ui.open('import')),

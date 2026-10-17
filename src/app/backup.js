@@ -20,7 +20,7 @@ export const backupName = (project, now = new Date()) =>
   `${String(project.name || 'проект').replace(/[\\/:*?"<>|]/g, '_')} ${now.toISOString().slice(0, 10)}.json`;
 
 export async function runBackup(api, project, data, now = new Date()) {
-  const folderId = await api.folder(BACKUP_FOLDER);
+  const folderId = api.projectFolder ? await api.projectFolder(project, 'backups') : await api.folder(BACKUP_FOLDER);
   const body = buildBackup(project, data, now);
   await api.putJson(folderId, backupName(project, now), JSON.stringify(body));
   const count = IMPORTABLE.reduce((n, c) => n + body[c].length, 0);

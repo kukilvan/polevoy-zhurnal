@@ -8,7 +8,9 @@ import { h, formModal, confirmDialog, toast } from '../ui.js';
 import { getToken, realApi, clearToken } from '../google.js';
 import { syncTable } from '../managers.js';
 import { tablesOf, mainTable, withTable, readinessByCabinet } from '../../domain/index.js';
-import { runBackup } from '../backup.js';
+import { runBackup, BACKUP_FOLDER, backupName } from '../backup.js';
+import { liveProjects } from '../store.js';
+import { filesIn } from '../drivefolders.js';
 import { memberLabel, memberNameByUid } from './members.js';
 import { hint } from './guide.js';
 import { exportExcel } from '../excel.js';
@@ -41,6 +43,27 @@ export async function backupNow(retried = false) {
   } catch (e) {
     if (e.status === 401 && retried !== true) { clearToken(); syncing = false; toast('Доступ Google истёк — запрашиваю заново…'); return backupNow(true); }
     toast(`Не получилось: ${e.message || e}`); console.error('backup', e);
+  } finally { syncing = false; }
+}
+// «📁 Разложить файлы по папкам»: чертежи, таблицы и резервные копии всех проектов — в «Полевой журнал / <проект> / …» на Диске.
+// Файлы, созданные другими участниками, Диск переложить не даст — они остаются у них.
+export async function organizeDrive(retried = false) {
+  if (syncing) return; syncing = true;
+  try {
+    toast('Раскладываю файлы на Диске по папкам проектов…');
+    const api = realApi(await getToken('folders')); let moved = 0;
+    for (const p of liveProjects()) {
+      for (const d of (p.drawings || []).filter((x) => x.fileId && !x.deleted)) if (await api.placeIn(d.fileId, p, 'drawings')) moved++;
+      for (const t of (p.tables || []).filter((x) => x.fileId)) if (await api.placeIn(t.fileId, p)) moved++;
+      const prefix = backupName(p, new Date()).replace(/ \d{4}-\d{2}-\d{2}\.json$/, ' ');
+      const olds = (await filesIn(api.req, BACKUP_FOLDER, prefix)).filter((f) => /^\d{4}-\d{2}-\d{2}\.json$/.test(f.name.slice(prefix.length)));
+      for (const f of olds) if (await api.placeIn(f.id, p, 'backups')) moved++;
+      await api.projectFolder(p);  // папка есть у каждого проекта, даже без файлов
+    }
+    toast(`Готово: переложено файлов — ${moved}. Всё в папке «Полевой журнал» на Диске. Старые пустые папки можно удалить вручную.`);
+  } catch (e) {
+    if (e.status === 401 && retried !== true) { clearToken(); syncing = false; return organizeDrive(true); }
+    toast(`Не получилось: ${e.message || e}`); console.error('folders', e);
   } finally { syncing = false; }
 }
 // Обновляет одну таблицу для руководства (по id профиля)

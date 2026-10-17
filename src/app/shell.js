@@ -8,7 +8,7 @@ import { installView } from './views/install.js';
 import { PENDING } from './google.js';
 import { onPendingChange } from './repo.js';
 import { themeLabel, setTheme, nextTheme } from './theme.js';
-import { projectView, updateManagerTable, updateTable, backupNow } from './views/project.js';
+import { projectView, updateManagerTable, updateTable, backupNow, organizeDrive } from './views/project.js';
 import { meterView } from './views/points.js';
 import { cabinetsView } from './views/cabinets.js';
 import { logView } from './views/log.js';
@@ -134,7 +134,7 @@ export function createShell({ user, onLogout, diag }) {
       const timer = setInterval(() => {
         tries += 1;
         let ok = false; try { ok = !!JSON.parse(localStorage.getItem('pz_gtoken') || 'null'); } catch { /* ok */ }
-        if (ok && state.projectsLoaded && currentProject() && ready()) { clearInterval(timer); const what = localStorage.getItem(PENDING); localStorage.removeItem(PENDING); (what === 'backup' ? backupNow : what.startsWith('table:') ? () => updateTable(what.slice(6)) : updateManagerTable)(); }
+        if (ok && state.projectsLoaded && currentProject() && ready()) { clearInterval(timer); const what = localStorage.getItem(PENDING); localStorage.removeItem(PENDING); (what === 'backup' ? backupNow : what === 'folders' ? organizeDrive : what === 'drawing' ? () => {} : what.startsWith('table:') ? () => updateTable(what.slice(6)) : updateManagerTable)(); }
         else if (tries > 60) { clearInterval(timer); localStorage.removeItem(PENDING); }
       }, 500);
     }
