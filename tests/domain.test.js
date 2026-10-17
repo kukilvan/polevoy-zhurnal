@@ -700,3 +700,14 @@ test('подпись нескольких точек на одной отмет�
   assert.deepEqual(combineLabels(['A-09', 'A-10']), ['A-09-10']);
   assert.deepEqual(combineLabels(['X1']), ['X1']);
 });
+
+test('групповое переименование точек', async () => {
+  const { renameLabel } = await import('../src/domain/points.js');
+  assert.equal(renameLabel('CCTV1-TV01', { find: 'CCTV1-', where: 'start' }), 'TV01');
+  assert.equal(renameLabel('W01', { find: 'W', replace: 'WL', where: 'start' }), 'WL01');
+  assert.equal(renameLabel('TV09', { shift: 2 }), 'TV11');
+  assert.equal(renameLabel('1A-17-18', { shift: 2 }), '1A-19-20');
+  assert.equal(renameLabel('C-05', { prefix: '2B/', suffix: '.1' }), '2B/C-05.1');
+  assert.equal(renameLabel('A1-B1', { find: '1', replace: '' }), 'A-B');
+  assert.equal(renameLabel('X-01', { shift: -1 }), 'X-00');
+});

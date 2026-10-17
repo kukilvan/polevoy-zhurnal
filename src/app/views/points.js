@@ -1,7 +1,7 @@
 // Точки: форма точки, генератор пачкой, карточка точки с историей, вкладка «Точки».
 import { h, formModal, openModal, confirmDialog, toast, qtyList } from '../ui.js';
 import { state, getRepo, pointsSorted, infoOf, currentProject } from '../store.js';
-import { generateLabels, parseSuffixes, comparePoints, usesConfig, remaining, REMAIN_STAGES, hasDeviceId, normalizeMac, findDuplicate } from '../../domain/index.js';
+import { generateLabels, parseSuffixes, comparePoints, renameLabel, usesConfig, remaining, REMAIN_STAGES, hasDeviceId, normalizeMac, findDuplicate } from '../../domain/index.js';
 import { scanDevice } from '../scan.js';
 import { statusClass } from './project.js';
 import { hint } from './guide.js';
@@ -330,6 +330,51 @@ function remainingModal() {
 // Массовые действия: выбранные точки (живёт, пока открыто приложение)
 let selMode = false; const selected = new Set();
 
+// Групповое переименование: убрать/заменить часть названия, сдвинуть номер, добавить в начало/конец — с предпросмотром и проверкой повторов
+function renameForm(ids, done) {
+  const pts = ids.map((id) => state.ctx.points.get(id)).filter(Boolean).sort(comparePoints);
+  const others = new Set([...state.ctx.points.values()].filter((p) => !ids.includes(p.id)).map((p) => p.label));
+  // общее начало у всех выбранных — подсказка «убрать»
+  let common = pts[0]?.label || ''; for (const p of pts) { while (common && !p.label.startsWith(common)) common = common.slice(0, -1); }
+  const find = h('input', { placeholder: common ? `Что убрать, например: ${common}` : 'Что убрать или заменить' });
+  const where = h('select', {}, h('option', { value: 'start' }, 'в начале'), h('option', { value: 'any' }, 'везде'), h('option', { value: 'end' }, 'в конце'));
+  const repl = h('input', { placeholder: 'На что заменить (пусто — убрать)' });
+  const shift = h('input', { type: 'number', placeholder: '0', style: { width: '90px' } });
+  const prefix = h('input', { placeholder: 'Добавить в начало' }); const suffix = h('input', { placeholder: 'Добавить в конец' });
+  const keep = h('input', { type: 'checkbox', checked: true });
+  const prev = h('div', { class: 'card', style: { padding: 0, maxHeight: '40vh', overflow: 'auto' } }); const info = h('div', { style: { margin: '6px 0', fontWeight: 600 } });
+  const go = h('button', {});
+  let plan = [];
+  const calc = () => {
+    const op = { find: find.value, replace: repl.value, where: where.value, shift: shift.value, prefix: prefix.value, suffix: suffix.value };
+    plan = pts.map((p) => ({ p, to: renameLabel(p.label, op).trim() }));
+    const cnt = new Map(); plan.forEach((x) => cnt.set(x.to, (cnt.get(x.to) || 0) + 1));
+    plan.forEach((x) => { x.bad = !x.to ? 'пустое название' : others.has(x.to) ? 'уже есть в проекте' : cnt.get(x.to) > 1 ? 'повтор' : ''; });
+    const changed = plan.filter((x) => x.to !== x.p.label); const bad = plan.filter((x) => x.bad && x.to !== x.p.label);
+    prev.replaceChildren(...plan.map((x) => h('div', { class: 'item', style: { cursor: 'default' } },
+      h('div', { class: 'name' }, x.p.label, h('span', { class: 'mut' }, '  →  '), h('b', { style: { color: x.bad && x.to !== x.p.label ? '#ff453a' : x.to !== x.p.label ? '#30a14e' : '' } }, x.to || '—'),
+        x.bad && x.to !== x.p.label ? h('div', { class: 'sub', style: { color: '#ff453a' } }, x.bad) : null))));
+    info.textContent = `Изменится: ${changed.length} из ${plan.length}${bad.length ? ` · ошибок: ${bad.length} — исправьте, иначе сохранить нельзя` : ''}`;
+    go.disabled = !changed.length || !!bad.length; go.textContent = `🏷 Переименовать (${changed.length})`;
+  };
+  [find, where, repl, shift, prefix, suffix].forEach((el) => el.addEventListener('input', calc));
+  go.onclick = async () => {
+    const changed = plan.filter((x) => x.to !== x.p.label);
+    if (!(await confirmDialog(`Переименовать точек: ${changed.length}? История работ у точек останется.`, { yes: 'Переименовать' }))) return;
+    getRepo().save(currentProject().id, changed.map((x) => ({ coll: 'points', id: x.p.id, data: { label: x.to, ...(keep.checked && !x.p.planName && x.p.pos ? { planName: x.p.label } : {}) } })));
+    toast(`Переименовано: ${changed.length}`); c(); done?.();
+  };
+  const row = (label, ...els) => h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', margin: '6px 0' } }, h('span', { style: { minWidth: '150px' } }, label), ...els);
+  const c = openModal(`🏷 Переименовать точек: ${pts.length}`, h('div', {},
+    h('div', { class: 'mut' }, 'Можно сразу несколько действий: сначала замена, потом сдвиг номера, потом добавление. Справа видно, что получится.'),
+    row('Убрать / заменить', find, where), row('на', repl),
+    row('Сдвинуть номер на', shift, h('small', { class: 'mut' }, 'например 2 или -1; пара «17-18» сдвигается целиком')),
+    row('Добавить', prefix, suffix),
+    h('label', { class: 'pickrow' }, keep, h('span', {}, 'У точек на чертеже запомнить старое название как «Имя в плане» (если оно ещё не задано)')),
+    info, prev, h('div', { class: 'btns' }, go)), { sticky: true, wide: true });
+  calc();
+}
+
 function bulkEditForm(ids, done) {
   const repo = getRepo(); const pid = currentProject().id;
   formModal({
@@ -377,6 +422,7 @@ export function meterView(ui) {
         h('button', { class: 'sec', onclick: () => { selected.clear(); fill(); } }, 'Снять')),
       h('div', { class: 'btns' },
         h('button', { disabled: !ids.length, onclick: () => bulkEditForm(ids, () => { selected.clear(); selMode = false; ui.render(); }) }, '✏️ Изменить'),
+        h('button', { disabled: !ids.length, onclick: () => renameForm(ids, () => { selected.clear(); selMode = false; ui.render(); }) }, '🏷 Переименовать'),
         h('button', { class: 'danger', disabled: !ids.length, onclick: async () => {
           if (!(await confirmDialog(`Удалить точек: ${ids.length}? Их можно будет вернуть из истории.`, { yes: 'Удалить', danger: true }))) return;
           const repo = getRepo(); const pid = currentProject().id;

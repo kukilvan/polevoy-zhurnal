@@ -120,3 +120,22 @@ export function combineLabels(labels) {
   }
   return ls;
 }
+
+// Групповое переименование: заменить/убрать текст (в начале, в конце или везде), сдвинуть номер, добавить в начало/конец.
+// Номер — последнее число; пара «17-18» сдвигается целиком. Ведущие нули сохраняются.
+export function renameLabel(label, { find = '', replace = '', where = 'any', shift = 0, prefix = '', suffix = '' } = {}) {
+  let s = String(label);
+  if (find) {
+    if (where === 'start') { if (s.startsWith(find)) s = replace + s.slice(find.length); }
+    else if (where === 'end') { if (s.endsWith(find)) s = s.slice(0, s.length - find.length) + replace; }
+    else s = s.split(find).join(replace);
+  }
+  const n = Math.trunc(Number(shift) || 0);
+  if (n) {
+    const pad = (v, w) => (v < 0 ? String(v) : String(v).padStart(w, '0'));
+    const pair = s.match(/^(.*?)(\d+)([-_/])(\d+)(\D*)$/);
+    if (pair && +pair[4] === +pair[2] + 1) s = `${pair[1]}${pad(+pair[2] + n, pair[2].length)}${pair[3]}${pad(+pair[4] + n, pair[4].length)}${pair[5]}`;
+    else { const m = s.match(/^(.*?)(\d+)(\D*)$/); if (m) s = `${m[1]}${pad(+m[2] + n, m[2].length)}${m[3]}`; }
+  }
+  return `${prefix}${s}${suffix}`;
+}
