@@ -9,18 +9,13 @@ import { cablesPicker } from './cablespick.js';
 import { addWorkForPoints } from './doh.js';
 import { makeWorker, pointsFromDrawing } from './tohnitview.js';
 import { createViewer } from './planview.js';
-import { exportNumberedPdf } from './plannumbers.js';
+import { exportNumberedPdf, publishNumbered } from './plannumbers.js';
 import { linkPoints } from './planlink.js';
 import { choosePoint } from './pointchooser.js';
 import { typeMatch, typeFilterOptions } from '../typegroups.js';
 
-// Цвет по статусу: померяно — синий, протянуто — жёлтый, дальше от жёлтого к зелёному: установлено не всё → установлено → проверено; проблема — красный
-export const STATUS_COLORS = [['#9e9e9e', 'новая'], ['#2979ff', 'померяно'], ['#ffb300', 'протянуто частично'], ['#ffd600', 'протянуто'], ['#e4e000', 'захивучено'],
-  ['#b5d800', 'установлено не всё'], ['#6ccf00', 'установлено'], ['#00c853', 'проверено'], ['#ff1744', 'проблема']];
-const C = Object.fromEntries(STATUS_COLORS.map(([c, t]) => [t, c]));
-export const statusColor = (st = '') => (st === 'Неисправна' ? C['проблема'] : st === 'Проверена' ? C['проверено'] : st === 'Установлена' ? C['установлено']
-  : st.startsWith('Установлено') ? C['установлено не всё'] : st === 'Захивучена' ? C['захивучено'] : st === 'Протянута' ? C['протянуто']
-  : st.startsWith('Протянуто') ? C['протянуто частично'] : st === 'Посчитана' ? C['померяно'] : C['новая']);
+export { STATUS_COLORS, statusColor } from '../../domain/index.js';
+import { statusColor, STATUS_COLORS } from '../../domain/index.js';
 // подпись на чертеже — рамка вокруг текста; значок без подписи — кружок его размера
 const isText = (pos) => { const w = pos.w || 0; const hh = pos.h || 0; return w && hh && Math.max(w, hh) / Math.min(w, hh) > 1.6; };
 function outline(g, api, pos, color, { width = 1.5, pad = 1.5, fill = null } = {}) {
@@ -234,7 +229,8 @@ export function planModal({ point = null, placeFor = null } = {}) {
         h('div', { style: { display: 'flex', gap: '12px', flexWrap: 'wrap', margin: '6px 2px', fontSize: '13px' } }, ...STATUS_COLORS.map(([c, t]) => h('span', {}, h('span', { style: { color: c } }, '■ '), t))),
         h('div', { class: 'btns' },
           h('button', { class: 'sec', onclick: () => linkPoints(d, buf, { onDone: () => draw(d.id) }).catch((e) => toast(e.message)) }, '🔗 Связать точки'),
-          h('button', { class: 'sec', onclick: async () => { try { toast('Готовлю PDF…'); await exportNumberedPdf(d, buf, sheetPts(d)); } catch (e) { toast(`Не получилось: ${e.message}`); } } }, '📄 PDF с номерами'),
+          h('button', { class: 'sec', onclick: async () => { try { await exportNumberedPdf(cur(), buf); } catch (e) { toast(`Не получилось: ${e.message}`); } } }, '📄 Скачать PDF с номерами'),
+          h('button', { class: 'sec', title: cur().numberedAt ? `На Диске с ${new Date(cur().numberedAt).toLocaleString('ru-RU')}` : '', onclick: async () => { if (!cur().fileId) { toast('Сначала «⬆ На Диск» — исходный чертёж'); return; } try { await publishNumbered(cur(), buf); } catch (e) { toast(`Не получилось: ${e.message}`); } } }, cur().numberedFileId ? '☁️ Обновить на Диске сейчас' : '☁️ PDF с номерами на Диск'),
           h('button', { class: 'sec', onclick: () => pointsFromDrawing({ drawing: d, buf }) }, '✏️ Редактировать'),
           d.fileId ? null : h('button', { class: 'sec', onclick: async () => { try { toast('Отправляю на Диск…'); await pushDrawing(d); toast('Чертёж на Диске — откроется и на других устройствах'); draw(d.id); } catch (e) { toast(`Не получилось: ${e.message}`); } } }, '⬆ На Диск'),
           h('button', { class: 'sec', onclick: async () => { if (await confirmDialog(`Убрать чертёж «${drawingTitle(d)}» из проекта? Точки останутся, файл на Диске — тоже.`, { yes: 'Убрать', danger: true })) { removeDrawing(d); setTimeout(() => draw(), 300); } } }, '🗑 Убрать чертёж')));

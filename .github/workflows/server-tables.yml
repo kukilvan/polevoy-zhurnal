@@ -21,7 +21,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm i --no-save firebase-admin@13 google-auth-library@9
+      - run: npm i --no-save firebase-admin@13 google-auth-library@9 mupdf@1.28.1
       - name: Обновить таблицы
         run: node scripts/server-tables.mjs
         env:

@@ -45,12 +45,16 @@ async function uploadPdf(name, buf, p = currentProject()) {
   return (await r.json()).id;
 }
 /** «PDF с номерами» на Диск: папка проекта «Чертежи с номерами», один файл на чертёж — каждый раз заменяется свежим */
-export async function putNumbered(name, bytes, p = currentProject()) {
+export async function putNumbered(name, bytes, p = currentProject(), fileId = '') {
   if (mem()) return null;
   if (useRedirect() && !storedTokenValid()) return null;  // iPhone без разрешения Google — не уводим со страницы
   const parent = await projectFolder(dreq, p, 'numbered');
-  const q = encodeURIComponent(`name='${name.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}' and '${parent}' in parents and trashed=false`);
-  const old = (await drive('GET', `${D}?q=${q}&fields=files(id)`)).files?.[0];
+  let old = null;
+  if (fileId) { try { const f = await drive('GET', `${D}/${fileId}?fields=id,trashed`); if (!f.trashed) old = f; } catch { /* удалён — создадим новый */ } }
+  if (!old) {
+    const q = encodeURIComponent(`name='${name.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}' and '${parent}' in parents and trashed=false`);
+    old = (await drive('GET', `${D}?q=${q}&fields=files(id)`)).files?.[0];
+  }
   const init = await drive(old ? 'PATCH' : 'POST', `https://www.googleapis.com/upload/drive/v3/files${old ? `/${old.id}` : ''}?uploadType=resumable&fields=id`, {
     body: JSON.stringify(old ? {} : { name, parents: [parent], mimeType: 'application/pdf' }), headers: { 'Content-Type': 'application/json; charset=UTF-8', 'X-Upload-Content-Type': 'application/pdf' }, raw: true });
   const loc = init.headers.get('Location'); if (!loc) throw new Error('Диск не дал адрес для загрузки');
@@ -59,6 +63,11 @@ export async function putNumbered(name, bytes, p = currentProject()) {
   const id = (await r.json()).id;
   if (!old) await shareDrawing(id, p);
   return id;
+}
+// Доступ серверу (ночное обновление «PDF с номерами»): role — reader для исходного чертежа, writer для файла с номерами
+export async function shareWithServer(fileId, email, role) {
+  if (!fileId || !email || mem()) return;
+  await drive('POST', `${D}/${fileId}/permissions?sendNotificationEmail=false&fields=id`, { body: JSON.stringify({ role, type: 'user', emailAddress: email }), headers: { 'Content-Type': 'application/json' } });
 }
 // Доступ «читатель» участникам проекта (без писем)
 export async function shareDrawing(fileId, p = currentProject()) {

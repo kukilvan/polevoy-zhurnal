@@ -2,7 +2,7 @@
 import admin from 'firebase-admin';
 import { GoogleAuth } from 'google-auth-library';
 import { readProject, isDeleted } from './server-backup-lib.mjs';
-import { updateProjectTables, applyPatches, autoTables } from './server-tables-lib.mjs';
+import { updateProjectTables, applyPatches, autoTables, updateProjectNumbered, applyDrawingPatches } from './server-tables-lib.mjs';
 
 const note = (m, e) => console.log(`::error::${m}: ${String(e?.stack || e).replace(/\n/g, ' | ').slice(0, 900)}`);
 process.on('uncaughtException', (e) => { note('Необработанная ошибка', e); process.exit(1); });
@@ -29,7 +29,11 @@ const api = {
   sheetsOf: async (id) => (await call('GET', `${S}/${id}?fields=sheets.properties(sheetId,title,gridProperties)`)).sheets.map((x) => x.properties),
   batch: (id, requests) => call('POST', `${S}/${id}:batchUpdate`, { requests }),
   write: (id, data) => call('POST', `${S}/${id}/values:batchUpdate`, { valueInputOption: 'RAW', data }),
+  // для «PDF с номерами»
+  async download(id) { const token = await auth.getAccessToken(); const r = await fetch(`${D}/${id}?alt=media`, { headers: { Authorization: `Bearer ${token}` } }); if (!r.ok) throw new Error(`Чертёж не скачать: HTTP ${r.status} (откройте его серверу кнопкой «☁️ … на Диск» в плане)`); return new Uint8Array(await r.arrayBuffer()); },
+  async upload(id, bytes) { const token = await auth.getAccessToken(); const r = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${id}?uploadType=media&fields=id`, { method: 'PATCH', headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/pdf' }, body: bytes }); if (!r.ok) throw new Error(`Не записать на Диск: HTTP ${r.status}`); },
 };
+let mupdf = null;
 
 // для сборки таблиц журнал изменений (history), дела и заметки не нужны — не читаем их, чтобы экономить лимит чтений
 const NEED = ['points', 'days', 'entries', 'journal', 'catalog', 'types', 'cables', 'devices', 'configs', 'units', 'culprits', 'delayReasons', 'cabinetSettings'];
@@ -43,6 +47,13 @@ for (const ref of await db.collection('projects').listDocuments()) {
   if (isDeleted(project) || project.archived) continue; // архивные проекты не обновляем
   // адрес сервера записываем в проект: приложение откроет ему доступ к файлам таблиц
   await ref.set({ serverEmail: cred.client_email }, { merge: true });
+  // «PDF с номерами» на Диске
+  if ((project.drawings || []).some((d) => d.numberedFileId && !d.deleted)) {
+    mupdf ??= await import('mupdf');
+    const { patches, report } = await updateProjectNumbered(api, mupdf, project, data, now);
+    if (Object.keys(patches).length) await db.runTransaction(async (tx) => { const fresh = { id: ref.id, ...(await tx.get(ref)).data() }; tx.set(ref, { drawings: applyDrawingPatches(fresh, patches) }, { merge: true }); });
+    report.forEach((l) => console.log(l.includes('ОШИБКА') ? `::warning::${project.name}: ${l}` : `  - ${l}`));
+  }
   if (!autoTables(project).length) { console.log(`${project.name}: нет таблиц для автообновления`); continue; }
   const { patches, report } = await updateProjectTables(api, project, data, now);
   await db.runTransaction(async (tx) => {

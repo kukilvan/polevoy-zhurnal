@@ -120,8 +120,12 @@ test('тохнит: PDF с номерами — пометки у точек и 
   const { numberedPdf } = await import('../src/tohnit/numbered.js');
   const out = numberedPdf(mupdf, data, [{ label: 'W01', typeId: 'Вайфай', pos: { page: 0, x: 50, y: 50, w: 10, h: 10 } }, { label: 'C01', typeId: 'Камера', pos: { page: 0, x: 100, y: 80, w: 10, h: 10 } }]);
   const doc = mupdf.Document.openDocument(out, 'application/pdf').asPDF();
-  assert.equal(doc.countPages(), 2); assert.equal(doc.loadPage(0).getAnnotations().length, 4);
+  assert.equal(doc.countPages(), 2); assert.equal(doc.loadPage(0).getAnnotations().length, 6);  // у каждой: кружок + рамка подписи + текст
   assert.ok(doc.loadPage(1).getAnnotations().some((a) => /Камера: 1/.test(a.getContents())));
+  // точка на надписи чертежа: только рамка вокруг надписи; две точки на одной отметке — одна подпись «TV13-14»
+  const out2 = numberedPdf(mupdf, data, [{ label: 'A1', typeId: 'T', pos: { page: 0, x: 50, y: 50, w: 30, h: 8 } }, { label: 'TV13', typeId: 'TV', pos: { page: 0, x: 200, y: 150, w: 10, h: 10 } }, { label: 'TV14', typeId: 'TV', pos: { page: 0, x: 200, y: 150, w: 10, h: 10 } }]);
+  const an = mupdf.Document.openDocument(out2, 'application/pdf').asPDF().loadPage(0).getAnnotations();
+  assert.equal(an.length, 4); assert.ok(an.some((a) => a.getType() === 'FreeText' && a.getContents() === 'TV13-14'));
 });
 
 test('тохнит: нумерация по областям — сначала одна кучка строками, потом следующая', async () => {
@@ -150,4 +154,20 @@ test('план: связывание — точные, похожие (разд�
   assert.deepEqual(r.exact.map((x) => x.p.id), ['a']);
   assert.deepEqual(r.similar.map((x) => `${x.p.id}:${x.kind}`), ['b:same', 'c:tail']);
   assert.deepEqual(r.unlinked.map((x) => x.label), ['Z9-9']);
+});
+
+test('сервер: PDF с номерами пересобирается только при изменениях', async () => {
+  const mupdf = await import('mupdf');
+  const src = new mupdf.PDFDocument(); src.insertPage(-1, src.addPage([0, 0, 400, 300], 0, src.addObject(src.newDictionary()), '')); const pdf = src.saveToBuffer('').asUint8Array();
+  const { updateProjectNumbered } = await import('../scripts/server-tables-lib.mjs');
+  const d = { id: 'D1', name: 'a.pdf', fileId: 'SRC', numberedFileId: 'NUM' };
+  const project = { id: 'P', name: 'P', drawings: [d] };
+  const data = { points: [{ id: 'p1', label: 'C01', typeId: 'Камера', pos: { page: 0, x: 50, y: 50, w: 10, h: 10, sheet: 'a.pdf' } }], types: [{ id: 'Камера' }] };
+  const up = []; const api = { download: async () => pdf, upload: async (id, b) => up.push([id, b.length]) };
+  const r1 = await updateProjectNumbered(api, mupdf, project, data);
+  assert.equal(up.length, 1); assert.equal(up[0][0], 'NUM'); assert.ok(r1.patches.D1.numberedHash);
+  d.numberedHash = r1.patches.D1.numberedHash;
+  await updateProjectNumbered(api, mupdf, project, data); assert.equal(up.length, 1);  // без изменений — не трогаем
+  data.points[0].label = 'C02';
+  await updateProjectNumbered(api, mupdf, project, data); assert.equal(up.length, 2);
 });

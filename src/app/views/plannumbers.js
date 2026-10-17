@@ -1,20 +1,46 @@
-// «📄 PDF с номерами»: чертёж + номера точек цветом по типу + страница-легенда; файл сохраняется на устройство.
+// «📄 PDF с номерами»: чертёж как план в приложении (рамки цвета статуса, подписи без наложений, скрытое — белым) + легенда.
+// Скачать на устройство — отдельно; на Google Диск — отдельно («☁️ На Диск»), дальше сервер обновляет его каждую ночь, если что-то поменялось.
 import { makeWorker } from './tohnitview.js';
 import { toast } from '../ui.js';
-import { currentProject } from '../store.js';
-import { drawingTitle, putNumbered } from '../drawings.js';
+import { state, currentProject, getRepo } from '../store.js';
+import { drawingTitle, putNumbered, shareWithServer, updateDrawing } from '../drawings.js';
+import { numberedInput, numberedHash } from '../../domain/index.js';
 
-export async function exportNumberedPdf(drawing, buf, points) {
-  if (!points.length) { toast('На этом чертеже нет точек'); return; }
+export const numberedName = (d) => `${drawingTitle(d).replace(/\.pdf$/i, '').replace(/[\\/:*?"<>|]/g, '_')}_с_номерами.pdf`;
+async function build(drawing, buf) {
+  const input = numberedInput(state.ctx.points.values(), state.ctx, drawing);
+  if (!input.length) { toast('На этом чертеже нет точек'); return null; }
+  const icons = currentProject()?.typeIcons || {};
   const wk = makeWorker();
   try {
-    const out = await wk.call('numbered', { data: buf.slice(0), title: drawingTitle(drawing), points: points.map((p) => ({ label: p.label, typeId: p.typeId, pos: p.pos })), icons: currentProject()?.typeIcons || {} });
-    const name = `${drawingTitle(drawing).replace(/\.pdf$/i, '').replace(/[\\/:*?"<>|]/g, '_')}_с_номерами.pdf`;
-    const url = URL.createObjectURL(new Blob([out], { type: 'application/pdf' }));
-    const a = document.createElement('a'); a.href = url; a.download = name; document.body.append(a); a.click(); a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 60000);
-    toast(`Готово: ${name}`);
-    // и на Диск — в папку проекта «Чертежи с номерами» (заменяет прошлую версию)
-    putNumbered(name, out).then((id) => { if (id) toast(`«${name}» обновлён на Google Диске (Чертежи с номерами)`); }).catch((e) => toast(`На Диск не получилось: ${e.message}`));
+    const out = await wk.call('numbered', { data: buf.slice(0), title: drawingTitle(drawing), points: input, icons, hidden: drawing.hidden || [] });
+    return { out, hash: numberedHash(input, drawing, icons) };
   } finally { wk.stop(); }
+}
+
+/** Скачать на это устройство */
+export async function exportNumberedPdf(drawing, buf) {
+  toast('Готовлю PDF…');
+  const r = await build(drawing, buf); if (!r) return;
+  const name = numberedName(drawing);
+  const url = URL.createObjectURL(new Blob([r.out], { type: 'application/pdf' }));
+  const a = document.createElement('a'); a.href = url; a.download = name; document.body.append(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 60000);
+  toast(`Готово: ${name}`);
+}
+
+/** На Google Диск (папка проекта «Чертежи с номерами»), без скачивания; открыть доступ серверу для ночного обновления */
+export async function publishNumbered(drawing, buf) {
+  toast('Готовлю PDF для Диска…');
+  const r = await build(drawing, buf); if (!r) return;
+  const p = currentProject(); const name = numberedName(drawing);
+  const id = await putNumbered(name, r.out, p, drawing.numberedFileId || '');
+  if (!id) { toast('На iPhone сначала дайте доступ к Google Диску (например, «💾 Резервная копия на Диск»), потом повторите'); return; }
+  const patch = { numberedFileId: id, numberedHash: r.hash, numberedAt: new Date().toISOString() };
+  if (p.serverEmail && drawing.numberedServer !== p.serverEmail) {
+    try { await shareWithServer(id, p.serverEmail, 'writer'); await shareWithServer(drawing.fileId, p.serverEmail, 'reader'); patch.numberedServer = p.serverEmail; } catch (e) { console.warn('share server', e); }
+  }
+  updateDrawing(drawing.id, patch);
+  toast(`«${name}» на Google Диске (Чертежи с номерами). Дальше он обновляется сам каждую ночь, если что-то поменялось.`);
+  void getRepo;
 }
