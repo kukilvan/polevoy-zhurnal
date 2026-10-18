@@ -231,6 +231,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
           h('button', { class: 'sec', onclick: async () => { try { await exportNumberedPdf(cur(), buf); } catch (e) { toast(`Не получилось: ${e.message}`); } } }, '📄 Скачать PDF с номерами'),
           h('button', { class: 'sec', title: cur().numberedAt ? `На Диске с ${new Date(cur().numberedAt).toLocaleString('ru-RU')}` : '', onclick: async () => { if (!cur().fileId) { toast('Сначала «⬆ На Диск» — исходный чертёж'); return; } try { await publishNumbered(cur(), buf); } catch (e) { toast(`Не получилось: ${e.message}`); } } }, cur().numberedFileId ? '☁️ Обновить на Диске сейчас' : '☁️ PDF с номерами на Диск'),
           h('button', { class: 'sec', onclick: () => pointsFromDrawing({ drawing: d, buf }) }, '✏️ Редактировать'),
+          h('button', { class: 'sec', onclick: () => pointsFromDrawing({ drawing: d, buf, iconsOnly: true, onDone: () => draw(d.id) }) }, '🔎 Значки без номеров'),
           d.fileId ? null : h('button', { class: 'sec', onclick: async () => { try { toast('Отправляю на Диск…'); await pushDrawing(d); toast('Чертёж на Диске — откроется и на других устройствах'); draw(d.id); } catch (e) { toast(`Не получилось: ${e.message}`); } } }, '⬆ На Диск'),
           h('button', { class: 'sec', onclick: async () => { if (await confirmDialog(`Убрать чертёж «${drawingTitle(d)}» из проекта? Точки останутся, файл на Диске — тоже.`, { yes: 'Убрать', danger: true })) { removeDrawing(d); setTimeout(() => draw(), 300); } } }, '🗑 Убрать чертёж')));
       selBar(); toolBar();

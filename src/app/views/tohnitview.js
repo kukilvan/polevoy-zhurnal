@@ -66,7 +66,7 @@ function iconGroupsOf(drawing) {
 }
 
 // drawing + buf — правка уже сохранённого чертежа (из «🗺 План» → «✏️ Редактировать»): без выбора файла; значки — уже отмеченные
-export function pointsFromDrawing({ drawing = null, buf: preBuf = null, file = null, onDone = null } = {}) {  // file: { name, buf, fileId } — уже выбранный PDF
+export function pointsFromDrawing({ drawing = null, buf: preBuf = null, file = null, onDone = null, iconsOnly = false } = {}) {  // iconsOnly: сразу окно «Значки без номеров», после «Готово» — применить  // file: { name, buf, fileId } — уже выбранный PDF
   const input = h('input', { type: 'file', accept: '.pdf,application/pdf', style: { display: 'none' } });
   const floorIn = h('input', { placeholder: 'Этаж (например 0, -3.50)' });
   const status = h('div', { class: 'mut', style: { margin: '6px 0' } });
@@ -113,6 +113,7 @@ export function pointsFromDrawing({ drawing = null, buf: preBuf = null, file = n
     if (drawing) [...state.ctx.points.values()].forEach((p) => { if (p.pos && drawingFor(p)?.id === drawing.id && !String(p.note || '').includes('значок без номера')) out.push(p.pos); });
     return out;
   }
+  let lastNext = null; let autoIcons = false; const applyNow = () => lastNext?.click();
   function render(r) {
     const pts = [...r.data.points, ...iconPts()]; const byType = {};
     pts.forEach((p) => { byType[p.typeId] = (byType[p.typeId] || 0) + 1; });
@@ -135,6 +136,9 @@ export function pointsFromDrawing({ drawing = null, buf: preBuf = null, file = n
         h('div', { class: 'btns' }, tune, h('small', { class: 'mut', style: { alignSelf: 'center' } }, 'что значит каждая часть подписи'))));
       Promise.all(q.examples.slice(0, 3).map((ex) => cropImg(ex, r.scale))).then((els) => imgs.append(...els)).catch(() => {});
     }
+    const openIcons = () => iconsPicker({ wk, pages: pagesInfo, floor: floorIn.value.trim(), sheet: fileName, groups: iconGroups, known: knownPos(r),
+      onDone: (gs) => { iconGroups = gs; render(lastR); if (iconsOnly) { iconsOnly = false; applyNow(); } } });
+    const iconsBtn = h('button', { class: pts.length ? 'sec' : '', onclick: openIcons }, iconGroups.length ? '✏️ Изменить значки' : '🔎 Отметить значки на плане');
     const again = h('button', { onclick: async () => { again.disabled = true; try { await parse(); } catch (e) { status.textContent = e.message; } } }, '🔄 Разобрать с ответами');
     const next = h('button', { class: r.questions.length ? 'sec' : '', onclick: async () => {
       if (drawing) {  // сначала правка уже существующих точек-значков (номера, место, тип), потом — добавление нового
@@ -172,10 +176,11 @@ export function pointsFromDrawing({ drawing = null, buf: preBuf = null, file = n
       r.questions.length ? h('div', {}, h('b', { class: 'l-warn' }, `Вопросы (${r.questions.length}) — ответьте и нажмите «Разобрать с ответами»`), qBox, h('div', { class: 'btns' }, again)) : null,
       h('div', { class: 'card', style: { margin: '10px 0' } }, h('b', {}, '🔎 Значки без номеров'),
         h('div', { class: 'mut', style: { margin: '4px 0' } }, iconGroups.length ? `Добавлено: ${iconGroups.map((gr) => `${gr.typeId} ${gr.points.length}`).join(', ')}` : 'Если точки на чертеже — только значки (без подписей), отметьте их на плане: нажали на значок → нашлись такие же → номера по порядку.'),
-        h('div', { class: 'btns' }, h('button', { class: pts.length ? 'sec' : '', onclick: () => iconsPicker({ wk, pages: pagesInfo, floor: floorIn.value.trim(), sheet: fileName, groups: iconGroups, known: knownPos(r),
-          onDone: (gs) => { iconGroups = gs; render(lastR); } }) }, iconGroups.length ? '✏️ Изменить значки' : '🔎 Отметить значки на плане'))),
+        h('div', { class: 'btns' }, iconsBtn)),
       drawing ? null : h('label', { class: 'pickrow', style: { margin: '8px 0' } }, keepPdf, h('span', {}, '📌 Сохранить чертёж в проект — «🗺 План» и «📍 На чертеже» в карточке точки')),
       h('div', { class: 'btns' }, next)].filter(Boolean));
+    lastNext = next;
+    if (iconsOnly && !autoIcons) { autoIcons = true; openIcons(); }
   }
 
   async function load(buf) {
