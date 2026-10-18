@@ -130,7 +130,7 @@ function cellOf(col, point, info, ctx, project, lang, nameOf) {
     case 'cables': return cablesCountOf(point, ctx);
     case 'length': return info.metrage || '';
     case 'port': return s(point.port);
-    case 'panel': return panelText(point);
+    case 'panel': return panelText(point, project);
     case 'serial': return s(point.serial);
     case 'mac': return s(point.mac);
     case 'config': return configText(point, project, ctx, lang);

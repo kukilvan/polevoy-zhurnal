@@ -15,7 +15,7 @@ import { drawingFor, drawingsOf } from '../drawings.js';
 import { typeMatch, typeFilterOptions, typeFilterValid } from '../typegroups.js';
 import { planModal } from './planmodal.js';
 import { choosePoint } from './pointchooser.js';
-import { panelText, panelOf, parsePanelPorts, panelOccupancy, rackPortsOf, matchesPanelQuery, fmtPanelPort } from '../../domain/rack.js';
+import { panelText, panelOf, parsePanelPorts, panelOccupancy, rackPortsOf, matchesPanelQuery, fmtPanelPort, slotKey, subsOf, subNameOf } from '../../domain/rack.js';
 
 const typeOptions = () => [...state.ctx.types.values()].filter((t) => !isSystemType(t)).map((t) => ({ value: t.id, label: t.id }));
 const hasIdType = (id) => hasDeviceId(state.ctx.types.get(id));
@@ -142,14 +142,14 @@ export function pointForm(point, { onDone } = {}) {
     { key: 'length', label: 'Длина (м на 1 кабель)', type: 'number' },
     { key: 'configId', label: 'Конфигурация двери (если отличается от проекта)', type: 'select', options: configOptions(), visible: (v) => isDoorType(v.typeId) && !composedType(v.typeId) },
     { key: 'port', label: 'Порт в свитче' },
-    { key: 'panelText', label: 'Порт в панели', hint: 'U панели и порт 1–24, например U38-05. Точке с двумя кабелями cat7 — два порта через запятую: U38-05, U38-06' },
+    { key: 'panelText', label: 'Порт в панели', hint: 'U панели и порт 1–24, например U38-05. Точке с двумя кабелями cat7 — два порта через запятую: U38-05, U38-06. Если шкаф из нескольких секций — с названием секции: CCTV1-B U38-05' },
     { ...scanField('serial', 'Серийный номер', 'serial', point?.serial), visible: (v) => hasIdType(v.typeId) },
     { ...scanField('mac', 'MAC', 'mac', point?.mac), visible: (v) => hasIdType(v.typeId) },
     { key: 'delayReasonId', label: 'Причина задержки', type: 'select', options: reasonOptions() },
     { key: 'note', label: 'Примечание', type: 'textarea' },
   ];
   formModal({
-    title: point ? point.label : 'Новая точка', fields, values: point ? { ...point, panelText: panelText(point) } : { typeId: typeOptions()[0]?.value },
+    title: point ? point.label : 'Новая точка', fields, values: point ? { ...point, panelText: panelText(point, currentProject()) } : { typeId: typeOptions()[0]?.value },
     extra: point ? [{ label: 'Удалить', kind: 'danger', onClick: async () => {
       if (!(await confirmDialog(`Удалить точку «${point.label}»? Её можно будет вернуть из истории.`, { yes: 'Удалить', danger: true }))) return false;
       repo.remove(pid, 'points', point.id); toast('Точка удалена'); onDone?.(); return true;
@@ -167,10 +167,14 @@ export function pointForm(point, { onDone } = {}) {
       const pp = parsePanelPorts(v.panelText);
       if (pp.errors.length) { toast(`Порт в панели: ${pp.errors[0]}`); return false; }
       const busy = panelOccupancy([...state.ctx.points.values()].filter((x) => x.id !== point?.id && (x.cabinet || '') === (v.cabinet || '')));
-      const taken = pp.list.map((x) => ({ x, by: busy.get(`${v.cabinet || ''}|${x.u}|${x.p}`)?.[0]?.point })).find((t) => t.by);
-      if (taken) { toast(`Порт ${fmtPanelPort(taken.x)} в шкафу ${v.cabinet || '(без шкафа)'} уже занят точкой ${taken.by.label}`); return false; }
+      const subs = subsOf(currentProject().racks?.[v.cabinet || ''], v.cabinet || '');
+      const badSub = pp.list.find((x) => x.sub && !subs.some((q) => q.name.toLowerCase() === x.sub.toLowerCase()));
+      if (badSub) { toast(`Порт в панели: у шкафа ${v.cabinet || '—'} нет секции «${badSub.sub}» (есть: ${subs.map((q) => q.name).join(', ')})`); return false; }
+      const slots = pp.list.map(({ sub, ...x }) => { const sid = sub ? subs.find((q) => q.name.toLowerCase() === sub.toLowerCase()).id : ''; return sid ? { ...x, s: sid } : x; });
+      const taken = slots.map((x) => ({ x, by: busy.get(`${v.cabinet || ''}|${slotKey(x)}`)?.[0]?.point })).find((t) => t.by);
+      if (taken) { toast(`Порт ${fmtPanelPort(taken.x, subNameOf(currentProject(), v.cabinet || '', taken.x.s))} в шкафу ${v.cabinet || '(без шкафа)'} уже занят точкой ${taken.by.label}`); return false; }
       const oldPanel = panelOf(point);
-      const panel = pp.list.map((x) => { const o = oldPanel.find((y) => y.u === x.u && y.p === x.p); return o?.label ? { ...x, label: o.label } : x; });
+      const panel = slots.map((x) => { const o = oldPanel.find((y) => slotKey(y) === slotKey(x)); return o?.label ? { ...x, label: o.label } : x; });
       repo.save(pid, [{ coll: 'points', id: point?.id, data: { panel,
         label, planName: v.planName, cabinet: v.cabinet, floor: v.floor, typeId: v.typeId, length: v.length,
         configId: isDoorType(v.typeId) ? v.configId : undefined, port: v.port, serial, mac, delayReasonId: v.delayReasonId, note: v.note,
@@ -291,7 +295,7 @@ export function pointCard(startPoint, { fromPlan = false } = {}) {
       ['Шкаф / этаж', [p.cabinet && `шкаф ${p.cabinet}`, p.floor && `этаж ${p.floor}`].filter(Boolean).join(', ')],
       ['Тип', p.typeId], ['Состав', compText(p)], ['Имя в плане', p.planName], ['Кабели', `${info.cableList?.length ? cablesText(info.cableList) : info.cable || ''}${Array.isArray(p.cableOverride) ? ' (свои у точки)' : ''}`],
       ['Длина', hasLen ? `${p.length} м на 1 кабель${info.metrage ? ` (всего ${Math.round(info.metrage * 100) / 100} м)` : ''}` : ''],
-      ['Конфигурация', usesConfig(ctx.types.get(p.typeId)) ? cfg?.name : ''], ['Порт в свитче', p.port], ['Порт в панели', panelText(p)], ['Серийный номер', p.serial], ['MAC', p.mac], ['Причина задержки', p.delayReasonId], ['Примечание', p.note],
+      ['Конфигурация', usesConfig(ctx.types.get(p.typeId)) ? cfg?.name : ''], ['Порт в свитче', p.port], ['Порт в панели', panelText(p, proj)], ['Серийный номер', p.serial], ['MAC', p.mac], ['Причина задержки', p.delayReasonId], ['Примечание', p.note],
     ].filter(([, v]) => v);
     const rows = (ctx.journalByPoint.get(p.id) || []).map((r) => ({ ...r, work: `${ctx.catalog.get(r.workId)?.name || r.action || '?'}${r.action === 'Протяжка' && r.cableId ? ` (${r.cableId})` : ''}` }))
       .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.order - a.order));

@@ -4,8 +4,8 @@ import { h, openModal, toast, confirmDialog, formModal } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { comparePoints } from '../../domain/index.js';
 import {
-  PANEL_PORTS, rackPortsOf, panelOf, fmtPanelPort, defaultPortLabels, rackOf, uOrder, panelsInOrder, rackPointsOf,
-  cabinetFloor, autoFill, rackProblems, typeColorOf,
+  PANEL_PORTS, rackPortsOf, panelOf, fmtPanelPort, defaultPortLabels, rackOf, panelsInOrder, rackPointsOf,
+  cabinetFloor, autoFill, rackProblems, typeColorOf, slotKey, subsOf,
 } from '../../domain/rack.js';
 import { pointCard } from './points.js';
 
@@ -20,12 +20,17 @@ const allPoints = () => [...state.ctx.points.values()];
 const cabPoints = (cab) => rackPointsOf(allPoints(), state.ctx, cab);
 const slotLabel = (pt, i) => panelOf(pt)[i]?.label || defaultPortLabels(pt.label, rackPortsOf(pt, state.ctx))[i] || pt.label;
 const shortLabel = (txt, cab) => (cab && (txt.startsWith(`${cab}-`) || txt.startsWith(`${cab}/`)) ? txt.slice(cab.length + 1) : txt);
-// «U|порт» → { pt, i } для точек шкафа
+// «секция|U|порт» → { pt, i } для точек шкафа
 function slotsOf(cab) {
   const m = new Map();
-  cabPoints(cab).forEach((pt) => panelOf(pt).forEach((x, i) => m.set(`${x.u}|${x.p}`, { pt, i })));
+  cabPoints(cab).forEach((pt) => panelOf(pt).forEach((x, i) => m.set(slotKey(x), { pt, i })));
   return m;
 }
+const multi = (cab) => subsOf(rackOf(currentProject(), cab), cab).length > 1;
+const subName = (cab, sid) => (multi(cab) ? subsOf(rackOf(currentProject(), cab), cab).find((x) => x.id === (sid || ''))?.name || '' : '');
+const pName = (cab, pnl) => `${multi(cab) ? `${subName(cab, pnl.s)} ` : ''}U${pnl.u}`;
+const samePanel = (a, b) => (a.s || '') === (b.s || '') && a.u === b.u;
+const withS = (x, sid) => { const o = { ...x }; if (sid) o.s = sid; else delete o.s; return o; };
 function saveRack(cab, rack) {
   const p = currentProject();
   getRepo().saveProject(p.id, { racks: { ...(p.racks || {}), [cab]: rack } });
@@ -49,42 +54,69 @@ export function racksView(ui) {
     h('div', { class: 'card', style: { padding: 0 } }, cabs.length ? cabs.map((c) => {
       const x = byCab.get(c); const r = rackOf(p, c);
       return h('div', { class: 'item', onclick: () => { openCab = c; moving = null; ui.render(); } },
-        h('div', { class: 'name' }, `🗄 Шкаф ${c}`, h('div', { class: 'sub' }, `точек cat7: ${x.pts} (портов ${x.ports}) · расставлено ${x.placed} из ${x.pts}${r ? ` · ${r.height}U, панелей ${r.panels?.length || 0}` : ' · плана ещё нет'}`)),
+        h('div', { class: 'name' }, `🗄 Шкаф ${c}`, h('div', { class: 'sub' }, `точек cat7: ${x.pts} (портов ${x.ports}) · расставлено ${x.placed} из ${x.pts}${r ? ` · ${subsOf(r, c).map((x) => `${subsOf(r, c).length > 1 ? `${x.name} ` : ''}${x.height}U`).join(' + ')}, панелей ${r.panels?.length || 0}` : ' · плана ещё нет'}`)),
         h('span', { style: { fontSize: '20px' } }, x.placed === x.pts && x.pts ? '✅' : '›'));
     }) : h('div', { class: 'empty' }, 'Нет точек с кабелями cat7 и шкафом')));
 }
 
-// ---------- размер и нумерация шкафа ----------
+// ---------- размер и нумерация шкафа (и секции: несколько физических шкафов под одним именем) ----------
 function rackForm(cab, done) {
   const r = rackOf(currentProject(), cab) || { height: 42, bottomUp: true, panels: [] };
-  formModal({
-    title: `Шкаф ${cab}: размер и нумерация`, submitLabel: 'Сохранить',
-    values: { height: r.height, numbering: r.bottomUp === false ? 'top' : 'bottom' },
-    fields: [
-      { key: 'height', label: 'Высота шкафа, U', type: 'number', required: true },
-      { key: 'numbering', label: 'Нумерация U', type: 'select', options: [{ value: 'bottom', label: 'U1 внизу (сверху: U42, U41, …)' }, { value: 'top', label: 'U1 вверху (сверху: U01, U02, …)' }] },
-    ],
-    onSubmit: (v) => {
-      const height = Math.round(Number(v.height));
-      if (!(height >= 1 && height <= 60)) { toast('Высота — от 1 до 60 U'); return false; }
-      const out = (r.panels || []).filter((x) => x.u > height);
-      if (out.length) { toast(`Панели выше ${height}U: ${out.map((x) => `U${x.u}`).join(', ')} — сначала перенесите их`); return false; }
-      saveRack(cab, { ...r, height, bottomUp: v.numbering !== 'top' }); done?.();
-    },
-  });
+  const subs = subsOf(r, cab).map((x) => ({ ...x }));
+  let many = subs.length > 1;
+  const box = h('div', {});
+  const used = (sid) => (r.panels || []).some((x) => (x.s || '') === sid) || cabPoints(cab).some((pt) => panelOf(pt).some((x) => (x.s || '') === sid));
+  const row = (x, i) => {
+    const name = h('input', { type: 'text', value: x.name, placeholder: `${cab}-${String.fromCharCode(65 + i)}`, style: { flex: 2, minWidth: '110px' }, oninput: (e) => { x.name = e.target.value; } });
+    const hgt = h('input', { type: 'text', inputMode: 'numeric', value: String(x.height || 42), style: { width: '64px' }, oninput: (e) => { x.height = e.target.value; } });
+    const num = h('select', { onchange: (e) => { x.bottomUp = e.target.value !== 'top'; } },
+      h('option', { value: 'bottom', selected: x.bottomUp !== false }, 'U1 внизу (сверху U42, U41…)'), h('option', { value: 'top', selected: x.bottomUp === false }, 'U1 вверху (сверху U01, U02…)'));
+    return h('div', { class: 'card', style: { margin: '6px 0' } },
+      many ? h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '6px' } }, h('small', { class: 'mut' }, `Шкаф ${i + 1}:`), name,
+        i > 0 ? h('button', { class: 'sec', style: { padding: '4px 10px' }, onclick: () => { if (used(x.id)) { toast('В этом шкафу есть панели или точки — сначала уберите их'); return; } subs.splice(i, 1); draw(); } }, '✖') : null) : null,
+      h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } }, h('span', {}, 'Высота, U'), hgt, num));
+  };
+  const multiCb = h('input', { type: 'checkbox', checked: many, onchange: () => {
+    if (!multiCb.checked && subs.slice(1).some((x) => used(x.id))) { multiCb.checked = true; toast('Во 2-м и следующих шкафах есть панели или точки — сначала уберите их'); return; }
+    many = multiCb.checked;
+    if (many && subs.length < 2) { if (!subs[0].name || subs[0].name === cab) subs[0].name = `${cab}-A`; subs.push({ id: `s${Date.now().toString(36)}`, name: `${cab}-B`, height: subs[0].height, bottomUp: subs[0].bottomUp }); }
+    if (!many) subs.splice(1);
+    draw();
+  } });
+  const draw = () => box.replaceChildren(...subs.map(row),
+    many ? h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => { subs.push({ id: `s${Date.now().toString(36)}`, name: `${cab}-${String.fromCharCode(65 + subs.length)}`, height: subs[0].height, bottomUp: subs[0].bottomUp }); draw(); } }, '➕ Ещё шкаф')) : null);
+  draw();
+  const save = h('button', { onclick: () => {
+    for (const x of subs) {
+      x.height = Math.round(Number(x.height));
+      if (!(x.height >= 1 && x.height <= 60)) { toast('Высота — от 1 до 60 U'); return; }
+      const out = (r.panels || []).filter((q) => (q.s || '') === x.id && q.u > x.height);
+      if (out.length) { toast(`Панели выше ${x.height}U: ${out.map((q) => `U${q.u}`).join(', ')} — сначала перенесите их`); return; }
+      if (many && !String(x.name || '').trim()) { toast('Назовите каждый шкаф'); return; }
+    }
+    const names = subs.map((x) => String(x.name).trim().toLowerCase());
+    if (many && new Set(names).size !== names.length) { toast('Названия шкафов не должны повторяться'); return; }
+    const s0 = subs[0];
+    saveRack(cab, { ...r, height: s0.height, bottomUp: s0.bottomUp !== false, subs: many ? subs.map((x) => ({ id: x.id || '', name: String(x.name).trim(), height: x.height, bottomUp: x.bottomUp !== false })) : null });
+    c(); done?.();
+  } }, 'Сохранить');
+  const c = openModal(`Шкаф ${cab}: размер и нумерация`, h('div', {},
+    h('label', { class: 'pickrow' }, multiCb, h('span', {}, 'Несколько шкафов в одном (точки этого шкафа стоят в разных физических шкафах)')),
+    box, h('div', { class: 'btns' }, save)), { sticky: true });
 }
 
 // ---------- мастер: панели по типам ----------
 function wizard(cab, ui) {
   const r = rackOf(currentProject(), cab);
   if (!r) { rackForm(cab, () => setTimeout(() => wizard(cab, ui), 300)); return; }
+  const subs = subsOf(r, cab); const many = subs.length > 1;
   const pts = cabPoints(cab);
   const types = [...new Set(pts.map((p) => p.typeId))].sort(sortRu).map((t) => {
     const list = pts.filter((p) => p.typeId === t).sort(comparePoints);
     const ports = list.reduce((n, p) => n + rackPortsOf(p, state.ctx), 0);
     const placed = list.filter((p) => panelOf(p).length).length;
-    const holding = [...new Set(list.flatMap((p) => panelOf(p).map((x) => x.u)))];  // где они сейчас
-    return { t, list, ports, placed, on: placed === 0, us: holding.length ? holding : Array(Math.ceil(ports / PANEL_PORTS)).fill('') };
+    const holding = [...new Map(list.flatMap((p) => panelOf(p).map((x) => [`${x.s || ''}|${x.u}`, { s: x.s || '', u: String(x.u) }]))).values()];  // где они сейчас
+    return { t, list, ports, placed, on: placed === 0, us: holding.length ? holding : Array.from({ length: Math.ceil(ports / PANEL_PORTS) }, () => ({ s: '', u: '' })) };
   });
   const box = h('div', {});
   const draw = () => box.replaceChildren(...types.map((x) => {
@@ -93,9 +125,11 @@ function wizard(cab, ui) {
     return h('div', { class: 'card', style: { margin: '8px 0', opacity: x.on ? 1 : 0.6 } },
       h('label', { class: 'pickrow', style: { margin: 0 } }, cb, h('span', {}, h('b', {}, x.t), ` — точек ${x.list.length}, портов ${x.ports} → нужно панелей: ${need}${x.placed ? ` · уже расставлено ${x.placed} (будут разложены заново)` : ''}`)),
       x.on ? h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', alignItems: 'center', marginTop: '6px' } },
-        ...x.us.map((u, i) => h('label', { style: { display: 'flex', gap: '4px', alignItems: 'center' } }, h('small', { class: 'mut' }, `${i + 1}-я на U`),
-          h('input', { type: 'text', inputMode: 'numeric', value: u, style: { width: '64px' }, oninput: (e) => { x.us[i] = e.target.value; } }))),
-        h('button', { class: 'sec', style: { padding: '4px 12px' }, onclick: () => { x.us.push(''); draw(); } }, '＋'),
+        ...x.us.map((e, i) => h('label', { style: { display: 'flex', gap: '4px', alignItems: 'center' } }, h('small', { class: 'mut' }, `${i + 1}-я:`),
+          many ? h('select', { style: { width: 'auto' }, onchange: (ev) => { e.s = ev.target.value; } }, subs.map((q) => h('option', { value: q.id, selected: q.id === e.s }, q.name))) : null,
+          h('small', { class: 'mut' }, 'U'),
+          h('input', { type: 'text', inputMode: 'numeric', value: e.u, style: { width: '64px' }, oninput: (ev) => { e.u = ev.target.value; } }))),
+        h('button', { class: 'sec', style: { padding: '4px 12px' }, onclick: () => { x.us.push({ s: x.us[x.us.length - 1]?.s || '', u: '' }); draw(); } }, '＋'),
         x.us.length > 1 ? h('button', { class: 'sec', style: { padding: '4px 12px' }, onclick: () => { x.us.pop(); draw(); } }, '－') : null) : null);
   }));
   draw();
@@ -103,21 +137,24 @@ function wizard(cab, ui) {
     const chosen = types.filter((x) => x.on);
     if (!chosen.length) { toast('Отметьте хотя бы один тип'); return; }
     for (const x of chosen) {
-      const us = x.us.map((u) => Number(String(u).trim()));
-      if (us.some((u) => !Number.isInteger(u) || u < 1 || u > r.height)) { toast(`${x.t}: укажите U каждой панели (1–${r.height})`); return; }
-      if (new Set(us).size !== us.length) { toast(`${x.t}: две панели на одном U`); return; }
+      for (const e of x.us) {
+        const u = Number(String(e.u).trim()); const sub = subs.find((q) => q.id === (e.s || ''));
+        if (!sub || !Number.isInteger(u) || u < 1 || u > sub.height) { toast(`${x.t}: укажите U каждой панели (1–${sub?.height || '?'})`); return; }
+      }
+      const keys = x.us.map((e) => `${e.s || ''}|${Number(e.u)}`);
+      if (new Set(keys).size !== keys.length) { toast(`${x.t}: две панели на одном U`); return; }
     }
     const replaced = chosen.reduce((n, x) => n + x.placed, 0);
     if (replaced && !(await confirmDialog(`Уже расставленные точки этих типов (${replaced}) будут разложены заново по порядку номеров. Продолжить?`, { yes: 'Разложить' }))) return;
     const again = new Set(chosen.flatMap((x) => x.list.map((p) => p.id)));
-    const occupied = new Set(); cabPoints(cab).filter((p) => !again.has(p.id)).forEach((p) => panelOf(p).forEach((s) => occupied.add(`${s.u}|${s.p}`)));
+    const occupied = new Set(); cabPoints(cab).filter((p) => !again.has(p.id)).forEach((p) => panelOf(p).forEach((q) => occupied.add(slotKey(q))));
     const panels = [...(r.panels || [])]; const writes = []; const left = [];
     for (const x of chosen) {
-      const tp = x.us.map((u) => ({ u: Number(u) }));
-      tp.forEach((pnl) => { if (!panels.some((q) => q.u === pnl.u)) panels.push({ u: pnl.u }); });
+      const tp = x.us.map((e) => withS({ u: Number(e.u) }, e.s || ''));
+      tp.forEach((pnl) => { if (!panels.some((q) => samePanel(q, pnl))) panels.push(pnl); });
       const res = autoFill(x.list, state.ctx, tp, occupied);
       x.list.forEach((p) => writes.push([p.id, res.assign.get(p.id) || []]));
-      res.assign.forEach((list) => list.forEach((s) => occupied.add(`${s.u}|${s.p}`)));
+      res.assign.forEach((list) => list.forEach((q) => occupied.add(slotKey(q))));
       left.push(...res.left);
     }
     saveRack(cab, { ...r, panels }); savePanels(writes); close();
@@ -125,19 +162,19 @@ function wizard(cab, ui) {
     ui.render();
   } }, '✅ Разложить');
   const close = openModal(`🧙 Мастер: шкаф ${cab}`, h('div', {},
-    h('div', { class: 'mut' }, `Шкаф ${r.height}U, ${r.bottomUp === false ? 'U1 вверху' : 'U1 внизу'}. Для каждого типа укажите, на каких U стоят его панели (по порядку: первая, вторая…). Точки ляжут по возрастанию номера с 1-го порта; занятые другими точками порты пропускаются. Одну и ту же панель можно указать у двух типов — второй тип займёт свободные порты.`),
+    h('div', { class: 'mut' }, `${subs.map((q) => `${many ? `${q.name}: ` : 'Шкаф '}${q.height}U, ${q.bottomUp === false ? 'U1 вверху' : 'U1 внизу'}`).join('; ')}. Для каждого типа укажите, ${many ? 'в каком шкафу и ' : ''}на каких U стоят его панели (по порядку: первая, вторая…). Точки ляжут по возрастанию номера с 1-го порта; занятые другими точками порты пропускаются. Одну и ту же панель можно указать у двух типов — второй тип займёт свободные порты.`),
     box, h('div', { class: 'btns' }, go)), { sticky: true });
 }
 
 // ---------- поставить точки в панель ----------
-function placeModal(cab, ui, { u = null, p = 1 } = {}) {
-  const r = rackOf(currentProject(), cab); const panels = panelsInOrder(r);
+function placeModal(cab, ui, { u = null, s: sid = '', p = 1 } = {}) {
+  const r = rackOf(currentProject(), cab); const panels = subsOf(r, cab).flatMap((sub) => panelsInOrder(r, sub));
   if (!panels.length) { toast('Сначала добавьте панель'); return; }
   const free = cabPoints(cab).filter((pt) => !panelOf(pt).length).sort(comparePoints);
   if (!free.length) { toast('Все точки шкафа уже расставлены'); return; }
   const types = [...new Set(free.map((x) => x.typeId))].sort(sortRu);
   let fType = types.length === 1 ? types[0] : ''; const on = new Set();
-  const panelSel = h('select', {}, panels.map((x) => h('option', { value: x.u, selected: x.u === u }, `Панель U${x.u}`)));
+  const panelSel = h('select', {}, panels.map((x, i) => h('option', { value: i, selected: x.u === u && (x.s || '') === (sid || '') }, `Панель ${pName(cab, x)}`)));
   const portIn = h('input', { type: 'text', inputMode: 'numeric', value: String(p), style: { width: '64px' } });
   const list = h('div', { class: 'picklist' }); const go = h('button', {});
   const label = () => { go.textContent = `Поставить (${on.size})`; go.disabled = !on.size; };
@@ -153,9 +190,9 @@ function placeModal(cab, ui, { u = null, p = 1 } = {}) {
   const typeSel = h('select', { onchange: (e) => { fType = e.target.value; draw(); } }, h('option', { value: '' }, 'Все типы'), ...types.map((t) => h('option', { value: t, selected: t === fType }, t)));
   go.onclick = () => {
     const start = Number(portIn.value); if (!(start >= 1 && start <= PANEL_PORTS)) { toast('Порт — от 1 до 24'); return; }
-    const pu = Number(panelSel.value); const chosen = free.filter((x) => on.has(x.id));
+    const pnl = panels[Number(panelSel.value)]; const chosen = free.filter((x) => on.has(x.id));
     const occupied = new Set(slotsOf(cab).keys());
-    const res = autoFill(chosen, state.ctx, [{ u: pu }], occupied, { start });
+    const res = autoFill(chosen, state.ctx, [withS({ u: pnl.u }, pnl.s || '')], occupied, { start });
     savePanels([...res.assign.entries()]); c();
     toast(res.left.length ? `Поставлено ${res.assign.size}. Не поместились до конца панели: ${res.left.map((x) => x.label).join(', ')}` : `Поставлено: ${res.assign.size}`);
     ui.render();
@@ -177,15 +214,18 @@ function rackEditor(ui, cab) {
   const back = h('button', { class: 'sec', onclick: () => { openCab = null; moving = null; editMode = false; ui.render(); } }, '← Все шкафы');
   if (!r) {
     return h('div', {}, back,
-      h('div', { class: 'card', style: { marginTop: '10px' } }, h('b', {}, `Шкаф ${cab}`), h('div', { class: 'mut', style: { margin: '6px 0' } }, `Точек cat7: ${pts.length}. Плана шкафа ещё нет: укажите размер и нумерацию U, затем мастер разложит точки по панелям.`),
+      h('div', { class: 'card', style: { marginTop: '10px' } }, h('b', {}, `Шкаф ${cab}`), h('div', { class: 'mut', style: { margin: '6px 0' } }, `Точек cat7: ${pts.length}. Плана шкафа ещё нет: укажите размер и нумерацию U (или несколько шкафов в одном), затем мастер разложит точки по панелям.`),
         h('div', { class: 'btns' }, h('button', { onclick: () => wizard(cab, ui) }, '🧙 Создать план шкафа'))));
   }
+  const subs = subsOf(r, cab); const many = subs.length > 1;
   const slots = slotsOf(cab);
-  const problems = rackProblems(r, pts, state.ctx);
+  const problems = rackProblems(r, pts, state.ctx, cab);
   const free = pts.filter((pt) => !panelOf(pt).length);
   const floor = cabinetFloor(pts);
-  const cellTap = (u, port) => {
-    const at = slots.get(`${u}|${port}`);
+  const subOf = (sid) => subs.find((x) => x.id === (sid || ''));
+  const cellTap = (pnl, port) => {
+    const sid = pnl.s || ''; const u = pnl.u;
+    const at = slots.get(slotKey({ s: sid, u, p: port }));
     if (editMode && !moving) { if (at) { moving = { id: at.pt.id, i: at.i }; ui.render(); } else toast('Сначала нажмите на точку, которую переносите'); return; }
     if (moving) {
       const src = state.ctx.points.get(moving.id); const sp = panelOf(src);
@@ -194,28 +234,30 @@ function rackEditor(ui, cab) {
       if (at && at.pt.id === src.id && at.i === moving.i) { moving = null; ui.render(); return; }
       const writes = new Map();
       const get = (pt) => writes.get(pt.id) || panelOf(pt).map((x) => ({ ...x }));
-      const a = get(src); a[moving.i] = { ...a[moving.i], u, p: port }; writes.set(src.id, a);
-      if (at) { const b = at.pt.id === src.id ? a : get(at.pt); b[at.i] = { ...b[at.i], u: from.u, p: from.p }; writes.set(at.pt.id, b); }
+      const a = get(src); a[moving.i] = withS({ ...a[moving.i], u, p: port }, sid); writes.set(src.id, a);
+      if (at) { const b = at.pt.id === src.id ? a : get(at.pt); b[at.i] = withS({ ...b[at.i], u: from.u, p: from.p }, from.s || ''); writes.set(at.pt.id, b); }
       savePanels([...writes.entries()]); moving = null; if (!editMode) toast(at ? 'Переставлено местами' : 'Перенесено'); ui.render(); return;
     }
-    if (!at) { placeModal(cab, ui, { u, p: port }); return; }
+    if (!at) { placeModal(cab, ui, { u, s: sid, p: port }); return; }
     const { pt, i } = at; const n = rackPortsOf(pt, state.ctx);
-    const c = openModal(`${fmtPanelPort({ u, p: port })} · ${slotLabel(pt, i)}`, h('div', {},
-      h('div', { class: 'mut' }, `Точка ${pt.label} · ${pt.typeId}${n > 1 ? ` · порт ${i + 1} из ${n}: ${panelOf(pt).map((x) => fmtPanelPort(x)).join(', ')}` : ''}`),
+    const c = openModal(`${fmtPanelPort({ u, p: port }, subName(cab, sid))} · ${slotLabel(pt, i)}`, h('div', {},
+      h('div', { class: 'mut' }, `Точка ${pt.label} · ${pt.typeId}${n > 1 ? ` · порт ${i + 1} из ${n}: ${panelOf(pt).map((x) => fmtPanelPort(x, subName(cab, x.s))).join(', ')}` : ''}`),
       h('div', { class: 'btns' },
         h('button', { onclick: () => { moving = { id: pt.id, i }; c(); ui.render(); } }, '↔ Переставить'),
         h('button', { class: 'sec', onclick: () => { c(); pointCard(pt); } }, '📋 Карточка точки'),
         h('button', { class: 'danger', onclick: () => { savePanels([[pt.id, []]]); c(); toast(`${pt.label} убрана из панели`); ui.render(); } }, n > 1 ? '✖ Убрать точку (все её порты)' : '✖ Убрать из панели'))));
   };
+  const onPanel = (pnl) => (x) => samePanel(x, pnl);
   const panelCard = (pnl) => {
-    const used = Array.from({ length: PANEL_PORTS }, (_, k) => slots.get(`${pnl.u}|${k + 1}`));
+    const sid = pnl.s || ''; const sub = subOf(sid);
+    const used = Array.from({ length: PANEL_PORTS }, (_, k) => slots.get(slotKey({ s: sid, u: pnl.u, p: k + 1 })));
     const n = used.filter(Boolean).length;
     const types = [...new Set(used.filter(Boolean).map((x) => x.pt.typeId))];
     const cells = used.map((at, k) => {
       const mv = moving && at && at.pt.id === moving.id && at.i === moving.i;
       const hue = at ? hueOf(at.pt.typeId) : 0;
       const col = at ? typeColorOf(currentProject(), at.pt.typeId, getRepo().prefs?.shilutColors || []) : null;
-      return h('div', { title: at ? `${slotLabel(at.pt, at.i)} (${at.pt.typeId})` : 'свободно', onclick: () => cellTap(pnl.u, k + 1),
+      return h('div', { title: at ? `${slotLabel(at.pt, at.i)} (${at.pt.typeId})` : 'свободно', onclick: () => cellTap(pnl, k + 1),
         style: { cursor: 'pointer', border: `1px solid ${mv ? '#e0007a' : 'var(--line)'}`, borderWidth: mv ? '2px' : '1px', borderRadius: '6px', outline: mv ? '3px solid #e0007a' : 'none', outlineOffset: '1px', padding: '2px 4px', minHeight: '38px',
           background: col ? col.bg : at ? `hsla(${hue},70%,50%,.18)` : 'transparent', color: col ? col.fg : 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', overflow: 'hidden' } },
         h('small', { class: col ? '' : 'mut', style: { fontSize: '10px', lineHeight: '12px', opacity: col ? 0.75 : 1 } }, String(k + 1)),
@@ -228,37 +270,53 @@ function rackEditor(ui, cab) {
           h('button', { class: 'sec', style: { padding: '4px 10px' }, title: 'Переставить по порядку номеров с 1-го порта', onclick: async () => {
             const here = [...new Map(used.filter(Boolean).map((x) => [x.pt.id, x.pt])).values()].sort(comparePoints);
             if (!here.length) return;
-            if (!(await confirmDialog(`Панель U${pnl.u}: поставить её точки (${here.length}) подряд по порядку номеров с 1-го порта? Пропуски (запас) исчезнут.`, { yes: 'Упорядочить' }))) return;
+            if (!(await confirmDialog(`Панель ${pName(cab, pnl)}: поставить её точки (${here.length}) подряд по порядку номеров с 1-го порта? Пропуски (запас) исчезнут.`, { yes: 'Упорядочить' }))) return;
             const ids = new Set(here.map((x) => x.id)); const occ = new Set(); slots.forEach((v, k) => { if (!ids.has(v.pt.id)) occ.add(k); });
-            const res = autoFill(here, state.ctx, [{ u: pnl.u }], occ);
+            const res = autoFill(here, state.ctx, [withS({ u: pnl.u }, sid)], occ);
             savePanels(here.map((x) => [x.id, res.assign.get(x.id) || []])); ui.render();
           } }, '🔢'),
-          h('button', { class: 'sec', style: { padding: '4px 10px' }, title: 'Сменить U панели', onclick: () => formModal({ title: `Панель U${pnl.u}: новый U`, values: { u: pnl.u }, fields: [{ key: 'u', label: 'U', type: 'number', required: true }],
+          h('button', { class: 'sec', style: { padding: '4px 10px' }, title: 'Сменить U панели', onclick: () => formModal({ title: `Панель ${pName(cab, pnl)}: новый U`, values: { u: pnl.u }, fields: [{ key: 'u', label: 'U', type: 'number', required: true }],
             onSubmit: (v) => {
-              const nu = Math.round(Number(v.u)); if (!(nu >= 1 && nu <= r.height)) { toast(`U от 1 до ${r.height}`); return false; }
-              if (nu !== pnl.u && (r.panels || []).some((x) => x.u === nu)) { toast(`На U${nu} уже есть панель`); return false; }
-              saveRack(cab, { ...r, panels: (r.panels || []).map((x) => (x.u === pnl.u ? { ...x, u: nu } : x)) });
-              savePanels(pts.filter((pt) => panelOf(pt).some((x) => x.u === pnl.u)).map((pt) => [pt.id, panelOf(pt).map((x) => (x.u === pnl.u ? { ...x, u: nu } : x))]));
+              const nu = Math.round(Number(v.u)); if (!(nu >= 1 && nu <= sub.height)) { toast(`U от 1 до ${sub.height}`); return false; }
+              if (nu !== pnl.u && (r.panels || []).some((x) => samePanel(x, { s: sid, u: nu }))) { toast(`На U${nu} уже есть панель`); return false; }
+              saveRack(cab, { ...r, panels: (r.panels || []).map((x) => (samePanel(x, pnl) ? { ...x, u: nu } : x)) });
+              savePanels(pts.filter((pt) => panelOf(pt).some(onPanel(pnl))).map((pt) => [pt.id, panelOf(pt).map((x) => (samePanel(x, pnl) ? { ...x, u: nu } : x))]));
               setTimeout(() => ui.render(), 200);
             } }) }, '✏️'),
           h('button', { class: 'sec', style: { padding: '4px 10px' }, title: 'Удалить панель', onclick: async () => {
-            const on = pts.filter((pt) => panelOf(pt).some((x) => x.u === pnl.u));
-            if (!(await confirmDialog(`Удалить панель U${pnl.u}?${on.length ? ` Точки на ней (${on.length}) станут нерасставленными.` : ''}`, { yes: 'Удалить', danger: true }))) return;
-            saveRack(cab, { ...r, panels: (r.panels || []).filter((x) => x.u !== pnl.u) }); savePanels(on.map((pt) => [pt.id, []])); setTimeout(() => ui.render(), 200);
+            const on = pts.filter((pt) => panelOf(pt).some(onPanel(pnl)));
+            if (!(await confirmDialog(`Удалить панель ${pName(cab, pnl)}?${on.length ? ` Точки на ней (${on.length}) станут нерасставленными.` : ''}`, { yes: 'Удалить', danger: true }))) return;
+            saveRack(cab, { ...r, panels: (r.panels || []).filter((x) => !samePanel(x, pnl)) }); savePanels(on.map((pt) => [pt.id, []])); setTimeout(() => ui.render(), 200);
           } }, '🗑'))),
       h('div', { class: 'rackgrid' }, ...cells));
   };
+  const addPanel = () => formModal({ title: 'Новая панель',
+    fields: [
+      ...(many ? [{ key: 's', label: 'Шкаф', type: 'select', options: subs.slice(1).map((x) => ({ value: x.id, label: x.name })), emptyLabel: subs[0].name }] : []),
+      { key: 'u', label: 'На каком U', type: 'number', required: true }],
+    onSubmit: (v) => {
+      const sid = many ? (v.s || '') : ''; const sub = subOf(sid); const u = Math.round(Number(v.u));
+      if (!(u >= 1 && u <= sub.height)) { toast(`U от 1 до ${sub.height}`); return false; }
+      if ((r.panels || []).some((x) => samePanel(x, { s: sid, u }))) { toast(`На U${u} уже есть панель`); return false; }
+      saveRack(cab, { ...r, panels: [...(r.panels || []), withS({ u }, sid)] }); setTimeout(() => ui.render(), 200);
+    } });
   const byType = new Map(); free.forEach((pt) => byType.set(pt.typeId, (byType.get(pt.typeId) || 0) + 1));
+  const subBlock = (sub) => {
+    const list = panelsInOrder(r, sub);
+    return h('div', {},
+      many ? h('div', { class: 'group', style: { padding: '14px 2px 2px', fontSize: '15px' } }, `🗄 ${sub.name} · ${sub.height}U · ${sub.bottomUp === false ? 'U1 вверху' : 'U1 внизу'} · панелей ${list.length}`) : null,
+      ...list.map(panelCard),
+      !list.length ? h('div', { class: 'empty' }, many ? 'В этом шкафу панелей пока нет' : 'Панелей пока нет — «🧙 Мастер» или «➕ Панель»') : null);
+  };
   return h('div', {}, back,
     h('div', { class: 'card', style: { marginTop: '10px' } },
       h('b', {}, `${p.name} · ${floor ? `этаж ${floor} · ` : ''}шкаф ${cab}`),
-      h('div', { class: 'mut', style: { margin: '4px 0' } }, `${r.height}U · ${r.bottomUp === false ? 'U1 вверху' : 'U1 внизу'} · панелей ${r.panels?.length || 0} · точек cat7 ${pts.length}, расставлено ${pts.length - free.length}`),
+      h('div', { class: 'mut', style: { margin: '4px 0' } }, `${many ? `${subs.length} шкафа: ${subs.map((x) => `${x.name} ${x.height}U`).join(', ')}` : `${subs[0].height}U · ${subs[0].bottomUp === false ? 'U1 вверху' : 'U1 внизу'}`} · панелей ${r.panels?.length || 0} · точек cat7 ${pts.length}, расставлено ${pts.length - free.length}`),
       h('div', { class: 'btns' },
         h('button', { class: editMode ? '' : 'sec', onclick: () => { editMode = !editMode; moving = null; ui.render(); } }, editMode ? '✅ Готово' : '✏️ Редактировать'),
         h('button', { class: 'sec', onclick: () => wizard(cab, ui) }, '🧙 Мастер'),
-        h('button', { class: 'sec', onclick: () => formModal({ title: 'Новая панель', fields: [{ key: 'u', label: `На каком U (1–${r.height})`, type: 'number', required: true }],
-          onSubmit: (v) => { const u = Math.round(Number(v.u)); if (!(u >= 1 && u <= r.height)) { toast(`U от 1 до ${r.height}`); return false; } if ((r.panels || []).some((x) => x.u === u)) { toast(`На U${u} уже есть панель`); return false; } saveRack(cab, { ...r, panels: [...(r.panels || []), { u }] }); setTimeout(() => ui.render(), 200); } }) }, '➕ Панель'),
-        h('button', { class: 'sec', onclick: () => rackForm(cab, () => setTimeout(() => ui.render(), 200)) }, '⚙️ Размер и нумерация'))),
+        h('button', { class: 'sec', onclick: addPanel }, '➕ Панель'),
+        h('button', { class: 'sec', onclick: () => rackForm(cab, () => setTimeout(() => ui.render(), 200)) }, many ? '⚙️ Шкафы, размер и нумерация' : '⚙️ Размер и нумерация'))),
     editMode ? h('div', { class: 'card', style: { borderColor: '#e0007a', position: 'sticky', top: '53px', zIndex: 6 } },
       h('b', {}, moving ? `✏️ Переношу: ${slotLabel(state.ctx.points.get(moving.id) || { label: '?' }, moving.i)}` : '✏️ Режим перестановки'),
       h('div', { class: 'mut' }, moving ? 'Нажмите на порт: свободный — перенесётся туда, занятый — поменяются местами. Нажмите ту же точку — отменить выбор.' : 'Нажмите на точку, потом на порт, куда её перенести. Так сколько угодно раз; выйти — «✅ Готово».'),
@@ -269,7 +327,6 @@ function rackEditor(ui, cab) {
     free.length ? h('div', { class: 'card' }, h('b', {}, `Не расставлены: ${free.length}`),
       h('div', { class: 'mut', style: { margin: '4px 0' } }, [...byType.entries()].map(([t, n]) => `${t}: ${n}`).join(' · ')),
       h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => placeModal(cab, ui) }, '➕ Поставить в панель…'))) : null,
-    ...panelsInOrder(r).map(panelCard),
-    !(r.panels || []).length ? h('div', { class: 'empty' }, 'Панелей пока нет — «🧙 Мастер» или «➕ Панель»') : null,
+    ...subs.map(subBlock),
     h('div', { class: 'mut', style: { margin: '10px 2px', fontSize: '13px' } }, 'Нажмите на свободный порт — поставить точки с него; на занятый — переставить, убрать или открыть точку. 🔢 — упорядочить панель по номерам.'));
 }

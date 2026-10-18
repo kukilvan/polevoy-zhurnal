@@ -28,7 +28,7 @@ import { autoFill, uOrder, panelsInOrder, rackProblems } from '../src/domain/rac
 const ctx1 = { types: new Map([['Cam', { id: 'Cam', defaultCable: 'cat7', defaultCables: 1 }], ['AP2', { id: 'AP2', defaultCable: 'cat7', defaultCables: 2 }]]), cabinetSettings: [], devices: new Map(), cables: new Map() };
 test('авторазкладка по панелям', () => {
   const pts = Array.from({ length: 30 }, (_, i) => ({ id: `c${i}`, label: `C${i}`, typeId: 'Cam' }));
-  const r = autoFill(pts, ctx1, [{ u: 38 }, { u: 37 }], new Set(['38|2']));
+  const r = autoFill(pts, ctx1, [{ u: 38 }, { u: 37 }], new Set(['|38|2']));
   assert.deepEqual(r.assign.get('c0'), [{ u: 38, p: 1 }]);
   assert.deepEqual(r.assign.get('c1'), [{ u: 38, p: 3 }]);
   assert.deepEqual(r.assign.get('c23'), [{ u: 37, p: 1 }]);
@@ -57,4 +57,16 @@ import { compareLabels } from '../src/domain/points.js';
 test('умная сортировка обозначений', () => {
   const l = ['1A-09-10', '1A/01-02', '1A-11-12', '1A/03-04', '1A-AP-03', '1A-AP01', '1A-AP-2', '1A-6.2', '1A-6.10', '1A-6.1', '2B-C200', '2B-C117'];
   assert.deepEqual([...l].sort(compareLabels), ['1A/01-02', '1A/03-04', '1A-6.1', '1A-6.2', '1A-6.10', '1A-09-10', '1A-11-12', '1A-AP01', '1A-AP-2', '1A-AP-03', '2B-C117', '2B-C200']);
+});
+import { subsOf, parsePanelPorts as ppp, panelText as ptext, autoFill as af2, panelsInOrder as pio } from '../src/domain/rack.js';
+test('секции шкафа', () => {
+  assert.deepEqual(ppp('CCTV1-A U38-05, CCTV1-B: 7-1').list, [{ u: 38, p: 5, sub: 'CCTV1-A' }, { u: 7, p: 1, sub: 'CCTV1-B' }]);
+  assert.deepEqual(ppp('38-5 38-6').list, [{ u: 38, p: 5 }, { u: 38, p: 6 }]);
+  const rack = { height: 42, bottomUp: true, subs: [{ id: '', name: 'CCTV1-A', height: 42, bottomUp: true }, { id: 's2', name: 'CCTV1-B', height: 20, bottomUp: false }], panels: [{ u: 10 }, { u: 10, s: 's2' }] };
+  assert.equal(subsOf(rack, 'CCTV1').length, 2); assert.equal(subsOf({ height: 42 }, 'X')[0].name, 'X');
+  assert.deepEqual(pio(rack, subsOf(rack)[1]).map((x) => x.u), [10]);
+  const pt = { cabinet: 'CCTV1', panel: [{ u: 10, p: 3, s: 's2' }] };
+  assert.equal(ptext(pt, { racks: { CCTV1: rack } }), 'CCTV1-B U10-03');
+  const r = af2([{ id: 'c', label: 'C', typeId: 'Cam' }], ctx1, [{ u: 10, s: 's2' }], new Set(['s2|10|1']));
+  assert.deepEqual(r.assign.get('c'), [{ s: 's2', u: 10, p: 2 }]);
 });
