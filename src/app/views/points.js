@@ -114,12 +114,27 @@ function scanField(key, label, kind, value) {
   return { key, label, type: 'custom', build: () => ({ el: h('div', { style: { display: 'flex', gap: '8px' } }, input, btn), get: () => (input.value.trim() === '' ? undefined : input.value.trim()) }) };
 }
 
+// Выбор из имеющихся в проекте (шкафы, этажи) или «✏️ Новый…» — своё значение. empty — подпись пустого варианта
+const sortRu = (a, b) => a.localeCompare(b, 'ru', { numeric: true });
+const projectValues = (key) => [...new Set([...state.ctx.points.values()].map((p) => String(p[key] ?? '').trim()).filter(Boolean))].sort(sortRu);
+function pickOrNewField(key, label, { empty = '—', hint = '' } = {}) {
+  return { key, label, hint, type: 'custom', build: ({ value, changed }) => {
+    const vals = projectValues(key); const cur = String(value ?? '').trim();
+    if (cur && !vals.includes(cur)) vals.push(cur);
+    const NEW = '__new';
+    const sel = h('select', { style: { flex: 1, minWidth: 0 } }, h('option', { value: '' }, empty), ...vals.map((v) => h('option', { value: v }, v)), h('option', { value: NEW }, '✏️ Новый…'));
+    const inp = h('input', { type: 'text', placeholder: `Новый: ${label.toLowerCase()}`, autocapitalize: 'characters', style: { flex: 1, minWidth: 0, display: 'none' }, oninput: () => changed() });
+    sel.value = cur; sel.onchange = () => { inp.style.display = sel.value === NEW ? '' : 'none'; if (sel.value === NEW) inp.focus(); changed(); };
+    return { el: h('div', { style: { display: 'flex', gap: '8px' } }, sel, inp), get: () => { const v = sel.value === NEW ? inp.value.trim() : sel.value; return v === '' ? undefined : v; } };
+  } };
+}
+
 export function pointForm(point, { onDone } = {}) {
   const repo = getRepo(); const pid = currentProject().id;
   const fields = [
     { key: 'label', label: 'Обозначение', required: true, hint: 'Например: 1A-01-02' },
     { key: 'planName', label: 'Имя в плане заказчика (по тохниту)' },
-    { key: 'cabinet', label: 'Шкаф' }, { key: 'floor', label: 'Этаж' },
+    pickOrNewField('cabinet', 'Шкаф', { empty: '— без шкафа —' }), pickOrNewField('floor', 'Этаж', { empty: '— без этажа —' }),
     { key: 'typeId', label: 'Тип', type: 'select', required: true, options: typeOptions(), emptyLabel: 'Выберите тип' },
     compField(point),
     cablesField(point),
@@ -169,7 +184,7 @@ export function generatorForm() {
     { key: 'typeId', label: 'Тип', type: 'select', required: true, options: typeOptions(), emptyLabel: 'Выберите тип' },
     compField(null),
     cablesField(null),
-    { key: 'cabinet', label: 'Шкаф' }, { key: 'floor', label: 'Этаж' },
+    pickOrNewField('cabinet', 'Шкаф', { empty: '— без шкафа —' }), pickOrNewField('floor', 'Этаж', { empty: '— без этажа —' }),
     { key: 'configId', label: 'Конфигурация двери', type: 'select', options: configOptions(), visible: (v) => isDoorType(v.typeId) && !composedType(v.typeId) },
   ];
   const labelsOf = (v) => generateLabels({ prefix: v.prefix ?? '', from: v.from, to: v.to, step: v.step ?? 1, digits: v.digits ?? 0, suffixes: parseSuffixes(v.suffixes), pair: !!v.pair });
@@ -429,21 +444,30 @@ function bulkEditForm(ids, done) {
   formModal({
     title: `Изменить точек: ${ids.length}`, submitLabel: 'Применить',
     fields: [
-      { key: 'cabinet', label: 'Шкаф', hint: 'Пусто — не менять' }, { key: 'floor', label: 'Этаж', hint: 'Пусто — не менять' },
+      pickOrNewField('cabinet', 'Шкаф', { empty: 'Не менять' }), pickOrNewField('floor', 'Этаж', { empty: 'Не менять' }),
       { key: 'typeId', label: 'Тип', type: 'select', options: typeOptions(), emptyLabel: 'Не менять' },
       { key: 'setCables', label: 'Изменить кабели', type: 'checkbox', hint: 'Без галочки: при смене типа кабели станут как у нового типа, иначе не меняются.' },
       { key: 'cables', label: 'Кабели каждой точки', type: 'custom', visible: (v) => !!v.setCables, build: () => {
         const first = state.ctx.points.get(ids[0]); const p = cablesPicker({ typeId: first?.typeId || '', cabinet: first?.cabinet || '', compact: true });
         return { el: p.el, update: (v) => { if (v.typeId) p.setType(v.typeId); }, get: () => p.get() };
       } },
+      { key: 'length', label: 'Длина (м на 1 кабель)', type: 'number', hint: 'Пусто — не менять' },
+      { key: 'clearLength', label: 'Стереть длину', type: 'checkbox', visible: (v) => v.length === undefined },
+      { key: 'delayReasonId', label: 'Причина задержки', type: 'select', options: [{ value: '__clear', label: '✖ Убрать причину' }, ...reasonOptions()], emptyLabel: 'Не менять' },
+      { key: 'noteAdd', label: 'Добавить к примечанию', type: 'textarea', hint: 'Допишется к примечанию каждой точки (старое не стирается)' },
     ],
     onSubmit: (v) => {
-      if (!v.cabinet && !v.floor && !v.typeId && !v.setCables) { toast('Ничего не выбрано для изменения'); return false; }
+      if (!v.cabinet && !v.floor && !v.typeId && !v.setCables && v.length === undefined && !v.clearLength && !v.delayReasonId && !v.noteAdd) { toast('Ничего не выбрано для изменения'); return false; }
+      if (v.length !== undefined && !(v.length >= 0)) { toast('Длина — число метров'); return false; }
       const ops = ids.map((id) => {
         const data = {};
         if (v.cabinet) data.cabinet = v.cabinet;
         if (v.floor) data.floor = v.floor;
         if (v.typeId) { data.typeId = v.typeId; data.devices = null; data.cables = null; data.cableOverride = null; if (!isDoorType(v.typeId)) data.configId = undefined; }
+        const pt = state.ctx.points.get(id);
+        if (v.length !== undefined) data.length = v.length; else if (v.clearLength) data.length = null;
+        if (v.delayReasonId) data.delayReasonId = v.delayReasonId === '__clear' ? null : v.delayReasonId;
+        if (v.noteAdd) data.note = [String(pt?.note || '').trim(), v.noteAdd].filter(Boolean).join('\n');
         if (v.setCables) { const p = state.ctx.points.get(id); data.cableOverride = cableOverrideFor(v.cables, state.ctx, data.typeId || p?.typeId, data.cabinet || p?.cabinet, pid); }
         return { coll: 'points', id, data };
       });
