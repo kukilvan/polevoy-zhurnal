@@ -79,6 +79,9 @@ export function pointsFromDrawing({ drawing = null, buf: preBuf = null, file = n
     h('label', { class: 'field' }, h('span', {}, 'Этаж'), floorIn),
     drawing ? null : h('div', { class: 'btns' }, h('button', { onclick: async () => { const r = await pickPdf({ title: 'Тохнит для разбора' }); if (r) useFile(r); } }, '📂 Выбрать PDF'), input),
     status, out), { sticky: true, onClose: () => wk?.stop() });
+  // только значки (кнопка в плане): окно правки чертежа не показываем — оно появится лишь для проверки перед добавлением
+  const backdrop = out.closest('.backdrop'); if (iconsOnly && backdrop) { backdrop.style.display = 'none'; toast('Читаю чертёж…'); }
+  const showMain = () => { if (backdrop) backdrop.style.display = ''; };
 
   const answers = {}; const remember = new Set();
   let lastQuestions = []; let iconGroups = []; let lastR = null; let pagesInfo = [];  // значки без номеров (добавлены на плане)
@@ -137,7 +140,8 @@ export function pointsFromDrawing({ drawing = null, buf: preBuf = null, file = n
       Promise.all(q.examples.slice(0, 3).map((ex) => cropImg(ex, r.scale))).then((els) => imgs.append(...els)).catch(() => {});
     }
     const openIcons = () => iconsPicker({ wk, pages: pagesInfo, floor: floorIn.value.trim(), sheet: fileName, groups: iconGroups, known: knownPos(r),
-      onDone: (gs) => { iconGroups = gs; render(lastR); if (iconsOnly) { iconsOnly = false; applyNow(); } } });
+      onDone: (gs) => { iconGroups = gs; render(lastR); if (iconsOnly) { iconsOnly = false; showMain(); applyNow(); } },
+      onCancel: () => { if (iconsOnly) close(); } });
     const iconsBtn = h('button', { class: pts.length ? 'sec' : '', onclick: openIcons }, iconGroups.length ? '✏️ Изменить значки' : '🔎 Отметить значки на плане');
     const again = h('button', { onclick: async () => { again.disabled = true; try { await parse(); } catch (e) { status.textContent = e.message; } } }, '🔄 Разобрать с ответами');
     const next = h('button', { class: r.questions.length ? 'sec' : '', onclick: async () => {
@@ -192,7 +196,7 @@ export function pointsFromDrawing({ drawing = null, buf: preBuf = null, file = n
       pagesInfo = o.pages; iconGroups = drawing ? iconGroupsOf(drawing) : [];
       status.textContent = `Прочитано за ${(o.ms / 1000).toFixed(1)} с, листов: ${o.pages.length}`;
       await parse();
-    } catch (e) { status.textContent = `Не получилось прочитать: ${e.message}`; }
+    } catch (e) { status.textContent = `Не получилось прочитать: ${e.message}`; showMain(); }
   }
   input.addEventListener('change', async () => {
     const file = input.files?.[0]; if (!file) return;

@@ -19,7 +19,8 @@ function guessNumbering(labels) {
 
 // wk — фоновый разборщик (open уже сделан); pages — [{w,h}]; floor — этаж; groups — уже добавленные (для повторного открытия / правки)
 // known — места точек, уже найденных по подписям (рамки подписей): их можно закрасить белым, чтобы искать только непронумерованные
-export function iconsPicker({ wk, pages, floor = '', sheet = '', groups = [], onDone, title = '🔎 Значки без номеров', known = [] }) {
+export function iconsPicker({ wk, pages, floor = '', sheet = '', groups = [], onDone, onCancel = null, title = '🔎 Значки без номеров', known = [] }) {
+  let finished = false;
   let hideKnown = known.length > 0;
   // закрашивается ровно рамка подписи; значок, стоящий вплотную к подписи (до 1,5 высоты подписи), при поиске сразу убирается из найденных
   const knownBox = (k, pad = 0.5) => [k.x - (k.w || 6) / 2 - pad, k.y - (k.h || 6) / 2 - pad, k.x + (k.w || 6) / 2 + pad, k.y + (k.h || 6) / 2 + pad];
@@ -73,7 +74,7 @@ export function iconsPicker({ wk, pages, floor = '', sheet = '', groups = [], on
     h('div', { class: 'mut', style: { margin: '6px 0' } }, 'Номера идут по областям: значки, стоящие кучно, — одна область; в ней строками слева направо, сверху вниз; потом следующая область. «1️⃣ Начать отсюда» — с какого значка начать. Пропущенный значок — «➕ Вручную».'),
     h('div', { class: 'btns' }, addBtn, h('button', { class: 'sec', onclick: cancel }, 'Отмена')));
   const list = h('div', {});
-  const finish = h('button', { onclick: () => { if (found) { toast('Сначала «Добавить» или «Отмена» для текущего вида значков'); return; } onDone?.(done); close(); } });
+  const finish = h('button', { onclick: () => { if (found) { toast('Сначала «Добавить» или «Отмена» для текущего вида значков'); return; } finished = true; onDone?.(done); close(); } });
 
   const ordered = () => { if (!found) return []; const its = found.items.filter((_, i) => !off.has(i)); return regionOrder(its, start && its.includes(start) ? start : null); };
   const labelsNow = () => { const o = ordered(); return numberLabels(prefIn.value.trim(), o.length, { from: Math.max(0, parseInt(fromIn.value, 10) || 1), digits: Math.min(6, Math.max(0, parseInt(digIn.value, 10) || 0)) }); };
@@ -151,7 +152,7 @@ export function iconsPicker({ wk, pages, floor = '', sheet = '', groups = [], on
       h('label', { class: 'pickrow', style: { margin: 0 } }, h('input', { type: 'checkbox', checked: hideKnown, onchange: (e) => { hideKnown = e.target.checked; drawAll(); } }), h('span', {}, `Закрасить уже найденные по подписям (${known.length})`))) : null,
     viewer.el, info, form,
     h('div', { class: 'group', style: { margin: '10px 2px 4px' } }, 'Добавлено'), list,
-    h('div', { class: 'btns' }, finish)), { sticky: true, wide: true });
+    h('div', { class: 'btns' }, finish)), { sticky: true, wide: true, onClose: () => { if (!finished) onCancel?.(); } });
   viewer.start().catch((e) => { info.textContent = `Не получилось показать лист: ${e.message}`; });
   refresh();
 }
