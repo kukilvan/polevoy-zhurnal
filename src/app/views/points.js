@@ -454,10 +454,21 @@ function bulkEditForm(ids, done) {
       { key: 'length', label: 'Длина (м на 1 кабель)', type: 'number', hint: 'Пусто — не менять' },
       { key: 'clearLength', label: 'Стереть длину', type: 'checkbox', visible: (v) => v.length === undefined },
       { key: 'delayReasonId', label: 'Причина задержки', type: 'select', options: [{ value: '__clear', label: '✖ Убрать причину' }, ...reasonOptions()], emptyLabel: 'Не менять' },
+      { key: 'configId', label: 'Конфигурация двери', type: 'select', options: [{ value: '__clear', label: '✖ Как в проекте (убрать свою)' }, ...configOptions()], emptyLabel: 'Не менять',
+        hint: 'Меняется только у дверей среди выбранных', visible: () => ids.some((id) => isDoorType(state.ctx.points.get(id)?.typeId)) },
+      { key: 'portFrom', label: 'Порт по порядку: начиная с', type: 'number', hint: 'Пусто — не менять. Номера идут по возрастанию номера точки' },
+      { key: 'portStep', label: 'Шаг порта', type: 'number', visible: (v) => v.portFrom !== undefined },
+      { key: 'clearPort', label: 'Стереть порт', type: 'checkbox', visible: (v) => v.portFrom === undefined },
       { key: 'noteAdd', label: 'Добавить к примечанию', type: 'textarea', hint: 'Допишется к примечанию каждой точки (старое не стирается)' },
     ],
     onSubmit: (v) => {
-      if (!v.cabinet && !v.floor && !v.typeId && !v.setCables && v.length === undefined && !v.clearLength && !v.delayReasonId && !v.noteAdd) { toast('Ничего не выбрано для изменения'); return false; }
+      if (!v.cabinet && !v.floor && !v.typeId && !v.setCables && v.length === undefined && !v.clearLength && !v.delayReasonId && !v.noteAdd && !v.configId && v.portFrom === undefined && !v.clearPort) { toast('Ничего не выбрано для изменения'); return false; }
+      const portOf = new Map();
+      if (v.portFrom !== undefined) {
+        const step = v.portStep === undefined || !(v.portStep > 0) ? 1 : v.portStep;
+        ids.map((id) => state.ctx.points.get(id)).filter(Boolean).sort((a, b) => a.label.localeCompare(b.label, 'ru', { numeric: true }))
+          .forEach((pt, i) => portOf.set(pt.id, String(v.portFrom + i * step)));
+      }
       if (v.length !== undefined && !(v.length >= 0)) { toast('Длина — число метров'); return false; }
       const ops = ids.map((id) => {
         const data = {};
@@ -467,6 +478,8 @@ function bulkEditForm(ids, done) {
         const pt = state.ctx.points.get(id);
         if (v.length !== undefined) data.length = v.length; else if (v.clearLength) data.length = null;
         if (v.delayReasonId) data.delayReasonId = v.delayReasonId === '__clear' ? null : v.delayReasonId;
+        if (portOf.has(id)) data.port = portOf.get(id); else if (v.clearPort) data.port = null;
+        if (v.configId && isDoorType(data.typeId || pt?.typeId)) data.configId = v.configId === '__clear' ? null : v.configId;
         if (v.noteAdd) data.note = [String(pt?.note || '').trim(), v.noteAdd].filter(Boolean).join('\n');
         if (v.setCables) { const p = state.ctx.points.get(id); data.cableOverride = cableOverrideFor(v.cables, state.ctx, data.typeId || p?.typeId, data.cabinet || p?.cabinet, pid); }
         return { coll: 'points', id, data };
