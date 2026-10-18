@@ -42,8 +42,8 @@ function planSheet(project, ctx, points, c, { colors, modelName }) {
   const placed = portsOf(project, ctx, points, c);
   const panels = new Map(panelsInOrder(rack, c.sub).map((x) => [x.u, x]));
   const rows = [
-    [`Проект: ${project.name || ''}`], [`Этаж: ${c.floor || ''}`], [`Шкаф: ${c.name}`], [],
-    ['Unit', ...Array.from({ length: PANEL_PORTS }, (_, i) => i + 1), 'Модель панели'],
+    [`Project: ${project.name || ''}`], [`Floor: ${c.floor || ''}`], [`Cabinet: ${c.name}`], [],
+    ['Unit', ...Array.from({ length: PANEL_PORTS }, (_, i) => i + 1), 'Panel model'],
   ];
   const first = rows.length; const fills = []; const grid = [];
   uOrder(c.sub).forEach((u, ri) => {

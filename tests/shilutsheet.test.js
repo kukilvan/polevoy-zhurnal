@@ -25,7 +25,7 @@ test('список шкафов с планом', () => {
 test('лист плана шкафа: Unit, нумерация, X, цвета', () => {
   const { sheets, warnings } = buildRackSheets(proj(), ctx, pts(), { ...prefs, mode: MODES.split });
   const plan = sheets.find((s) => s.key === '1A|');
-  assert.deepEqual(plan.rows[0], ['Проект: Мега Ор']); assert.deepEqual(plan.rows[2], ['Шкаф: 1A']);
+  assert.deepEqual(plan.rows[0], ['Project: Мега Ор']); assert.deepEqual(plan.rows[2], ['Cabinet: 1A']);
   assert.equal(plan.rows[4][0], 'Unit'); assert.equal(plan.rows[4][1], 1); assert.equal(plan.rows[4].length, 26);
   assert.deepEqual(plan.rows.slice(5).map((r) => r[0]), [10, 9, 8, 7, 6, 5, 4, 3, 2, 1]);   // U1 внизу: сверху U10
   const u9 = plan.rows[6]; assert.equal(u9[1], '1A-C1'); assert.equal(u9[3], 'X'); assert.equal(u9[4], '1A-C3'); assert.equal(u9[25], 'DaTaLink - נחושת');
