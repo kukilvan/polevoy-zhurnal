@@ -15,6 +15,7 @@ import { drawingFor, drawingsOf } from '../drawings.js';
 import { typeMatch, typeFilterOptions, typeFilterValid } from '../typegroups.js';
 import { planModal } from './planmodal.js';
 import { choosePoint } from './pointchooser.js';
+import { panelText, panelOf, parsePanelPorts, panelOccupancy, rackPortsOf, matchesPanelQuery, fmtPanelPort } from '../../domain/rack.js';
 
 const typeOptions = () => [...state.ctx.types.values()].filter((t) => !isSystemType(t)).map((t) => ({ value: t.id, label: t.id }));
 const hasIdType = (id) => hasDeviceId(state.ctx.types.get(id));
@@ -140,14 +141,15 @@ export function pointForm(point, { onDone } = {}) {
     cablesField(point),
     { key: 'length', label: 'Длина (м на 1 кабель)', type: 'number' },
     { key: 'configId', label: 'Конфигурация двери (если отличается от проекта)', type: 'select', options: configOptions(), visible: (v) => isDoorType(v.typeId) && !composedType(v.typeId) },
-    { key: 'port', label: 'Порт' },
+    { key: 'port', label: 'Порт в свитче' },
+    { key: 'panelText', label: 'Порт в панели', hint: 'U панели и порт 1–24, например U38-05. Точке с двумя кабелями cat7 — два порта через запятую: U38-05, U38-06' },
     { ...scanField('serial', 'Серийный номер', 'serial', point?.serial), visible: (v) => hasIdType(v.typeId) },
     { ...scanField('mac', 'MAC', 'mac', point?.mac), visible: (v) => hasIdType(v.typeId) },
     { key: 'delayReasonId', label: 'Причина задержки', type: 'select', options: reasonOptions() },
     { key: 'note', label: 'Примечание', type: 'textarea' },
   ];
   formModal({
-    title: point ? point.label : 'Новая точка', fields, values: point || { typeId: typeOptions()[0]?.value },
+    title: point ? point.label : 'Новая точка', fields, values: point ? { ...point, panelText: panelText(point) } : { typeId: typeOptions()[0]?.value },
     extra: point ? [{ label: 'Удалить', kind: 'danger', onClick: async () => {
       if (!(await confirmDialog(`Удалить точку «${point.label}»? Её можно будет вернуть из истории.`, { yes: 'Удалить', danger: true }))) return false;
       repo.remove(pid, 'points', point.id); toast('Точка удалена'); onDone?.(); return true;
@@ -162,12 +164,20 @@ export function pointForm(point, { onDone } = {}) {
       const dm = mac && findDuplicate(pts, point, 'mac', mac); const ds = serial && findDuplicate(state.ctx.points.values(), point, 'serial', serial);
       if (dm || ds) { toast(`${dm ? 'Такой MAC' : 'Такой серийный номер'} уже у точки ${(dm || ds).label}`); return false; }
       if (v.length !== undefined && !(v.length >= 0)) { toast('Длина должна быть числом'); return false; }
-      repo.save(pid, [{ coll: 'points', id: point?.id, data: {
+      const pp = parsePanelPorts(v.panelText);
+      if (pp.errors.length) { toast(`Порт в панели: ${pp.errors[0]}`); return false; }
+      const busy = panelOccupancy([...state.ctx.points.values()].filter((x) => x.id !== point?.id && (x.cabinet || '') === (v.cabinet || '')));
+      const taken = pp.list.map((x) => ({ x, by: busy.get(`${v.cabinet || ''}|${x.u}|${x.p}`)?.[0]?.point })).find((t) => t.by);
+      if (taken) { toast(`Порт ${fmtPanelPort(taken.x)} в шкафу ${v.cabinet || '(без шкафа)'} уже занят точкой ${taken.by.label}`); return false; }
+      const oldPanel = panelOf(point);
+      const panel = pp.list.map((x) => { const o = oldPanel.find((y) => y.u === x.u && y.p === x.p); return o?.label ? { ...x, label: o.label } : x; });
+      repo.save(pid, [{ coll: 'points', id: point?.id, data: { panel,
         label, planName: v.planName, cabinet: v.cabinet, floor: v.floor, typeId: v.typeId, length: v.length,
         configId: isDoorType(v.typeId) ? v.configId : undefined, port: v.port, serial, mac, delayReasonId: v.delayReasonId, note: v.note,
         ...compData(v.typeId, v.comp), cableOverride: v.cableOverride ?? null,
       } }]);
-      toast(point ? 'Сохранено' : 'Точка добавлена'); onDone?.();
+      const need = rackPortsOf({ ...(point || {}), typeId: v.typeId, cableOverride: v.cableOverride ?? null, ...compData(v.typeId, v.comp) }, state.ctx);
+      toast(panel.length && panel.length !== need ? `Сохранено. Внимание: портов в панели ${panel.length}, а кабелей cat7 у точки ${need}` : point ? 'Сохранено' : 'Точка добавлена'); onDone?.();
     },
   });
 }
@@ -281,7 +291,7 @@ export function pointCard(startPoint, { fromPlan = false } = {}) {
       ['Шкаф / этаж', [p.cabinet && `шкаф ${p.cabinet}`, p.floor && `этаж ${p.floor}`].filter(Boolean).join(', ')],
       ['Тип', p.typeId], ['Состав', compText(p)], ['Имя в плане', p.planName], ['Кабели', `${info.cableList?.length ? cablesText(info.cableList) : info.cable || ''}${Array.isArray(p.cableOverride) ? ' (свои у точки)' : ''}`],
       ['Длина', hasLen ? `${p.length} м на 1 кабель${info.metrage ? ` (всего ${Math.round(info.metrage * 100) / 100} м)` : ''}` : ''],
-      ['Конфигурация', usesConfig(ctx.types.get(p.typeId)) ? cfg?.name : ''], ['Порт', p.port], ['Серийный номер', p.serial], ['MAC', p.mac], ['Причина задержки', p.delayReasonId], ['Примечание', p.note],
+      ['Конфигурация', usesConfig(ctx.types.get(p.typeId)) ? cfg?.name : ''], ['Порт в свитче', p.port], ['Порт в панели', panelText(p)], ['Серийный номер', p.serial], ['MAC', p.mac], ['Причина задержки', p.delayReasonId], ['Примечание', p.note],
     ].filter(([, v]) => v);
     const rows = (ctx.journalByPoint.get(p.id) || []).map((r) => ({ ...r, work: `${ctx.catalog.get(r.workId)?.name || r.action || '?'}${r.action === 'Протяжка' && r.cableId ? ` (${r.cableId})` : ''}` }))
       .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.order - a.order));
@@ -456,9 +466,9 @@ function bulkEditForm(ids, done) {
       { key: 'delayReasonId', label: 'Причина задержки', type: 'select', options: [{ value: '__clear', label: '✖ Убрать причину' }, ...reasonOptions()], emptyLabel: 'Не менять' },
       { key: 'configId', label: 'Конфигурация двери', type: 'select', options: [{ value: '__clear', label: '✖ Как в проекте (убрать свою)' }, ...configOptions()], emptyLabel: 'Не менять',
         hint: 'Меняется только у дверей среди выбранных', visible: () => ids.some((id) => isDoorType(state.ctx.points.get(id)?.typeId)) },
-      { key: 'portFrom', label: 'Порт по порядку: начиная с', type: 'number', hint: 'Пусто — не менять. Номера идут по возрастанию номера точки' },
-      { key: 'portStep', label: 'Шаг порта', type: 'number', visible: (v) => v.portFrom !== undefined },
-      { key: 'clearPort', label: 'Стереть порт', type: 'checkbox', visible: (v) => v.portFrom === undefined },
+      { key: 'portFrom', label: 'Порт в свитче по порядку: начиная с', type: 'number', hint: 'Пусто — не менять. Номера идут по возрастанию номера точки' },
+      { key: 'portStep', label: 'Шаг порта в свитче', type: 'number', visible: (v) => v.portFrom !== undefined },
+      { key: 'clearPort', label: 'Стереть порт в свитче', type: 'checkbox', visible: (v) => v.portFrom === undefined },
       { key: 'noteAdd', label: 'Добавить к примечанию', type: 'textarea', hint: 'Допишется к примечанию каждой точки (старое не стирается)' },
     ],
     onSubmit: (v) => {
@@ -497,7 +507,7 @@ export function meterView(ui) {
   const withLen = total.filter((p) => p.length !== undefined && p.length !== null && p.length !== '').length;
   const bar = h('div', { class: 'card selbar', style: { position: 'sticky', top: '53px', zIndex: 6, margin: '8px 0 0' } });
   const shown = () => pointsSorted().filter((p) => { const q = searchText.trim().toLowerCase();
-    return (!q || `${p.label} ${p.planName ?? ''}`.toLowerCase().includes(q)) && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && typeMatch(fType, p.typeId) && planOk(p); });
+    return (!q || `${p.label} ${p.planName ?? ''} ${panelText(p)}`.toLowerCase().includes(q) || matchesPanelQuery(p, q)) && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && typeMatch(fType, p.typeId) && planOk(p); });
   function updateBar() {
     for (const id of [...selected]) if (!state.ctx.points.has(id)) selected.delete(id);
     bar.style.display = selMode ? '' : 'none';
@@ -519,7 +529,7 @@ export function meterView(ui) {
   function fill() {
     updateBar();
     const q = searchText.trim().toLowerCase();
-    const pts = pointsSorted().filter((p) => (!q || `${p.label} ${p.planName ?? ''}`.toLowerCase().includes(q))
+    const pts = pointsSorted().filter((p) => (!q || `${p.label} ${p.planName ?? ''} ${panelText(p)}`.toLowerCase().includes(q) || matchesPanelQuery(p, q))
       && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && typeMatch(fType, p.typeId) && planOk(p));
     list.replaceChildren();
     if (!pts.length) { list.append(total.length ? h('div', { class: 'empty' }, 'Ничего не найдено') : hint(ui, 'Точек пока нет. Добавьте их пачкой («Точки пачкой») или по одной. Нажмите точку: откроется её карточка с историей работ, там же кнопка «📏 Длина».', 'meter', '📖 Как вносить метраж')); return; }

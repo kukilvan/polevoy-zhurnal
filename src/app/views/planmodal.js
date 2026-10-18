@@ -1,4 +1,5 @@
 // «🗺 План»: чертёж проекта с точками по статусу. Нажал на точку — её карточка; из карточки точки «📍 На чертеже» — сюда же, к ней.
+import { matchesPanelQuery } from '../../domain/rack.js';
 import { pickPdf } from './pdfpick.js';
 import { h, openModal, toast, confirmDialog } from '../ui.js';
 import { state, currentProject, infoOf, getRepo, subscribe } from '../store.js';
@@ -172,9 +173,14 @@ export function planModal({ point = null, placeFor = null } = {}) {
         } });
       const types = [...new Set(sheetPts(d).map((p) => p.typeId))].sort((a, b) => a.localeCompare(b, 'ru'));
       const cabs = [...new Set(sheetPts(d).map((p) => p.cabinet || ''))].filter(Boolean).sort((a, b) => a.localeCompare(b, 'ru', { numeric: true }));
-      const search = h('input', { type: 'search', placeholder: 'Найти точку', style: { flex: 1, minWidth: '120px' }, onchange: (e) => {
+      const search = h('input', { type: 'search', placeholder: 'Найти точку или порт U38-05', style: { flex: 1, minWidth: '120px' }, onchange: (e) => {
         const q = e.target.value.trim().toLowerCase(); if (!q) return;
-        const p = sheetPts(d).find((x) => x.label.toLowerCase() === q) || sheetPts(d).find((x) => x.label.toLowerCase().includes(q));
+        let p = sheetPts(d).find((x) => x.label.toLowerCase() === q);
+        if (!p) {  // по порту панели (U38-05): сначала в выбранном шкафу
+          const byPort = sheetPts(d).filter((x) => matchesPanelQuery(x, q)).sort((a, b) => (b.cabinet === fCab) - (a.cabinet === fCab));
+          if (byPort.length) { p = byPort[0]; toast(byPort.length > 1 ? `Порт ${q.toUpperCase()} есть в шкафах: ${byPort.map((x) => `${x.cabinet || '—'} (${x.label})`).join(', ')}. Показана ${p.label}` : `Порт в панели ${q.toUpperCase()}: ${p.label}`); }
+        }
+        p ??= sheetPts(d).find((x) => x.label.toLowerCase().includes(q));
         if (!p) { toast('Такой точки на этом чертеже нет'); return; }
         focusId = p.id; viewer.focus(p.pos.x, p.pos.y, p.pos.page || 0);
       } });

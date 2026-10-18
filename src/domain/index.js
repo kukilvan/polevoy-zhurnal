@@ -16,3 +16,4 @@ export * from './pointsimport.js';
 export * from './typelib.js';
 export * from './plan.js';
 export * from './pool.js';
+export * from './rack.js';
