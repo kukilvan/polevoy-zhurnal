@@ -9,6 +9,7 @@ import {
 } from '../../domain/rack.js';
 import { pointCard } from './points.js';
 import { shilutSettings, panelModels, modelName } from './shilutsettings.js';
+import { rackTableCard } from './racktable.js';
 
 let openCab = null;   // открытый шкаф
 let moving = null;    // перенос порта: { id, i }
@@ -51,8 +52,9 @@ export function racksView(ui) {
   const cabs = [...byCab.keys()].filter(Boolean).sort(sortRu);
   const noCab = byCab.get('');
   return h('div', {},
-    h('div', { class: 'mut', style: { margin: '0 2px 10px' } }, 'План шкафа: в каких панелях (U) и портах стоят точки с кабелями cat7. Порт попадает в поле точки «Порт в панели». Таблица для шильюта — следующим шагом.'),
+    h('div', { class: 'mut', style: { margin: '0 2px 10px' } }, 'План шкафа: в каких панелях (U) и портах стоят точки с кабелями cat7. Порт попадает в поле точки «Порт в панели».'),
     h('div', { class: 'btns', style: { margin: '0 0 8px' } }, h('button', { class: 'sec', onclick: () => shilutSettings(ui) }, '🎨 Настройки шильюта: модели панелей, цвета, подписи')),
+    rackTableCard(ui),
     noCab ? h('div', { class: 'card l-warn' }, `Точек cat7 без шкафа: ${noCab.pts} — их нельзя поставить в панель, пока не указан шкаф.`) : null,
     h('div', { class: 'card', style: { padding: 0 } }, cabs.length ? cabs.map((c) => {
       const x = byCab.get(c); const r = rackOf(p, c);

@@ -161,7 +161,7 @@ export function createShell({ user, onLogout, diag }) {
       const timer = setInterval(() => {
         tries += 1;
         let ok = false; try { ok = !!JSON.parse(localStorage.getItem('pz_gtoken') || 'null'); } catch { /* ok */ }
-        if (ok && state.projectsLoaded && currentProject() && ready()) { clearInterval(timer); const what = localStorage.getItem(PENDING); localStorage.removeItem(PENDING); (what === 'backup' ? backupNow : what === 'folders' ? organizeDrive : what === 'mfolder' ? () => import('./views/managersfolder.js').then((m) => m.updateManagersFolder()) : what === 'drawing' ? () => {} : what.startsWith('table:') ? () => updateTable(what.slice(6)) : updateManagerTable)(); }
+        if (ok && state.projectsLoaded && currentProject() && ready()) { clearInterval(timer); const what = localStorage.getItem(PENDING); localStorage.removeItem(PENDING); (what === 'backup' ? backupNow : what === 'folders' ? organizeDrive : what === 'mfolder' ? () => import('./views/managersfolder.js').then((m) => m.updateManagersFolder()) : what === 'drawing' ? () => {} : what === 'racks' ? () => import('./views/racktable.js').then((m) => m.generateRackTable()) : what.startsWith('table:') ? () => updateTable(what.slice(6)) : updateManagerTable)(); }
         else if (tries > 60) { clearInterval(timer); localStorage.removeItem(PENDING); }
       }, 500);
     }
