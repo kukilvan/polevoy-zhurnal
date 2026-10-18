@@ -159,3 +159,7 @@ html, body { overflow-x: hidden; }
 .qtyrow input.qty { width: 56px; flex: none; text-align: center; }
 .qtyrow button.x { flex: none; padding: 8px 12px; }
 .dev-edit { border-left: 3px solid var(--acc); margin: 2px 0 10px 8px; padding: 6px 0 6px 10px; display: flex; flex-direction: column; gap: 4px; }
+
+/* шкаф: телефон — 4 строки по 6 портов, компьютер — все 24 в одну линию (как панель) */
+.rackgrid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; margin-top: 8px; }
+@media (min-width: 1000px) { .rackgrid { grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 3px; } .wrap.wide { max-width: 1500px; } }

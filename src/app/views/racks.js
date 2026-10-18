@@ -245,7 +245,7 @@ function rackEditor(ui, cab) {
             if (!(await confirmDialog(`Удалить панель U${pnl.u}?${on.length ? ` Точки на ней (${on.length}) станут нерасставленными.` : ''}`, { yes: 'Удалить', danger: true }))) return;
             saveRack(cab, { ...r, panels: (r.panels || []).filter((x) => x.u !== pnl.u) }); savePanels(on.map((pt) => [pt.id, []])); setTimeout(() => ui.render(), 200);
           } }, '🗑'))),
-      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(62px, 1fr))', gap: '4px', marginTop: '8px' } }, ...cells));
+      h('div', { class: 'rackgrid' }, ...cells));
   };
   const byType = new Map(); free.forEach((pt) => byType.set(pt.typeId, (byType.get(pt.typeId) || 0) + 1));
   return h('div', {}, back,

@@ -144,7 +144,7 @@ export function createShell({ user, onLogout, diag }) {
         pendingBadge(),
         h('span', { class: `pill ${state.online ? 'ok' : 'warn'}` }, state.online ? 'онлайн' : 'офлайн'),
         ui.screen ? null : h('button', { class: 'sec', onclick: menu }, '⋯')),
-      h('div', { class: 'wrap' }, invitesBanner(), content()),
+      h('div', { class: ui.screen === 'racks' ? 'wrap wide' : 'wrap' }, invitesBanner(), content()),
       h('nav', {}, TABS.map(([id, label, icon]) => h('button', { class: !ui.screen && ui.tab === id ? 'on' : '', onclick: () => go(id) }, icon, h('br'), h('small', {}, label)))));
   }
 
