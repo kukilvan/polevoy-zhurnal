@@ -34,7 +34,7 @@ test('лист плана шкафа: Unit, нумерация, X, цвета', 
   assert.ok(plan.fills.some((f) => f.bg === '#2fb350'));                      // камеры зелёные
   assert.ok(warnings.some((w) => w.includes('Не выбран цвет') === false) || true);
 });
-test('лист шильюта, режим split: столбцы по панелям, пустые места, зазоры', () => {
+test('лист шильюта, режим split: столбцы по панелям, без пропусков строк, зазоры', () => {
   const { sheets } = buildRackSheets(proj(), ctx, pts(), { ...prefs, mode: MODES.split });
   const sl = sheets.find((s) => s.kind === 'shilut');
   assert.equal(sl.rtl, true); assert.equal(sl.title, 'שילוט');
@@ -42,7 +42,8 @@ test('лист шильюта, режим split: столбцы по панел�
   const hdr = sl.rows[1].slice(1); assert.deepEqual(hdr, [HE_TOTAL, HE_TOTAL, '', HE_TOTAL, '', '', HE_TOTAL]);
   assert.deepEqual(sl.rows[3].slice(1), ['ירוק', 'ירוק', '', 'אדום', '', '', 'ירוק']);
   assert.deepEqual(sl.rows[2].slice(1), ['DaTaLink - נחושת', 'DaTaLink - נחושת', '', 'Other', '', '', 'DaTaLink - נחושת']);
-  const col1 = sl.rows.slice(4).map((r) => r[1]); assert.deepEqual(col1.slice(0, 5), ['1A-C1', '1A-C2', 'X', '1A-C3', '']);
+  const col1 = sl.rows.slice(4).map((r) => r[1]); assert.deepEqual(col1.slice(0, 5), ['1A-C1', '1A-C2', '1A-C3', '', '']);   // закрытый порт и пропуски не попадают в подписи
+  assert.ok(!sl.rows.flat().includes('X'));
   assert.equal(sl.rows.length, 4 + 24);
 });
 test('лист шильюта, режим fill: по 24 одного типа через шкафы, без пропусков', () => {
@@ -65,4 +66,11 @@ test('выбор шкафов и предупреждения', () => {
   assert.ok(r.warnings.some((w) => w.includes('модель')));
   const r3 = buildRackSheets(proj({ typeColors: { Камера: '' } }), ctx, [mk('Камера', 'X1', '1A', 9, 1)], { ...prefs, cabs: ['1A|'] });
   assert.ok(!r3.warnings.some((w) => w.includes('цвет')));
+});
+test('смешанные типы в одной панели — отдельные столбцы, подписи подряд', () => {
+  const p = proj(); p.racks['1A'].blocked = [];
+  const mixed = [mk('Камера', 'C1', '1A', 9, 1), mk('Вайфай', 'AP1', '1A', 9, 2), mk('Камера', 'C2', '1A', 9, 5), mk('Вайфай', 'AP2', '1A', 9, 9)];
+  const sl = buildRackSheets(p, ctx, mixed, { ...prefs, mode: MODES.split }).sheets.find((s) => s.kind === 'shilut');
+  assert.deepEqual(sl.rows[3].slice(1), ['ירוק', '', 'אדום']);
+  assert.deepEqual(sl.rows.slice(4, 7).map((r) => r[1]), ['C1', 'C2', '']); assert.deepEqual(sl.rows.slice(4, 7).map((r) => r[3]), ['AP1', 'AP2', '']);
 });

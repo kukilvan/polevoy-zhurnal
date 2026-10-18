@@ -70,21 +70,20 @@ function planSheet(project, ctx, points, c, { colors, modelName }) {
 
 // ---------- лист шильюта ----------
 // Режим fill: все точки одного типа из выбранных шкафов подряд по 24 в столбце, без пропусков; 1 пустой столбец между типами.
-// Режим split: как стоит в панелях — столбец на каждую панель (и тип), пустые места сохраняются; 1 пустой столбец между типами, 2 между шкафами.
+// Режим split: как стоит в панелях — столбец на каждую панель (и тип); подписи подряд без пропусков строк; 1 пустой столбец между типами, 2 между шкафами.
 function shilutSheet(project, ctx, points, cabs, { mode, colors, modelName }) {
   const sh = shilutOf(project); const defModel = modelName(sh.panelModel) || '';
   const colorHe = (typeId) => typeColorOf(project, typeId, colors);
   const cols = []; // { gap: n } или { typeId, model, cells: [24] }
   if (mode === MODES.split) {
     cabs.forEach((c, ci) => {
-      const placed = portsOf(project, ctx, points, c); const blocked = blockedOf(c.rack);
+      const placed = portsOf(project, ctx, points, c);
       const typeOrder = []; const byType = new Map();
       panelsInOrder(c.rack, c.sub).forEach((pn) => {
         const here = new Map();
-        for (let p = 1; p <= PANEL_PORTS; p++) { const at = placed.get(`${pn.u}|${p}`); if (at) { if (!here.has(at.pt.typeId)) here.set(at.pt.typeId, []); here.get(at.pt.typeId).push([p, at.label]); } }
+        for (let p = 1; p <= PANEL_PORTS; p++) { const at = placed.get(`${pn.u}|${p}`); if (at) { if (!here.has(at.pt.typeId)) here.set(at.pt.typeId, []); here.get(at.pt.typeId).push(at.label); } }
         for (const [t, list] of here) {
-          const cells = Array(PANEL_PORTS).fill(''); list.forEach(([p, l]) => { cells[p - 1] = l; });
-          for (let p = 1; p <= PANEL_PORTS; p++) if (blocked.has(`${c.sid}|${pn.u}|${p}`)) cells[p - 1] = cells[p - 1] || 'X';
+          const cells = [...list, ...Array(PANEL_PORTS - list.length).fill('')];   // подписи всегда подряд с первой строки, закрытые порты и пустые места не учитываются
           if (!byType.has(t)) { byType.set(t, []); typeOrder.push(t); }
           byType.get(t).push({ typeId: t, model: modelName(pn.m || sh.panelModel) || defModel, cells });
         }
