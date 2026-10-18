@@ -18,7 +18,11 @@ function guessNumbering(labels) {
 }
 
 // wk — фоновый разборщик (open уже сделан); pages — [{w,h}]; floor — этаж; groups — уже добавленные (для повторного открытия / правки)
-export function iconsPicker({ wk, pages, floor = '', sheet = '', groups = [], onDone, title = '🔎 Значки без номеров' }) {
+// known — места точек, уже найденных по подписям (рамки подписей): их можно закрасить белым, чтобы искать только непронумерованные
+export function iconsPicker({ wk, pages, floor = '', sheet = '', groups = [], onDone, title = '🔎 Значки без номеров', known = [] }) {
+  let hideKnown = known.length > 0; let spread = 2;  // насколько шире подписи закрашивать (в высотах подписи)
+  const knownBox = (k) => { const pad = Math.max(2, (k.h || 6) * spread); return [k.x - (k.w || 6) / 2 - pad, k.y - (k.h || 6) / 2 - pad, k.x + (k.w || 6) / 2 + pad, k.y + (k.h || 6) / 2 + pad]; };
+  const inKnown = (it) => hideKnown && known.some((k) => (k.page || 0) === (it.page || 0) && (() => { const b = knownBox(k); return it.x >= b[0] && it.x <= b[2] && it.y >= b[1] && it.y <= b[3]; })());
   let mode = 'pick'; let found = null; let off = new Set(); let start = null; let editing = null; // текущий вид значка
   const done = groups.map((g) => ({ ...g, points: g.points.map((p) => ({ ...p })) }));
   const faded = () => mode === 'pick' || mode === 'add';  // ищем новые — уже добавленные бледные, чтобы не мешали
@@ -26,6 +30,10 @@ export function iconsPicker({ wk, pages, floor = '', sheet = '', groups = [], on
     onRect: (b, page) => { found.items.forEach((it, i) => { if ((it.page || 0) === page && it.x >= b[0] && it.x <= b[2] && it.y >= b[1] && it.y <= b[3]) off.add(i); }); refresh(); },
     overlay: (g, api) => {
       const pg = api.page; const m = (it, c, l, o) => { if ((it.page || 0) === pg) mark(g, api, it, c, l, o); };
+      if (hideKnown) {  // уже найденные по подписям — закрашены белым
+        g.fillStyle = '#fff'; g.strokeStyle = 'rgba(48,209,88,.7)'; g.lineWidth = 1;
+        known.forEach((k) => { if ((k.page || 0) !== pg) return; const b = knownBox(k); const [x0, y0] = api.toScr(b[0], b[1]); const [x1, y1] = api.toScr(b[2], b[3]); g.fillRect(x0, y0, x1 - x0, y1 - y0); g.strokeRect(x0, y0, x1 - x0, y1 - y0); });
+      }
       done.forEach((gr, i) => gr.points.forEach((p) => {
         if (!faded()) { m(p.pos, COLORS[i % COLORS.length], p.label); return; }
         if ((p.pos.page || 0) !== pg) return;
@@ -127,7 +135,9 @@ export function iconsPicker({ wk, pages, floor = '', sheet = '', groups = [], on
         const add = r.items.filter((it) => !found.items.some((f) => Math.hypot(f.x - it.x, f.y - it.y) < 2)); found.items.push(...add);
       } else if (found && editing) { found.items.push(...r.items.filter((it) => !found.items.some((f) => Math.hypot(f.x - it.x, f.y - it.y) < 2))); }
       else { found = r; off = new Set(); start = null; if (r.text && !prefIn.value) prefIn.value = /^[A-Za-z]{1,3}\d?$/.test(r.text) ? r.text : ''; }
+      let hid = 0; found.items.forEach((it, i) => { if (!off.has(i) && inKnown(it)) { off.add(i); hid++; } });  // рядом с уже найденными по подписям — сразу убраны
       refresh(); setMode('off');
+      if (hid) toast(`Найдено: ${r.items.length}, из них ${hid} — у точек, уже найденных по подписям (убраны, вернуть можно «🚫»).`); else
       toast(`Найдено: ${r.items.length}. Лишние (легенда, детали) — уберите нажатием или рамкой.`);
     } catch (e) { info.textContent = `Не получилось: ${e.message}`; }
   }
@@ -135,7 +145,11 @@ export function iconsPicker({ wk, pages, floor = '', sheet = '', groups = [], on
   const pageSel = pages.length > 1 ? h('select', { onchange: (e) => { viewer.load(+e.target.value); } }, pages.map((_, i) => h('option', { value: i }, `Лист ${i + 1}`))) : null;
   const close = openModal(title, h('div', {},
     h('div', { class: 'mut' }, `${sheet ? `${sheet}. ` : ''}1) Нажмите на значок — приложение найдёт такие же. 2) Лишние уберите: «🚫» нажатием или «▭» рамкой (легенда, детали); пропущенные — «➕ Вручную». 3) Тип, кабели, буквы номера → «Добавить». Повторите для других значков; ✏️ — поправить добавленные.`),
-    pageSel, tools, viewer.el, info, form,
+    pageSel, tools,
+    known.length ? h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', margin: '6px 0' } },
+      h('label', { class: 'pickrow', style: { margin: 0 } }, h('input', { type: 'checkbox', checked: hideKnown, onchange: (e) => { hideKnown = e.target.checked; drawAll(); } }), h('span', {}, `Закрасить уже найденные по подписям (${known.length})`)),
+      h('select', { style: { width: 'auto' }, onchange: (e) => { spread = +e.target.value; drawAll(); } }, [[0.4, 'только подпись'], [2, 'подпись и рядом'], [4, 'шире'], [7, 'ещё шире']].map(([v, t]) => h('option', { value: v, selected: v === spread }, t)))) : null,
+    viewer.el, info, form,
     h('div', { class: 'group', style: { margin: '10px 2px 4px' } }, 'Добавлено'), list,
     h('div', { class: 'btns' }, finish)), { sticky: true, wide: true });
   viewer.start().catch((e) => { info.textContent = `Не получилось показать лист: ${e.message}`; });

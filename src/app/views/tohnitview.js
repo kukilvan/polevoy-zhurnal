@@ -107,6 +107,12 @@ export function pointsFromDrawing({ drawing = null, buf: preBuf = null, file = n
     g.strokeRect(pad * zoom - 4, pad * zoom - 4, (ex.x1 - ex.x0) * zoom + 8, (ex.y1 - ex.y0) * zoom + 8);
     return cv;
   }
+  // места точек, уже найденных по подписям (этот разбор + точки проекта на этом чертеже), — для «закрасить» в поиске значков
+  function knownPos(r) {
+    const out = r.data.points.map((p) => p.pos).filter(Boolean);
+    if (drawing) [...state.ctx.points.values()].forEach((p) => { if (p.pos && drawingFor(p)?.id === drawing.id && !String(p.note || '').includes('значок без номера')) out.push(p.pos); });
+    return out;
+  }
   function render(r) {
     const pts = [...r.data.points, ...iconPts()]; const byType = {};
     pts.forEach((p) => { byType[p.typeId] = (byType[p.typeId] || 0) + 1; });
@@ -166,7 +172,7 @@ export function pointsFromDrawing({ drawing = null, buf: preBuf = null, file = n
       r.questions.length ? h('div', {}, h('b', { class: 'l-warn' }, `Вопросы (${r.questions.length}) — ответьте и нажмите «Разобрать с ответами»`), qBox, h('div', { class: 'btns' }, again)) : null,
       h('div', { class: 'card', style: { margin: '10px 0' } }, h('b', {}, '🔎 Значки без номеров'),
         h('div', { class: 'mut', style: { margin: '4px 0' } }, iconGroups.length ? `Добавлено: ${iconGroups.map((gr) => `${gr.typeId} ${gr.points.length}`).join(', ')}` : 'Если точки на чертеже — только значки (без подписей), отметьте их на плане: нажали на значок → нашлись такие же → номера по порядку.'),
-        h('div', { class: 'btns' }, h('button', { class: pts.length ? 'sec' : '', onclick: () => iconsPicker({ wk, pages: pagesInfo, floor: floorIn.value.trim(), sheet: fileName, groups: iconGroups,
+        h('div', { class: 'btns' }, h('button', { class: pts.length ? 'sec' : '', onclick: () => iconsPicker({ wk, pages: pagesInfo, floor: floorIn.value.trim(), sheet: fileName, groups: iconGroups, known: knownPos(r),
           onDone: (gs) => { iconGroups = gs; render(lastR); } }) }, iconGroups.length ? '✏️ Изменить значки' : '🔎 Отметить значки на плане'))),
       drawing ? null : h('label', { class: 'pickrow', style: { margin: '8px 0' } }, keepPdf, h('span', {}, '📌 Сохранить чертёж в проект — «🗺 План» и «📍 На чертеже» в карточке точки')),
       h('div', { class: 'btns' }, next)].filter(Boolean));
