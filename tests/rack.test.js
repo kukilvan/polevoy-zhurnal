@@ -70,3 +70,32 @@ test('секции шкафа', () => {
   const r = af2([{ id: 'c', label: 'C', typeId: 'Cam' }], ctx1, [{ u: 10, s: 's2' }], new Set(['s2|10|1']));
   assert.deepEqual(r.assign.get('c'), [{ s: 's2', u: 10, p: 2 }]);
 });
+import { blockPort, unblockPort, blockedOf, autoFill as af3, rackProblems as rp3 } from '../src/domain/rack.js';
+test('закрытые порты: точки сдвигаются, лишние становятся нерасставленными', () => {
+  const mk = (n, ps) => ({ id: `c${n}`, label: `C${n}`, typeId: 'Cam', cabinet: 'X', panel: ps.map((p) => ({ u: 5, p })) });
+  const rack = { height: 42, panels: [{ u: 5 }] };
+  // порты 1..3 заняты, порт 24 тоже; закрываем 2
+  const pts = [mk(1, [1]), mk(2, [2]), mk(3, [3]), mk(4, [24])];
+  const r = blockPort(rack, pts, 'X', { u: 5, p: 2 });
+  assert.deepEqual(r.rack.blocked, [{ u: 5, p: 2 }]);
+  assert.deepEqual(r.writes.get('c2'), [{ u: 5, p: 3 }]); assert.deepEqual(r.writes.get('c3'), [{ u: 5, p: 4 }]);
+  assert.ok(!r.writes.has('c1') && !r.writes.has('c4')); assert.equal(r.dropped.length, 0);
+  // панель забита целиком — последняя точка не помещается
+  const full = Array.from({ length: 24 }, (_, i) => mk(i + 1, [i + 1]));
+  const r2 = blockPort(rack, full, 'X', { u: 5, p: 10 });
+  assert.deepEqual(r2.dropped.map((x) => x.id), ['c24']); assert.deepEqual(r2.writes.get('c24'), []);
+  assert.deepEqual(r2.writes.get('c10'), [{ u: 5, p: 11 }]);
+  // точка на 2 порта (5,6): закрыли 6 → переезжает на 7-8
+  const two = { id: 'w', label: 'W', typeId: 'AP2', cabinet: 'X', panel: [{ u: 5, p: 5 }, { u: 5, p: 6 }] };
+  assert.deepEqual(blockPort(rack, [two], 'X', { u: 5, p: 6 }).writes.get('w'), [{ u: 5, p: 7 }, { u: 5, p: 8 }]);
+  // секции: тот же U в другой секции не затрагивается
+  const sx = { id: 's', label: 'S', typeId: 'Cam', cabinet: 'X', panel: [{ u: 5, p: 2, s: 'b' }] };
+  assert.equal(blockPort(rack, [sx], 'X', { u: 5, p: 2 }).writes.size, 0);
+  assert.deepEqual(blockPort(rack, [sx], 'X', { u: 5, p: 2, s: 'b' }).writes.get('s'), [{ u: 5, p: 3, s: 'b' }]);
+  // автораскладка и проверки учитывают крестики
+  const ctx = { cables: new Map([['cat7', {}]]), types: new Map([['Cam', { cables: [{ cable: 'cat7', count: 1 }] }]]), configs: new Map() };
+  const a = af3([{ id: 'n', label: 'N', typeId: 'Cam' }], ctx, [{ u: 5 }], new Set(), { blocked: blockedOf({ blocked: [{ u: 5, p: 1 }, { u: 5, p: 2 }] }) });
+  assert.deepEqual(a.assign.get('n'), [{ u: 5, p: 3 }]);
+  assert.ok(rp3({ height: 42, panels: [{ u: 5 }], blocked: [{ u: 5, p: 1 }] }, [mk(9, [1])], ctx).some((t) => t.includes('закрыт')));
+  assert.equal(unblockPort(r.rack, { u: 5, p: 2 }).blocked.length, 0);
+});

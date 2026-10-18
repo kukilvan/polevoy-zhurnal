@@ -15,7 +15,7 @@ import { drawingFor, drawingsOf } from '../drawings.js';
 import { typeMatch, typeFilterOptions, typeFilterValid } from '../typegroups.js';
 import { planModal } from './planmodal.js';
 import { choosePoint } from './pointchooser.js';
-import { panelText, panelOf, parsePanelPorts, panelOccupancy, rackPortsOf, matchesPanelQuery, fmtPanelPort, slotKey, subsOf, subNameOf } from '../../domain/rack.js';
+import { panelText, panelOf, parsePanelPorts, panelOccupancy, rackPortsOf, matchesPanelQuery, fmtPanelPort, slotKey, subsOf, subNameOf, blockedOf } from '../../domain/rack.js';
 
 const typeOptions = () => [...state.ctx.types.values()].filter((t) => !isSystemType(t)).map((t) => ({ value: t.id, label: t.id }));
 const hasIdType = (id) => hasDeviceId(state.ctx.types.get(id));
@@ -171,6 +171,8 @@ export function pointForm(point, { onDone } = {}) {
       const badSub = pp.list.find((x) => x.sub && !subs.some((q) => q.name.toLowerCase() === x.sub.toLowerCase()));
       if (badSub) { toast(`Порт в панели: у шкафа ${v.cabinet || '—'} нет секции «${badSub.sub}» (есть: ${subs.map((q) => q.name).join(', ')})`); return false; }
       const slots = pp.list.map(({ sub, ...x }) => { const sid = sub ? subs.find((q) => q.name.toLowerCase() === sub.toLowerCase()).id : ''; return sid ? { ...x, s: sid } : x; });
+      const closed = blockedOf(currentProject().racks?.[v.cabinet || '']); const bx = slots.find((x) => closed.has(slotKey(x)));
+      if (bx) { toast(`Порт ${fmtPanelPort(bx, subNameOf(currentProject(), v.cabinet || '', bx.s))} закрыт крестиком`); return false; }
       const taken = slots.map((x) => ({ x, by: busy.get(`${v.cabinet || ''}|${slotKey(x)}`)?.[0]?.point })).find((t) => t.by);
       if (taken) { toast(`Порт ${fmtPanelPort(taken.x, subNameOf(currentProject(), v.cabinet || '', taken.x.s))} в шкафу ${v.cabinet || '(без шкафа)'} уже занят точкой ${taken.by.label}`); return false; }
       const oldPanel = panelOf(point);

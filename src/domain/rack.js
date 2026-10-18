@@ -88,8 +88,8 @@ export function cabinetFloor(points) {
 }
 // Разложить точки (уже в нужном порядке) по панелям (в нужном порядке) с порта start первой панели; занятые порты пропускаются.
 // Порты одной точки — подряд в одной панели (если не влезает в остаток панели — со следующей). → { assign: Map(id → [{u,p}]), left: [точки] }
-export function autoFill(points, ctx, panels, occupied, { start = 1 } = {}) {
-  const busy = new Set(occupied); const assign = new Map(); const left = [];
+export function autoFill(points, ctx, panels, occupied, { start = 1, blocked = [] } = {}) {
+  const busy = new Set([...occupied, ...blocked]); const assign = new Map(); const left = [];
   let pi = 0; let port = start;
   for (const pt of points) {
     const n = rackPortsOf(pt, ctx); let done = false;
@@ -109,6 +109,41 @@ export function autoFill(points, ctx, panels, occupied, { start = 1 } = {}) {
   }
   return { assign, left };
 }
+// ---------- закрытые порты (крестик: в них точки не ставятся) ----------
+// rack.blocked = [{ u, p, s? }]
+export const blockedOf = (rack) => new Set((rack?.blocked || []).map(slotKey));
+export const isBlocked = (rack, x) => blockedOf(rack).has(slotKey(x));
+export const unblockPort = (rack, x) => ({ ...rack, blocked: (rack.blocked || []).filter((b) => slotKey(b) !== slotKey(x)) });
+// Закрыть порт панели. Точки этой панели, что стояли на нём или мешают, сдвигаются вперёд на ближайшие свободные порты
+// (порядок сохраняется); кому не хватило места в панели — становятся нерасставленными (panel = []).
+// → { rack, writes: Map(id → panel[]), dropped: [точки] }
+export function blockPort(rack, points, cabinet, { s = '', u, p }) {
+  const sec = s || '';
+  const nb = sec ? { s: sec, u, p } : { u, p };
+  const nextRack = { ...rack, blocked: [...(rack?.blocked || []).filter((b) => slotKey(b) !== slotKey(nb)), nb] };
+  const blocked = blockedOf(nextRack);
+  const here = (x) => (x.s || '') === sec && x.u === u;
+  const units = points.filter((pt) => (pt.cabinet || '') === cabinet && panelOf(pt).some(here)).map((pt) => {
+    const arr = panelOf(pt).map((x) => ({ ...x }));
+    const idx = arr.map((x, i) => (here(x) ? i : -1)).filter((i) => i >= 0).sort((a, b) => arr[a].p - arr[b].p);
+    return { pt, arr, idx, first: arr[idx[0]].p };
+  }).sort((a, b) => a.first - b.first);
+  const taken = new Set(); const writes = new Map(); const dropped = [];
+  for (const un of units) {
+    const k = un.idx.length;
+    const ok = (ports) => ports.every((q) => q >= 1 && q <= PANEL_PORTS && !taken.has(q) && !blocked.has(slotKey({ s: sec, u, p: q })));
+    let ports = un.idx.map((i) => un.arr[i].p);
+    if (!ok(ports)) {
+      let st = un.first; while (st + k - 1 <= PANEL_PORTS && !ok(Array.from({ length: k }, (_, j) => st + j))) st++;
+      ports = st + k - 1 <= PANEL_PORTS ? Array.from({ length: k }, (_, j) => st + j) : null;
+    }
+    if (!ports) { dropped.push(un.pt); writes.set(un.pt.id, []); continue; }
+    ports.forEach((q) => taken.add(q));
+    if (ports.some((q, j) => q !== un.arr[un.idx[j]].p)) { un.idx.forEach((i, j) => { un.arr[i].p = ports[j]; }); writes.set(un.pt.id, un.arr); }
+  }
+  return { rack: nextRack, writes, dropped };
+}
+
 // Проверки плана шкафа: занятые дважды порты, точки на несуществующих панелях, панели вне шкафа и на одном U, число портов ≠ cat7
 export function rackProblems(rack, points, ctx, cabinet = '') {
   const out = [];
@@ -123,8 +158,10 @@ export function rackProblems(rack, points, ctx, cabinet = '') {
     if (sub?.height && (x.u < 1 || x.u > sub.height)) out.push(`Панель ${nm(x.s)}U${x.u} вне шкафа (${sub.height}U)`);
   });
   panelConflicts(points).forEach((c) => out.push(`Порт ${fmtPanelPort(c, nm(c.s).trim())} занят несколькими точками: ${c.points.map((p) => p.label).join(', ')}`));
+  const blockedSet = blockedOf(rack);
   points.forEach((pt) => {
     const pl = panelOf(pt); if (!pl.length) return;
+    const onX = pl.filter((x) => blockedSet.has(slotKey(x))); if (onX.length) out.push(`${pt.label}: ${onX.map((x) => fmtPanelPort(x, nm(x.s).trim())).join(', ')} — порт закрыт крестиком`);
     const bad = pl.filter((x) => !us.has(`${x.s || ''}|${x.u}`)); if (bad.length) out.push(`${pt.label}: ${bad.map((x) => fmtPanelPort(x, nm(x.s).trim())).join(', ')} — такой панели в плане нет`);
     const n = rackPortsOf(pt, ctx); if (pl.length !== n) out.push(`${pt.label}: портов в панели ${pl.length}, а кабелей cat7 ${n}`);
   });
