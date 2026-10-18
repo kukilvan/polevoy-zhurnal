@@ -111,3 +111,10 @@ test('подписи шильюта: шаблоны, убрать шкаф, ру
   assert.equal(contrastFg('#ffd60a'), '#000'); assert.equal(contrastFg('#111111'), '#fff');
   assert.equal(typeColorOf({ shilut: { typeColors: { Камера: '' } } }, 'Камера').id, 'green');
 });
+test('убрать название шкафа — у каждого шкафа отдельно', () => {
+  const ctx = { cables: new Map([['cat7', {}]]), types: new Map([['Cam', { cables: [{ cable: 'cat7', count: 1 }] }]]), configs: new Map() };
+  const mk = (cab) => ({ id: cab, label: `${cab}-C5`, typeId: 'Cam', cabinet: cab, panel: [{ u: 1, p: 1 }] });
+  const proj = { shilut: { dropCabs: { '1A': true, '2B': false } } };
+  assert.equal(shilutLabel(mk('1A'), 0, proj, ctx), 'C5'); assert.equal(shilutLabel(mk('2B'), 0, proj, ctx), '2B-C5');
+  assert.equal(shilutLabel(mk('3C'), 0, { shilut: { dropCab: true } }, ctx), 'C5');
+});

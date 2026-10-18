@@ -203,6 +203,8 @@ export function contrastFg(bg) {
 // project.shilut = { panelModel, typeColors: {тип: id цвета}, cabNames: {'шкаф|секция': имя}, dropCab, tpl: {тип: шаблон} }
 // В prefs пользователя: panelModels: [{ id, name }], shilutColors: [{ id, ru, he, bg, fg }]
 export const shilutOf = (project) => project?.shilut || {};
+// Убирать ли название шкафа из подписей: у каждого шкафа своя настройка (dropCabs), общая dropCab — запасная
+export const dropCabOf = (project, cab) => { const sh = shilutOf(project); return sh.dropCabs?.[cab] ?? !!sh.dropCab; };
 export const shilutCabName = (project, cabinet, sid = '') => shilutOf(project).cabNames?.[`${cabinet}|${sid || ''}`]
   || subNameOf(project, cabinet, sid) || subsOf(project?.racks?.[cabinet], cabinet).find((x) => (x.id || '') === (sid || ''))?.name || cabinet;
 const stripCab = (txt, cab) => (cab && (txt.startsWith(`${cab}-`) || txt.startsWith(`${cab}/`)) ? txt.slice(cab.length + 1) : txt);
@@ -211,7 +213,7 @@ export function shilutLabel(point, i, project, ctx) {
   const e = panelOf(point)[i]; if (e?.label) return e.label;
   const sh = shilutOf(project); const cab = point.cabinet || '';
   let base = defaultPortLabels(point.label, rackPortsOf(point, ctx))[i] ?? point.label;
-  if (sh.dropCab) base = stripCab(base, cab);
+  if (dropCabOf(project, cab)) base = stripCab(base, cab);
   const tpl = String(sh.tpl?.[point.typeId] || '').trim() || '{имя}';
   return tpl.replace(/\{имя\}/g, base).replace(/\{номер\}/g, stripCab(base, cab)).replace(/\{шкаф\}/g, shilutCabName(project, cab, e?.s))
     .replace(/\{U\}/g, String(e?.u ?? '')).replace(/\{порт\}/g, String(e?.p ?? ''));

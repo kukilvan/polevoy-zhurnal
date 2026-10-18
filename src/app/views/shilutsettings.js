@@ -2,7 +2,7 @@
 import { h, openModal, toast, confirmDialog } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import {
-  SHILUT_COLORS, defaultTypeColor, rackPortsOf, subsOf, rackOf, contrastFg, shilutOf, shilutLabel, shilutCabName,
+  SHILUT_COLORS, defaultTypeColor, rackPortsOf, subsOf, rackOf, contrastFg, shilutOf, shilutLabel, dropCabOf,
 } from '../../domain/rack.js';
 
 const sortRu = (a, b) => a.localeCompare(b, 'ru', { numeric: true });
@@ -16,7 +16,7 @@ export function shilutSettings(ui) {
   const types = [...new Set(rackPts.map((pt) => pt.typeId))].sort(sortRu);
   const cabs = [...new Set(rackPts.map((pt) => pt.cabinet || '').filter(Boolean))].sort(sortRu);
   const src = shilutOf(p);
-  const sh = { panelModel: src.panelModel || '', dropCab: !!src.dropCab, typeColors: { ...(src.typeColors || {}) }, cabNames: { ...(src.cabNames || {}) }, tpl: { ...(src.tpl || {}) } };
+  const sh = { panelModel: src.panelModel || '', dropCab: false, dropCabs: Object.fromEntries(cabs.map((c) => [c, dropCabOf(p, c)])), typeColors: { ...(src.typeColors || {}) }, cabNames: { ...(src.cabNames || {}) }, tpl: { ...(src.tpl || {}) } };
   const box = h('div', {});
 
   const colorChip = (c, text) => h('span', { style: { display: 'inline-block', minWidth: '22px', height: '22px', borderRadius: '6px', background: c?.bg || 'transparent', color: c?.fg || 'inherit', border: '1px solid var(--line)', textAlign: 'center', fontSize: '12px', lineHeight: '22px', padding: '0 4px' } }, text || '');
@@ -70,14 +70,19 @@ export function shilutSettings(ui) {
     }) : [h('div', { class: 'mut' }, 'Нет точек с кабелями cat7')]),
     h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: addColor }, '➕ Свой цвет…')));
 
-  const cabsCard = () => card('Названия шкафов в шильюте', 'Как называть шкаф в таблице и в подписях ({шкаф}). Пусто — как в приложении.',
-    h('label', { class: 'pickrow' }, h('input', { type: 'checkbox', checked: sh.dropCab, onchange: (e) => { sh.dropCab = e.target.checked; draw(); } }), h('span', {}, 'Убирать название шкафа из подписей (1A-C5 → C5)')),
-    ...cabs.flatMap((c) => subsOf(rackOf(p, c), c).map((sub) => {
-      const key = `${c}|${sub.id || ''}`; const multi = subsOf(rackOf(p, c), c).length > 1;
-      return h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', margin: '4px 0' } },
-        h('span', { style: { minWidth: '80px' } }, multi ? sub.name : c),
-        h('input', { type: 'text', value: sh.cabNames[key] || '', placeholder: multi ? sub.name : c, style: { flex: 1 }, oninput: (e) => { sh.cabNames[key] = e.target.value.trim(); } }));
-    })));
+  const cabsCard = () => card('Названия шкафов в шильюте', 'Как называть шкаф в таблице и в подписях ({шкаф}) — пусто: как в приложении. Галка у шкафа убирает его название из подписей (1A-C5 → C5) — только у этого шкафа.',
+    cabs.length > 1 ? h('label', { class: 'pickrow' }, h('input', { type: 'checkbox', checked: cabs.every((c) => sh.dropCabs[c]), onchange: (e) => { cabs.forEach((c) => { sh.dropCabs[c] = e.target.checked; }); draw(); } }), h('span', {}, h('b', {}, 'У всех шкафов'), ' — убрать название из подписей')) : null,
+    ...cabs.map((c) => {
+      const ss = subsOf(rackOf(p, c), c); const multi = ss.length > 1;
+      return h('div', { style: { margin: '8px 0', paddingTop: '6px', borderTop: '1px solid var(--line)' } },
+        h('label', { class: 'pickrow' }, h('input', { type: 'checkbox', checked: !!sh.dropCabs[c], onchange: (e) => { sh.dropCabs[c] = e.target.checked; draw(); } }), h('span', {}, `Шкаф ${c}: убрать название из подписей`)),
+        ...ss.map((sub) => {
+          const key = `${c}|${sub.id || ''}`;
+          return h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', margin: '4px 0' } },
+            h('small', { class: 'mut', style: { minWidth: '70px' } }, 'Название'),
+            h('input', { type: 'text', value: sh.cabNames[key] || '', placeholder: multi ? sub.name : c, style: { flex: 1 }, oninput: (e) => { sh.cabNames[key] = e.target.value.trim(); } }));
+        }));
+    }));
 
   const tplCard = () => {
     const fake = { ...p, shilut: sh };
