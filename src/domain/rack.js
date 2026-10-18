@@ -112,3 +112,28 @@ export function rackProblems(rack, points, ctx) {
   });
   return out;
 }
+
+// ---------- цвета шильюта ----------
+// Стандартные цвета (свои цвета добавляются в настройках пользователя: { id, ru, he, bg?, fg? })
+export const SHILUT_COLORS = [
+  { id: 'yellow', ru: 'жёлтый', he: 'צהוב', bg: '#ffd60a', fg: '#000' },
+  { id: 'green', ru: 'зелёный', he: 'ירוק', bg: '#2fb350', fg: '#000' },
+  { id: 'blue', ru: 'синий', he: 'כחול', bg: '#0a84ff', fg: '#fff' },
+  { id: 'red', ru: 'красный', he: 'אדום', bg: '#ff3b30', fg: '#fff' },
+  { id: 'black', ru: 'чёрный', he: 'שחור', bg: '#111111', fg: '#fff' },
+];
+// Цвет по умолчанию по названию типа: камеры — зелёный, биометрия/двери (core) — синий, бакары — жёлтый, вайфай — красный, точки — чёрный
+export function defaultTypeColor(typeId) {
+  const t = String(typeId || '').toLowerCase();
+  if (/камер|camera|cctv/.test(t)) return 'green';
+  if (/биометр|biometr|core|кор\b|двер/.test(t)) return 'blue';
+  if (/бакар|bms|контрол/.test(t)) return 'yellow';
+  if (/вайфа|wi-?fi|\bap\b|точка доступа/.test(t)) return 'red';
+  if (/^точк/.test(t)) return 'black';
+  return '';
+}
+// Цвет типа в проекте: свой (project.shilut.typeColors) или по умолчанию → объект цвета или null
+export function typeColorOf(project, typeId, extraColors = []) {
+  const id = project?.shilut?.typeColors?.[typeId] ?? defaultTypeColor(typeId);
+  return [...SHILUT_COLORS, ...extraColors].find((c) => c.id === id) || null;
+}

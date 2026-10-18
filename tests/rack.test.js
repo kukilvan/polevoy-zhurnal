@@ -46,3 +46,10 @@ test('порядок U и проверки', () => {
   const pr = rackProblems({ height: 42, panels: [{ u: 38 }, { u: 38 }] }, [{ id: 'x', label: 'X', typeId: 'Cam', cabinet: '1A', panel: [{ u: 30, p: 1 }] }], ctx1);
   assert.ok(pr.some((t) => t.includes('Две панели')) && pr.some((t) => t.includes('такой панели')));
 });
+import { defaultTypeColor, typeColorOf } from '../src/domain/rack.js';
+test('цвета шильюта по умолчанию', () => {
+  assert.equal(defaultTypeColor('Камера'), 'green'); assert.equal(defaultTypeColor('Коре биометри'), 'blue');
+  assert.equal(defaultTypeColor('Бакар'), 'yellow'); assert.equal(defaultTypeColor('Вайфай'), 'red'); assert.equal(defaultTypeColor('Точка'), 'black');
+  assert.equal(defaultTypeColor('Дверь'), 'blue'); assert.equal(defaultTypeColor('TV'), '');
+  assert.equal(typeColorOf({ shilut: { typeColors: { Камера: 'red' } } }, 'Камера').he, 'אדום');
+});
