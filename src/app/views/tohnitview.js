@@ -10,7 +10,7 @@ import { itemForm } from './settings.js';
 import { ruleEditor } from './catalogview.js';
 import { cablesPicker } from './cablespick.js';
 import { iconsPicker } from './planpick.js';
-import { addDrawing, drawingFor } from '../drawings.js';
+import { addDrawing, drawingFor, drawingsOf, drawingTitle, loadDrawing, updateDrawing } from '../drawings.js';
 
 // кабели рядом с выбором типа: видны, когда выбран настоящий тип
 export function cablesFor(onChange) {
@@ -66,7 +66,7 @@ function iconGroupsOf(drawing) {
 }
 
 // drawing + buf — правка уже сохранённого чертежа (из «🗺 План» → «✏️ Редактировать»): без выбора файла; значки — уже отмеченные
-export function pointsFromDrawing({ drawing = null, buf: preBuf = null, file = null } = {}) {  // file: { name, buf, fileId } — уже выбранный PDF
+export function pointsFromDrawing({ drawing = null, buf: preBuf = null, file = null, onDone = null } = {}) {  // file: { name, buf, fileId } — уже выбранный PDF
   const input = h('input', { type: 'file', accept: '.pdf,application/pdf', style: { display: 'none' } });
   const floorIn = h('input', { placeholder: 'Этаж (например 0, -3.50)' });
   const status = h('div', { class: 'mut', style: { margin: '6px 0' } });
@@ -143,17 +143,20 @@ export function pointsFromDrawing({ drawing = null, buf: preBuf = null, file = n
         }
         const byL = new Map([...state.ctx.points.values()].map((x) => [x.label, x]));
         const unplaced = r.data.points.filter((p) => byL.has(p.label) && byL.get(p.label).pos?.sheet !== drawing.name && !(drawing.aliases || []).includes(byL.get(p.label).pos?.sheet));
-        if (!iconPts().length && r.data.points.every((p) => byL.has(p.label)) && !unplaced.length) { toast('Новых точек нет — все уже на чертеже'); close(); return; }
+        if (!iconPts().length && r.data.points.every((p) => byL.has(p.label)) && !unplaced.length) { toast('Новых точек нет — все уже на чертеже'); markScanned(drawing); onDone?.(); close(); return; }
       }
       const keep = r.learned.filter((e) => remember.has(e.cluster) && e.type !== UNSORTED_TYPE).map(({ project: _p, ...e }) => e);  // запоминается для всех проектов
       out.replaceChildren(importPreview({ ...r.data, points: [...r.data.points, ...iconPts()] }, fileName, async () => {
         try { const n = await saveLearned(keep); if (n) toast(`Запомнено правил: ${n}`); } catch { /* не страшно */ }
+        if (drawing) markScanned(drawing);
         if (keepPdf.checked && theFile && !drawing) {  // чертёж — в проект: план и «📍 На чертеже»
+          scannedNow.add(fileName);
           theFile.arrayBuffer().then((buf) => addDrawing(buf, { name: fileName, floor: floorIn.value.trim(), pages: pagesInfo, fileId: theFile.fileId || null }))
+            .then((d) => { if (d?.id) { scannedNow.add(d.id); setTimeout(() => markScanned(d), 1500); } return d; })
             .then((d) => toast(d?.fileId ? 'Чертёж сохранён в проект и на Диск' : 'Чертёж сохранён в проект (на Диск — кнопка «⬆ На Диск» в плане)'))
             .catch((e) => toast(`Чертёж сохранён на этом устройстве; на Диск — не получилось: ${e.message}`));
         }
-        close();
+        onDone?.(); close();
       }));
     } }, `Дальше → проверить и добавить (${pts.length})`);
     out.replaceChildren(...[
@@ -187,7 +190,7 @@ export function pointsFromDrawing({ drawing = null, buf: preBuf = null, file = n
   });
   // выбранный PDF (из проекта, с Диска или с устройства); тохнит этого проекта — сразу режим «✏️ Редактировать»
   function useFile(r) {
-    if (r.drawing) { close(); pointsFromDrawing({ drawing: r.drawing, buf: r.buf }); return; }
+    if (r.drawing) { close(); pointsFromDrawing({ drawing: r.drawing, buf: r.buf, onDone }); return; }
     fileName = r.name; theFile = { name: r.name, fileId: r.fileId || null, arrayBuffer: async () => r.buf.slice(0) };
     if (!floorIn.value.trim()) floorIn.value = (fileName.match(/(-?\d+(?:\.\d+)?)/) || [])[1] || '';
     load(r.buf.slice(0));
@@ -195,6 +198,41 @@ export function pointsFromDrawing({ drawing = null, buf: preBuf = null, file = n
   if (file) useFile(file);
   if (drawing) { fileName = drawing.name; floorIn.value = drawing.floor || ''; load(preBuf.slice(0)); }
   void lastQuestions;
+}
+
+// Отметка «разобран» у тохнита проекта (зелёная птичка в окне «📐 Из чертежа»). scannedNow — на случай, если запись чертежа ещё не дошла
+const scannedNow = new Set();
+function markScanned(d) {
+  scannedNow.add(d.id); scannedNow.add(d.name);
+  if ((currentProject()?.drawings || []).some((x) => x.id === d.id)) updateDrawing(d.id, { scannedAt: new Date().toISOString() });
+}
+const isScanned = (d) => !!d.scannedAt || scannedNow.has(d.id) || scannedNow.has(d.name);
+
+/** «📐 Из чертежа»: список тохнитов проекта с отметкой «разобран», другой тохнит — с Диска или с устройства.
+ *  onNext (мастер нового проекта) — кнопка «Дальше» внизу; extra — только что добавленные чертежи */
+export function drawingsHub({ onNext = null, extra = [] } = {}) {
+  const box = h('div', {});
+  let close = null;
+  const unsub = subscribe(() => draw());
+  const open = async (d) => { try { pointsFromDrawing({ drawing: d, buf: await loadDrawing(d), onDone: draw }); } catch (e) { toast(e.message); } };
+  const other = async () => { const r = await pickPdf({ title: 'Другой тохнит', project: false }); if (r) pointsFromDrawing({ file: r, onDone: draw }); };
+  function draw() {
+    const list = [...drawingsOf(), ...extra]; const seen = new Set();
+    const ds = list.filter((d) => { const k = d.id || d.name; if (seen.has(k)) return false; seen.add(k); return !d.deleted; });
+    const done = ds.filter(isScanned).length;
+    box.replaceChildren(...[
+      h('div', { class: 'mut' }, 'Нажмите на тохнит — приложение найдёт на нём точки по каталогу, что не знает — спросит. Разобранные отмечены ✅. Тохнит можно разбирать повторно: уже добавленные точки пропускаются.'),
+      ds.length ? h('div', {}, h('div', { class: 'group', style: { padding: '8px 0 4px' } }, `В этом проекте${ds.length ? ` (разобрано ${done} из ${ds.length})` : ''}`),
+        h('div', { class: 'card', style: { padding: 0 } }, ds.map((d) => h('div', { class: 'item', style: { alignItems: 'center' }, onclick: () => open(d) },
+          h('div', { class: 'name', style: { flex: 1 } }, drawingTitle(d), h('div', { class: 'sub' }, `${d.floor ? `этаж ${d.floor} · ` : ''}${d.name}`)),
+          h('span', { title: isScanned(d) ? 'Разобран' : 'Ещё не разобран', style: { fontSize: '22px', minWidth: '28px', textAlign: 'center', pointerEvents: 'none', color: '#30d158' } }, isScanned(d) ? '✅' : '◻️')))))
+        : h('div', { class: 'empty' }, 'В проекте пока нет тохнитов'),
+      h('div', { class: 'btns' }, h('button', { class: ds.length ? 'sec' : '', onclick: other }, '➕ Другой тохнит (Google Диск / устройство)')),
+      onNext ? h('div', { class: 'btns' }, h('button', { onclick: () => { close(); onNext(); } }, 'Дальше')) : null].filter(Boolean));
+  }
+  close = openModal('📐 Точки из чертежа', box, { sticky: true, onClose: () => unsub() });
+  draw();
+  return close;
 }
 
 // «❓ Не разобрано»: точки, отложенные при разборе чертежа. Группы однотипных подписей → тип всей группе или выбранным; правило — в каталог.

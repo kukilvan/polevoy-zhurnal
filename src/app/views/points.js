@@ -9,7 +9,7 @@ import { dateText, cablesText, missingDetails, isComposedType, isSystemType, UNS
 import { addWorkForPoint, addWorkForPoints } from './doh.js';
 import { whoIs } from './journal.js';
 import { pointsFromFile } from './pointsfile.js';
-import { pointsFromDrawing, unsortedModal } from './tohnitview.js';
+import { drawingsHub, unsortedModal } from './tohnitview.js';
 import { cablesField, cablesPicker } from './cablespick.js';
 import { drawingFor, drawingsOf } from '../drawings.js';
 import { typeMatch, typeFilterOptions, typeFilterValid } from '../typegroups.js';
@@ -519,7 +519,7 @@ export function meterView(ui) {
       h('button', { onclick: () => generatorForm() }, '➕ Точки пачкой'),
       h('button', { class: 'sec', onclick: () => pointForm(null) }, 'Новая точка'),
       h('button', { class: 'sec', onclick: () => pointsFromFile() }, '📥 Из файла'),
-      h('button', { class: 'sec', onclick: () => pointsFromDrawing() }, '📐 Из чертежа'),
+      h('button', { class: 'sec', onclick: () => drawingsHub() }, '📐 Из чертежа'),
       h('button', { class: 'sec', onclick: () => planModal() }, '🗺 План'),
       h('button', { class: 'wide sec', onclick: () => remainingModal() }, '🧾 Что осталось'),
       total.some((p) => p.typeId === UNSORTED_TYPE) ? h('button', { class: 'wide', onclick: () => unsortedModal(ui) }, `❓ Не разобрано: ${total.filter((p) => p.typeId === UNSORTED_TYPE).length} — разобрать`) : null),

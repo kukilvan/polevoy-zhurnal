@@ -147,14 +147,10 @@ function afterCreate(pid, ui) {
       } }, 'Добавить и дальше')];
   }
   function points() {
-    return [h('div', { class: 'mut' }, 'Точки можно добавить сразу: из файла (после разбора тохнита) или разобрать тохнит — из этого проекта, с Google Диска или с устройства. Откроется своё окно; после него нажмите «Дальше».'),
+    return [h('div', { class: 'mut' }, 'Точки можно добавить сразу: из файла (после разбора тохнита) или разобрать тохниты проекта («📐 Из чертежа»: разобранные отмечаются ✅, внизу — «Дальше»). Потом здесь — «Дальше» или «Пропустить».'),
       h('div', { class: 'btns' },
         h('button', { class: 'sec', onclick: () => import('./pointsfile.js').then((m) => m.pointsFromFile()) }, '📥 Точки из файла'),
-        h('button', { class: 'sec', onclick: async () => {
-          const { pickPdf } = await import('./pdfpick.js'); const r = await pickPdf({ title: '📐 Какой тохнит разобрать', extra: added }); if (!r) return;
-          const m = await import('./tohnitview.js');
-          m.pointsFromDrawing(r.drawing ? { drawing: r.drawing, buf: r.buf } : { file: r });
-        } }, '📐 Из чертежа')),
+        h('button', { class: 'sec', onclick: () => import('./tohnitview.js').then((m) => m.drawingsHub({ extra: added, onNext: () => {} })) }, '📐 Из чертежа')),
       h('button', { onclick: next }, 'Дальше')];
   }
   function managers() {
