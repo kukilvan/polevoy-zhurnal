@@ -33,14 +33,14 @@ input { width:100%; }
 .rec .t { font-weight: 600; }
 pre.log { background:var(--deep); border:1px solid var(--line); border-radius: 10px; padding: 10px; font: 12px/1.45 ui-monospace, Menlo, Consolas, monospace; white-space: pre-wrap; word-break: break-word; max-height: 55vh; overflow:auto; margin: 0; }
 .l-error { color: var(--err); } .l-warn { color: var(--warn); }
-nav { position: fixed; left:0; right:0; bottom:0; display:flex; background:var(--inset); border-top:1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
+nav { position: fixed; left:0; right:0; bottom:0; z-index: 30; display:flex; background:var(--inset); border-top:1px solid var(--line); padding-bottom: env(safe-area-inset-bottom); }
 nav button { flex:1; border-radius:0; border:0; background:transparent; color: var(--mut); padding: 14px 2px; min-width:0; }
 nav button.on { color: var(--acc); }
 
 /* ---- формы и всплывающие окна ---- */
 body.noscroll { overflow: hidden; }
-.backdrop { position: fixed; inset: 0; background: var(--veil); display: flex; align-items: flex-end; justify-content: center; z-index: 50; }
-.sheet { width: 100%; max-width: 640px; max-height: 92vh; background: var(--card); border: 1px solid var(--line); border-radius: 16px 16px 0 0; display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom); }
+.backdrop { position: fixed; inset: 0; height: 100dvh; background: var(--veil); display: flex; align-items: flex-end; justify-content: center; z-index: 50; }
+.sheet { width: 100%; max-width: 640px; max-height: 92vh; max-height: calc(100dvh - env(safe-area-inset-top) - 16px); background: var(--card); border: 1px solid var(--line); border-radius: 16px 16px 0 0; display: flex; flex-direction: column; padding-bottom: env(safe-area-inset-bottom); }
 .sheet-head { display: flex; justify-content: space-between; align-items: center; padding: 14px 16px 8px; }
 .sheet-head .x { background: transparent; border: 0; color: var(--mut); padding: 4px 10px; font-size: 18px; }
 .sheet-head .x:hover { color: var(--fg, inherit); background: var(--line); border-radius: 8px; }
