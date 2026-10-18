@@ -11,6 +11,7 @@ import { pointCard } from './points.js';
 
 let openCab = null;   // открытый шкаф
 let moving = null;    // перенос порта: { id, i }
+let editMode = false; // режим перестановки: нажал точку → нажал порт, без окон
 
 const sortRu = (a, b) => a.localeCompare(b, 'ru', { numeric: true });
 const HUES = [205, 140, 45, 0, 275, 175, 25, 320, 95, 240];
@@ -173,7 +174,7 @@ function placeModal(cab, ui, { u = null, p = 1 } = {}) {
 function rackEditor(ui, cab) {
   const p = currentProject(); const r = rackOf(p, cab);
   const pts = cabPoints(cab);
-  const back = h('button', { class: 'sec', onclick: () => { openCab = null; moving = null; ui.render(); } }, '← Все шкафы');
+  const back = h('button', { class: 'sec', onclick: () => { openCab = null; moving = null; editMode = false; ui.render(); } }, '← Все шкафы');
   if (!r) {
     return h('div', {}, back,
       h('div', { class: 'card', style: { marginTop: '10px' } }, h('b', {}, `Шкаф ${cab}`), h('div', { class: 'mut', style: { margin: '6px 0' } }, `Точек cat7: ${pts.length}. Плана шкафа ещё нет: укажите размер и нумерацию U, затем мастер разложит точки по панелям.`),
@@ -185,6 +186,7 @@ function rackEditor(ui, cab) {
   const floor = cabinetFloor(pts);
   const cellTap = (u, port) => {
     const at = slots.get(`${u}|${port}`);
+    if (editMode && !moving) { if (at) { moving = { id: at.pt.id, i: at.i }; ui.render(); } else toast('Сначала нажмите на точку, которую переносите'); return; }
     if (moving) {
       const src = state.ctx.points.get(moving.id); const sp = panelOf(src);
       if (!src || !sp[moving.i]) { moving = null; ui.render(); return; }
@@ -194,7 +196,7 @@ function rackEditor(ui, cab) {
       const get = (pt) => writes.get(pt.id) || panelOf(pt).map((x) => ({ ...x }));
       const a = get(src); a[moving.i] = { ...a[moving.i], u, p: port }; writes.set(src.id, a);
       if (at) { const b = at.pt.id === src.id ? a : get(at.pt); b[at.i] = { ...b[at.i], u: from.u, p: from.p }; writes.set(at.pt.id, b); }
-      savePanels([...writes.entries()]); moving = null; toast(at ? 'Переставлено местами' : 'Перенесено'); ui.render(); return;
+      savePanels([...writes.entries()]); moving = null; if (!editMode) toast(at ? 'Переставлено местами' : 'Перенесено'); ui.render(); return;
     }
     if (!at) { placeModal(cab, ui, { u, p: port }); return; }
     const { pt, i } = at; const n = rackPortsOf(pt, state.ctx);
@@ -251,11 +253,15 @@ function rackEditor(ui, cab) {
       h('b', {}, `${p.name} · ${floor ? `этаж ${floor} · ` : ''}шкаф ${cab}`),
       h('div', { class: 'mut', style: { margin: '4px 0' } }, `${r.height}U · ${r.bottomUp === false ? 'U1 вверху' : 'U1 внизу'} · панелей ${r.panels?.length || 0} · точек cat7 ${pts.length}, расставлено ${pts.length - free.length}`),
       h('div', { class: 'btns' },
-        h('button', { onclick: () => wizard(cab, ui) }, '🧙 Мастер'),
+        h('button', { class: editMode ? '' : 'sec', onclick: () => { editMode = !editMode; moving = null; ui.render(); } }, editMode ? '✅ Готово' : '✏️ Редактировать'),
+        h('button', { class: 'sec', onclick: () => wizard(cab, ui) }, '🧙 Мастер'),
         h('button', { class: 'sec', onclick: () => formModal({ title: 'Новая панель', fields: [{ key: 'u', label: `На каком U (1–${r.height})`, type: 'number', required: true }],
           onSubmit: (v) => { const u = Math.round(Number(v.u)); if (!(u >= 1 && u <= r.height)) { toast(`U от 1 до ${r.height}`); return false; } if ((r.panels || []).some((x) => x.u === u)) { toast(`На U${u} уже есть панель`); return false; } saveRack(cab, { ...r, panels: [...(r.panels || []), { u }] }); setTimeout(() => ui.render(), 200); } }) }, '➕ Панель'),
         h('button', { class: 'sec', onclick: () => rackForm(cab, () => setTimeout(() => ui.render(), 200)) }, '⚙️ Размер и нумерация'))),
-    moving ? h('div', { class: 'card', style: { borderColor: '#e0007a', position: 'sticky', top: '53px', zIndex: 6 } },
+    editMode ? h('div', { class: 'card', style: { borderColor: '#e0007a', position: 'sticky', top: '53px', zIndex: 6 } },
+      h('b', {}, moving ? `✏️ Переношу: ${slotLabel(state.ctx.points.get(moving.id) || { label: '?' }, moving.i)}` : '✏️ Режим перестановки'),
+      h('div', { class: 'mut' }, moving ? 'Нажмите на порт: свободный — перенесётся туда, занятый — поменяются местами. Нажмите ту же точку — отменить выбор.' : 'Нажмите на точку, потом на порт, куда её перенести. Так сколько угодно раз; выйти — «✅ Готово».'),
+      h('div', { class: 'btns' }, h('button', { onclick: () => { editMode = false; moving = null; ui.render(); } }, '✅ Готово'))) : moving ? h('div', { class: 'card', style: { borderColor: '#e0007a', position: 'sticky', top: '53px', zIndex: 6 } },
       h('b', {}, `↔ Перенос: ${slotLabel(state.ctx.points.get(moving.id) || { label: '?' }, moving.i)}`), h('div', { class: 'mut' }, 'Нажмите на порт: свободный — перенесётся туда, занятый — поменяются местами.'),
       h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => { moving = null; ui.render(); } }, 'Отмена'))) : null,
     problems.length ? h('div', { class: 'card', style: { borderColor: '#ff9f0a' } }, h('b', {}, `⚠️ Проверка (${problems.length})`), ...problems.slice(0, 20).map((t) => h('div', { style: { fontSize: '14px' } }, `• ${t}`))) : null,
