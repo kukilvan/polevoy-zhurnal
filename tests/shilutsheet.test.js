@@ -74,3 +74,35 @@ test('смешанные типы в одной панели — отдельн�
   assert.deepEqual(sl.rows[3].slice(1), ['ירוק', '', 'אדום']);
   assert.deepEqual(sl.rows.slice(4, 7).map((r) => r[1]), ['C1', 'C2', '']); assert.deepEqual(sl.rows.slice(4, 7).map((r) => r[3]), ['AP1', 'AP2', '']);
 });
+test('таблица для руководства: создаётся в папке «Для руководства», обновляется только при изменениях, сервер не создаёт новых файлов', async () => {
+  const { syncRackTable, RACK_TITLE, rackAuto } = await import('../src/app/racktablecore.js');
+  const { updateProjectRackTable } = await import('../scripts/server-tables-lib.mjs');
+  const files = {}; const calls = [];
+  const api = {
+    fileInfo: async (id) => files[id] || null, create: async (n) => { files.F1 = { id: 'F1', name: n }; calls.push('create'); return files.F1; },
+    placeIn: async (id, p, kind) => calls.push(`placeIn:${kind}`), share: async (id, e) => calls.push(`share:${e}`), rename: async (id, n) => { files[id].name = n; calls.push('rename'); },
+    sheetsOf: async () => [{ sheetId: 0 }], batch: async () => calls.push('batch'), write: async () => calls.push('write'),
+  };
+  const ps = pts(); const cx = { ...ctx, points: new Map(ps.map((x) => [x.id, x])) };
+  const p0 = { ...proj(), rackTable: { mode: 'fill', auto: true, prefs: prefs.models ? { models: prefs.models, colors: [] } : {} } };
+  const r = await syncRackTable(api, p0, cx, { uid: 'u1', shareWith: 'srv@x' });
+  assert.equal(r.patch.fileId, 'F1'); assert.equal(r.patch.by, 'u1'); assert.equal(r.patch.placedKind, 'managers'); assert.equal(r.patch.sharedWith, 'srv@x'); assert.ok(r.changed && r.patch.hash && r.patch.at);
+  assert.deepEqual(calls.filter((c) => c.startsWith('placeIn') || c === 'create' || c.startsWith('share')), ['create', 'placeIn:managers', 'share:srv@x']);
+  assert.equal(files.F1.name, RACK_TITLE); assert.equal(RACK_TITLE, 'תכנון ארונות ושילוט');
+  // без изменений данных — таблица не переписывается
+  const p1 = { ...p0, rackTable: { ...p0.rackTable, ...r.patch } }; calls.length = 0;
+  const r2 = await syncRackTable(api, p1, cx, { uid: 'u1', shareWith: 'srv@x' });
+  assert.equal(r2.changed, false); assert.ok(!calls.includes('batch') && !calls.includes('create'));
+  // сервер: тот же файл, нового не создаёт, ошибка — в профиль
+  assert.ok(rackAuto(p1)); assert.ok(!rackAuto({ ...p1, rackTable: { ...p1.rackTable, auto: false } }));
+  const cx2 = { ...cx, points: new Map([...cx.points].slice(0, 5)) };
+  void cx2;
+  const sapi = { fileInfo: api.fileInfo, rename: api.rename, sheetsOf: api.sheetsOf, batch: api.batch, write: api.write };
+  const data = { points: ps.map((x) => ({ ...x })), types: [...ctx.types.entries()].map(([id, t]) => ({ id, ...t })), cables: [], devices: [], configs: [] };
+  const sv = await updateProjectRackTable(sapi, p1, data, new Date('2026-10-19T00:00:00Z'));
+  assert.equal(sv.patch.serverError, ''); assert.ok(sv.patch.serverAt && sv.patch.by === undefined);
+  delete files.F1;
+  const sv2 = await updateProjectRackTable(sapi, p1, data, new Date());
+  assert.match(sv2.patch.serverError, /не видит файл/);
+  assert.equal((await updateProjectRackTable(sapi, { ...p1, rackTable: { ...p1.rackTable, auto: false } }, data)).patch, null);
+});

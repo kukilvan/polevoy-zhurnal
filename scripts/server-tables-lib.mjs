@@ -2,6 +2,7 @@
 import { buildContext, tablesOf, numberedInput, numberedHash } from '../src/domain/index.js';
 import { numberedPdf } from '../src/tohnit/numbered.js';
 import { syncTable } from '../src/app/managers.js';
+import { syncRackTable, rackAuto } from '../src/app/racktablecore.js';
 import { isDeleted } from './server-backup-lib.mjs';
 
 const memberKey = (email) => String(email).toLowerCase().replace(/\./g, '_');
@@ -32,6 +33,19 @@ export async function updateProjectTables(api, project, data, now = new Date()) 
     }
   }
   return { patches, report };
+}
+
+// Таблица шкафов и шильюта для руководства: обновляется, если что-то поменялось. → { patch|null, report }
+export async function updateProjectRackTable(api, project, data, now = new Date()) {
+  if (!rackAuto(project)) return { patch: null, report: [] };
+  const ctx = buildContext({ ...data, projects: [project] });
+  try {
+    const r = await syncRackTable(api, project, ctx, { uid: '__server', noCreate: true });
+    const { by, ...rest } = r.patch; void by;
+    return { patch: { ...rest, serverAt: now.toISOString(), serverError: '' }, report: [`шкафы и шильют: ${r.changed ? 'обновлена' : 'без изменений'}`] };
+  } catch (e) {
+    return { patch: { serverAt: now.toISOString(), serverError: String(e.message || e).slice(0, 300) }, report: [`шкафы и шильют: ОШИБКА ${e.message}`] };
+  }
 }
 
 // «PDF с номерами» на Диске: чертежи, которые приложение уже выложило (numberedFileId) и открыло серверу.

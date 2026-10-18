@@ -6,6 +6,7 @@ import { state, getRepo, currentProject } from '../store.js';
 import { tablesOf, withTable } from '../../domain/index.js';
 import { getToken, realApi, clearToken, storedTokenValid } from '../google.js';
 import { syncTable } from '../managers.js';
+import { syncRackTable, rackAuto, RACK_TITLE } from '../racktablecore.js';
 import { memberNameByUid } from './members.js';
 import { drawingsOf, drawingTitle, loadDrawing, putNumbered, shareWithServer, updateDrawing } from '../drawings.js';
 import { build } from './plannumbers.js';
@@ -58,6 +59,16 @@ export async function updateManagersFolder(retried = false) {
         getRepo().saveProject(p.id, { tables: withTable(currentProject(), t.id, { ...res.patch, serverError: '' }) }); if (t.inFolder) nt++;
       } catch (e) { toast(`Таблица «${t.name}»: ${e.message}`); }
     }
+    // таблица шкафов и шильюта (план + шильют)
+    let nr = 0;
+    if (rackAuto(currentProject())) {
+      try {
+        const cur = currentProject(); const pf = getRepo().prefs || {};
+        const rt = { ...cur.rackTable, prefs: { models: pf.panelModels || [], colors: pf.shilutColors || [] } };
+        const r = await syncRackTable(api, { ...cur, rackTable: rt }, state.ctx, { uid: getRepo().user.uid, shareWith: cur.serverEmail || '' });
+        getRepo().saveProject(p.id, { rackTable: { ...rt, ...r.patch, serverError: '' } }); nr = 1;
+      } catch (e) { if (e.patch) getRepo().saveProject(p.id, { rackTable: { ...currentProject().rackTable, ...e.patch } }); toast(`«${RACK_TITLE}»: ${e.message}`); }
+    }
     // тохниты
     let nd = 0; const ds = { ...(m.drawings || {}) };
     for (const d of drawingsOf(p)) {
@@ -72,7 +83,7 @@ export async function updateManagersFolder(retried = false) {
       } catch (e) { ds[d.id] = { ...md, error: String(e.message || e).slice(0, 200) }; toast(`«${drawingTitle(d)}»: ${e.message}`); }
     }
     saveMgr({ ...m, drawings: ds });
-    toast(`Папка для руководства обновлена: таблиц ${nt}, тохнитов ${nd}`);
+    toast(`Папка для руководства обновлена: таблиц ${nt}${nr ? ' + шкафы и шильют' : ''}, тохнитов ${nd}`);
   } catch (e) {
     if (e.status === 401 && retried !== true) { clearToken(); busy = false; return updateManagersFolder(true); }
     toast(`Не получилось: ${e.message || e}`); console.error('managers folder', e);
@@ -105,6 +116,10 @@ export function managersFolderCard(ui) {
       h('div', { style: { fontWeight: 700 } }, '🗺 Тохниты в папке'),
       h('div', { class: 'mut', style: { margin: '4px 0' } }, 'Отметьте, какие тохниты с номерами положить в папку, и задайте им название (можно на иврите). Это отдельные копии — ваши «Чертежи с номерами» не меняются.'),
       rows.length ? rows : h('div', { class: 'mut' }, 'В проекте пока нет чертежей')),
+    p.rackTable?.fileId ? h('div', { class: 'card' }, h('div', { style: { fontWeight: 700 } }, `🗄 ${RACK_TITLE}`),
+      h('div', { class: 'mut', style: { margin: '4px 0' } }, `Планы шкафов и шильют (создаётся в «Настройки → Шкафы и шильют»). ${p.rackTable.auto === false ? 'Автообновление выключено.' : 'Обновляется вместе с папкой и каждую ночь.'}${p.rackTable.at ? ` Обновлена ${when(p.rackTable.at)}.` : ''}`),
+      p.rackTable.serverError ? h('div', { style: { color: '#ff453a', fontSize: '13px' } }, `Сервер: ${p.rackTable.serverError}`) : null,
+      h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => window.open(p.rackTable.link, '_blank') }, '🔗 Открыть'))) : null,
     h('div', { style: { fontWeight: 700, margin: '14px 2px 6px' } }, '📊 Таблицы'),
     void ui);
 }

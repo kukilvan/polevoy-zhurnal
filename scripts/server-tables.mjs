@@ -2,7 +2,7 @@
 import admin from 'firebase-admin';
 import { GoogleAuth } from 'google-auth-library';
 import { readProject, isDeleted } from './server-backup-lib.mjs';
-import { updateProjectTables, applyPatches, autoTables, updateProjectNumbered, applyDrawingPatches, applyManagerPatches } from './server-tables-lib.mjs';
+import { updateProjectTables, applyPatches, autoTables, updateProjectNumbered, applyDrawingPatches, applyManagerPatches, updateProjectRackTable } from './server-tables-lib.mjs';
 
 const note = (m, e) => console.log(`::error::${m}: ${String(e?.stack || e).replace(/\n/g, ' | ').slice(0, 900)}`);
 process.on('uncaughtException', (e) => { note('Необработанная ошибка', e); process.exit(1); });
@@ -52,6 +52,12 @@ for (const ref of await db.collection('projects').listDocuments()) {
     mupdf ??= await import('mupdf');
     const { patches, mgrPatches, report } = await updateProjectNumbered(api, mupdf, project, data, now);
     if (Object.keys(patches).length || Object.keys(mgrPatches).length) await db.runTransaction(async (tx) => { const fresh = { id: ref.id, ...(await tx.get(ref)).data() }; tx.set(ref, { drawings: applyDrawingPatches(fresh, patches), managers: applyManagerPatches(fresh, mgrPatches) }, { merge: true }); });
+    report.forEach((l) => console.log(l.includes('ОШИБКА') ? `::warning::${project.name}: ${l}` : `  - ${l}`));
+  }
+  // таблица шкафов и шильюта для руководства
+  {
+    const { patch, report } = await updateProjectRackTable(api, project, data, now);
+    if (patch) await db.runTransaction(async (tx) => { const fresh = { id: ref.id, ...(await tx.get(ref)).data() }; tx.set(ref, { rackTable: { ...(fresh.rackTable || {}), ...patch } }, { merge: true }); });
     report.forEach((l) => console.log(l.includes('ОШИБКА') ? `::warning::${project.name}: ${l}` : `  - ${l}`));
   }
   if (!autoTables(project).length) { console.log(`${project.name}: нет таблиц для автообновления`); continue; }
