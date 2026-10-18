@@ -148,7 +148,7 @@ export function createShell({ user, onLogout, diag }) {
 
   window.addEventListener('online', () => { state.online = true; render(); });
   window.addEventListener('offline', () => { state.online = false; render(); });
-  const unsub = subscribe(() => { render(); if (ready()) maybeWelcome(ui, user); });
+  const unsub = subscribe(() => { render(); if (ready()) { maybeWelcome(ui, user); if (currentProject()?.serverEmail) import('./views/managersfolder.js').then((m) => m.ensureServerAccess()).catch(() => {}); } });
   startPool();  // общий пул: слушать, входящие администратора, отправка нового из проекта
   render();
 

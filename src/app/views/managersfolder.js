@@ -4,10 +4,10 @@
 import { h, toast } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { tablesOf, withTable } from '../../domain/index.js';
-import { getToken, realApi, clearToken } from '../google.js';
+import { getToken, realApi, clearToken, storedTokenValid } from '../google.js';
 import { syncTable } from '../managers.js';
 import { memberNameByUid } from './members.js';
-import { drawingsOf, drawingTitle, loadDrawing, putNumbered, shareWithServer } from '../drawings.js';
+import { drawingsOf, drawingTitle, loadDrawing, putNumbered, shareWithServer, updateDrawing } from '../drawings.js';
 import { build } from './plannumbers.js';
 
 // Легенда на иврите для папки руководства
@@ -19,6 +19,22 @@ export const managerName = (d, m) => (m?.name || '').trim() || drawingTitle(d).r
 
 function saveMgr(patch) { const p = currentProject(); getRepo().saveProject(p.id, { managers: { ...mgr(p), ...patch } }); }
 function saveMgrDrawing(id, patch) { const p = currentProject(); const ds = { ...(mgr(p).drawings || {}) }; ds[id] = { ...(ds[id] || {}), ...patch }; saveMgr({ drawings: ds }); }
+
+// Тихо открыть серверу (ночное обновление) доступ к файлам, выложенным раньше, чем сервер записал свой адрес в проект
+// (например, проект создан мастером и папка для руководства сделана в тот же день). Только если разрешение Google уже есть.
+const accessDone = new Set();
+export async function ensureServerAccess(p = currentProject()) {
+  if (!p?.serverEmail || !storedTokenValid()) return;
+  const key = `${p.id}:${p.serverEmail}`; if (accessDone.has(key)) return;
+  const ds = drawingsOf(p); const mds = { ...(mgr(p).drawings || {}) };
+  const needNum = ds.filter((d) => d.numberedFileId && d.numberedServer !== p.serverEmail);
+  const needMgr = ds.filter((d) => mds[d.id]?.fileId && mds[d.id].server !== p.serverEmail);
+  accessDone.add(key); if (!needNum.length && !needMgr.length) return;
+  let changed = false;
+  for (const d of needNum) { try { await shareWithServer(d.numberedFileId, p.serverEmail, 'writer'); await shareWithServer(d.fileId, p.serverEmail, 'reader'); updateDrawing(d.id, { numberedServer: p.serverEmail }); } catch (e) { console.warn('server access', e); } }
+  for (const d of needMgr) { try { await shareWithServer(mds[d.id].fileId, p.serverEmail, 'writer'); await shareWithServer(d.fileId, p.serverEmail, 'reader'); mds[d.id] = { ...mds[d.id], server: p.serverEmail }; changed = true; } catch (e) { console.warn('server access', e); } }
+  if (changed) getRepo().saveProject(p.id, { managers: { ...mgr(currentProject()), drawings: mds } });
+}
 
 let busy = false;
 export async function updateManagersFolder(retried = false) {
