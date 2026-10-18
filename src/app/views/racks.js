@@ -217,7 +217,7 @@ function rackEditor(ui, cab) {
       const col = at ? typeColorOf(currentProject(), at.pt.typeId, getRepo().prefs?.shilutColors || []) : null;
       return h('div', { title: at ? `${slotLabel(at.pt, at.i)} (${at.pt.typeId})` : 'свободно', onclick: () => cellTap(pnl.u, k + 1),
         style: { cursor: 'pointer', border: `1px solid ${mv ? '#e0007a' : 'var(--line)'}`, borderWidth: mv ? '2px' : '1px', borderRadius: '6px', outline: mv ? '3px solid #e0007a' : 'none', outlineOffset: '1px', padding: '2px 4px', minHeight: '38px',
-          background: col ? col.bg : at ? `hsla(${hue},70%,50%,.18)` : 'transparent', color: col ? col.fg : 'inherit', display: 'flex', flexDirection: 'column', overflow: 'hidden' } },
+          background: col ? col.bg : at ? `hsla(${hue},70%,50%,.18)` : 'transparent', color: col ? col.fg : 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', overflow: 'hidden' } },
         h('small', { class: col ? '' : 'mut', style: { fontSize: '10px', lineHeight: '12px', opacity: col ? 0.75 : 1 } }, String(k + 1)),
         h('span', { style: { fontSize: '12px', lineHeight: '14px', wordBreak: 'break-all', fontWeight: at ? 600 : 400 } }, at ? shortLabel(slotLabel(at.pt, at.i), cab) : ''));
     });
