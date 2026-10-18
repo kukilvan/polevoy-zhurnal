@@ -5,9 +5,10 @@ import { state, getRepo, currentProject } from '../store.js';
 import { comparePoints } from '../../domain/index.js';
 import {
   PANEL_PORTS, rackPortsOf, panelOf, fmtPanelPort, defaultPortLabels, rackOf, panelsInOrder, rackPointsOf,
-  cabinetFloor, autoFill, rackProblems, typeColorOf, slotKey, subsOf, blockedOf, blockPort, unblockPort,
+  cabinetFloor, autoFill, rackProblems, typeColorOf, slotKey, subsOf, blockedOf, blockPort, unblockPort, shilutLabel, shilutOf,
 } from '../../domain/rack.js';
 import { pointCard } from './points.js';
+import { shilutSettings, panelModels, modelName } from './shilutsettings.js';
 
 let openCab = null;   // открытый шкаф
 let moving = null;    // перенос порта: { id, i }
@@ -19,7 +20,7 @@ const HUES = [205, 140, 45, 0, 275, 175, 25, 320, 95, 240];
 const hueOf = (typeId) => { let x = 0; for (const ch of String(typeId)) x = (x * 31 + ch.charCodeAt(0)) >>> 0; return HUES[x % HUES.length]; };
 const allPoints = () => [...state.ctx.points.values()];
 const cabPoints = (cab) => rackPointsOf(allPoints(), state.ctx, cab);
-const slotLabel = (pt, i) => panelOf(pt)[i]?.label || defaultPortLabels(pt.label, rackPortsOf(pt, state.ctx))[i] || pt.label;
+const slotLabel = (pt, i) => shilutLabel(pt, i, currentProject(), state.ctx) || pt.label;
 const shortLabel = (txt, cab) => (cab && (txt.startsWith(`${cab}-`) || txt.startsWith(`${cab}/`)) ? txt.slice(cab.length + 1) : txt);
 // «секция|U|порт» → { pt, i } для точек шкафа
 function slotsOf(cab) {
@@ -51,6 +52,7 @@ export function racksView(ui) {
   const noCab = byCab.get('');
   return h('div', {},
     h('div', { class: 'mut', style: { margin: '0 2px 10px' } }, 'План шкафа: в каких панелях (U) и портах стоят точки с кабелями cat7. Порт попадает в поле точки «Порт в панели». Таблица для шильюта — следующим шагом.'),
+    h('div', { class: 'btns', style: { margin: '0 0 8px' } }, h('button', { class: 'sec', onclick: () => shilutSettings(ui) }, '🎨 Настройки шильюта: модели панелей, цвета, подписи')),
     noCab ? h('div', { class: 'card l-warn' }, `Точек cat7 без шкафа: ${noCab.pts} — их нельзя поставить в панель, пока не указан шкаф.`) : null,
     h('div', { class: 'card', style: { padding: 0 } }, cabs.length ? cabs.map((c) => {
       const x = byCab.get(c); const r = rackOf(p, c);
@@ -225,6 +227,14 @@ function rackEditor(ui, cab) {
   const floor = cabinetFloor(pts);
   const subOf = (sid) => subs.find((x) => x.id === (sid || ''));
   const blocked = blockedOf(r);
+  // Своя подпись порта в шильюте (пусто — снова по умолчанию/шаблону)
+  const editLabel = (pt, i) => {
+    const arr = panelOf(pt).map((x) => ({ ...x })); const own = arr[i].label || '';
+    const auto = shilutLabel({ ...pt, panel: arr.map((x) => ({ ...x, label: '' })) }, i, p, state.ctx);
+    formModal({ title: `Подпись порта ${fmtPanelPort(arr[i], subName(cab, arr[i].s))}`, values: { label: own || auto },
+      fields: [{ key: 'label', label: `В шильюте (по умолчанию: ${auto})`, type: 'text' }],
+      onSubmit: (v) => { const t = String(v.label || '').trim(); if (!t || t === auto) delete arr[i].label; else arr[i].label = t; savePanels([[pt.id, arr]]); setTimeout(() => ui.render(), 200); } });
+  };
   // Закрыть/открыть порт крестиком; при закрытии точки панели сдвигаются, кому не хватило места — не расставлены
   const toggleBlock = (pnl, port, isX) => {
     const sid = pnl.s || '';
@@ -265,6 +275,7 @@ function rackEditor(ui, cab) {
       h('div', { class: 'mut' }, `Точка ${pt.label} · ${pt.typeId}${n > 1 ? ` · порт ${i + 1} из ${n}: ${panelOf(pt).map((x) => fmtPanelPort(x, subName(cab, x.s))).join(', ')}` : ''}`),
       h('div', { class: 'btns' },
         h('button', { onclick: () => { moving = { id: pt.id, i }; c(); ui.render(); } }, '↔ Переставить'),
+        h('button', { class: 'sec', onclick: () => { c(); editLabel(pt, i); } }, '🏷 Подпись для шильюта'),
         h('button', { class: 'sec', onclick: () => { c(); pointCard(pt); } }, '📋 Карточка точки'),
         h('button', { class: 'danger', onclick: () => { savePanels([[pt.id, []]]); c(); toast(`${pt.label} убрана из панели`); ui.render(); } }, n > 1 ? '✖ Убрать точку (все её порты)' : '✖ Убрать из панели'))));
   };
@@ -292,7 +303,7 @@ function rackEditor(ui, cab) {
     });
     return h('div', { class: 'card', style: { margin: '8px 0' } },
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
-        h('b', {}, `U${pnl.u}`, h('span', { class: 'mut', style: { fontWeight: 400 } }, ` · занято ${n}/${PANEL_PORTS}${nx ? ` · закрыто ${nx}` : ''}${types.length ? ` · ${types.join(', ')}` : ''}`)),
+        h('b', {}, `U${pnl.u}`, h('span', { class: 'mut', style: { fontWeight: 400 } }, `${modelName(pnl.m || shilutOf(p).panelModel) ? ` · ${modelName(pnl.m || shilutOf(p).panelModel)}` : ''} · занято ${n}/${PANEL_PORTS}${nx ? ` · закрыто ${nx}` : ''}${types.length ? ` · ${types.join(', ')}` : ''}`)),
         h('div', { style: { display: 'flex', gap: '6px' } },
           h('button', { class: 'sec', style: { padding: '4px 10px' }, title: 'Переставить по порядку номеров с 1-го порта', onclick: async () => {
             const here = [...new Map(used.filter(Boolean).map((x) => [x.pt.id, x.pt])).values()].sort(comparePoints);
@@ -302,11 +313,12 @@ function rackEditor(ui, cab) {
             const res = autoFill(here, state.ctx, [withS({ u: pnl.u }, sid)], occ, { blocked: blockedOf(r) });
             savePanels(here.map((x) => [x.id, res.assign.get(x.id) || []])); ui.render();
           } }, '🔢'),
-          h('button', { class: 'sec', style: { padding: '4px 10px' }, title: 'Сменить U панели', onclick: () => formModal({ title: `Панель ${pName(cab, pnl)}: новый U`, values: { u: pnl.u }, fields: [{ key: 'u', label: 'U', type: 'number', required: true }],
+          h('button', { class: 'sec', style: { padding: '4px 10px' }, title: 'U и модель панели', onclick: () => formModal({ title: `Панель ${pName(cab, pnl)}: U и модель`, values: { u: pnl.u, m: pnl.m || '' },
+              fields: [{ key: 'u', label: 'U', type: 'number', required: true }, ...(panelModels().length ? [{ key: 'm', label: 'Модель панели', type: 'select', options: panelModels().map((x) => ({ value: x.id, label: x.name })), emptyLabel: 'как в настройках проекта' }] : [])],
             onSubmit: (v) => {
               const nu = Math.round(Number(v.u)); if (!(nu >= 1 && nu <= sub.height)) { toast(`U от 1 до ${sub.height}`); return false; }
               if (nu !== pnl.u && (r.panels || []).some((x) => samePanel(x, { s: sid, u: nu }))) { toast(`На U${nu} уже есть панель`); return false; }
-              saveRack(cab, { ...r, panels: (r.panels || []).map((x) => (samePanel(x, pnl) ? { ...x, u: nu } : x)), blocked: (r.blocked || []).map((x) => (samePanel(x, pnl) ? { ...x, u: nu } : x)) });
+              saveRack(cab, { ...r, panels: (r.panels || []).map((x) => (samePanel(x, pnl) ? { ...x, u: nu, m: v.m || '' } : x)), blocked: (r.blocked || []).map((x) => (samePanel(x, pnl) ? { ...x, u: nu } : x)) });
               savePanels(pts.filter((pt) => panelOf(pt).some(onPanel(pnl))).map((pt) => [pt.id, panelOf(pt).map((x) => (samePanel(x, pnl) ? { ...x, u: nu } : x))]));
               setTimeout(() => ui.render(), 200);
             } }) }, '✏️'),
@@ -344,6 +356,7 @@ function rackEditor(ui, cab) {
         h('button', { class: blockMode ? '' : 'sec', onclick: () => { blockMode = !blockMode; editMode = false; moving = null; ui.render(); } }, blockMode ? '✅ Готово' : '🚫 Закрыть порты'),
         h('button', { class: 'sec', onclick: () => wizard(cab, ui) }, '🧙 Мастер'),
         h('button', { class: 'sec', onclick: addPanel }, '➕ Панель'),
+        h('button', { class: 'sec', onclick: () => shilutSettings(ui) }, '🎨 Шильют'),
         h('button', { class: 'sec', onclick: () => rackForm(cab, () => setTimeout(() => ui.render(), 200)) }, many ? '⚙️ Шкафы, размер и нумерация' : '⚙️ Размер и нумерация'))),
     blockMode ? h('div', { class: 'card', style: { borderColor: '#ff3b30', position: 'sticky', top: '53px', zIndex: 6 } },
       h('b', {}, '🚫 Закрытие портов'),

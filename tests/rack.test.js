@@ -99,3 +99,15 @@ test('закрытые порты: точки сдвигаются, лишние
   assert.ok(rp3({ height: 42, panels: [{ u: 5 }], blocked: [{ u: 5, p: 1 }] }, [mk(9, [1])], ctx).some((t) => t.includes('закрыт')));
   assert.equal(unblockPort(r.rack, { u: 5, p: 2 }).blocked.length, 0);
 });
+import { shilutLabel, shilutCabName, contrastFg } from '../src/domain/rack.js';
+test('подписи шильюта: шаблоны, убрать шкаф, ручная подпись, цвета', () => {
+  const pt = { id: 'a', label: '1A-C5', typeId: 'Cam', cabinet: '1A', panel: [{ u: 38, p: 5 }] };
+  const ctx = { cables: new Map([['cat7', {}]]), types: new Map([['Cam', { cables: [{ cable: 'cat7', count: 1 }] }]]), configs: new Map() };
+  assert.equal(shilutLabel(pt, 0, {}, ctx), '1A-C5');
+  assert.equal(shilutLabel(pt, 0, { shilut: { dropCab: true } }, ctx), 'C5');
+  assert.equal(shilutLabel(pt, 0, { shilut: { tpl: { Cam: 'CAM {номер} ({шкаф} U{U}-{порт})' } } }, ctx), 'CAM C5 (1A U38-5)');
+  assert.equal(shilutLabel({ ...pt, panel: [{ u: 38, p: 5, label: 'свой' }] }, 0, { shilut: { dropCab: true } }, ctx), 'свой');
+  assert.equal(shilutCabName({ shilut: { cabNames: { '1A|': 'Шкаф A' } } }, '1A'), 'Шкаф A'); assert.equal(shilutCabName({}, '1A'), '1A');
+  assert.equal(contrastFg('#ffd60a'), '#000'); assert.equal(contrastFg('#111111'), '#fff');
+  assert.equal(typeColorOf({ shilut: { typeColors: { Камера: '' } } }, 'Камера').id, 'green');
+});

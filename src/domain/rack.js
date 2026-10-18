@@ -189,6 +189,30 @@ export function defaultTypeColor(typeId) {
 }
 // Цвет типа в проекте: свой (project.shilut.typeColors) или по умолчанию → объект цвета или null
 export function typeColorOf(project, typeId, extraColors = []) {
-  const id = project?.shilut?.typeColors?.[typeId] ?? defaultTypeColor(typeId);
+  const id = project?.shilut?.typeColors?.[typeId] || defaultTypeColor(typeId);
   return [...SHILUT_COLORS, ...extraColors].find((c) => c.id === id) || null;
+}
+// Цвет текста на заданном фоне (чёрный/белый)
+export function contrastFg(bg) {
+  const m = String(bg || '').match(/^#?([0-9a-f]{6})$/i); if (!m) return '#fff';
+  const n = parseInt(m[1], 16); const r = n >> 16; const g = (n >> 8) & 255; const b = n & 255;
+  return (r * 299 + g * 587 + b * 114) / 1000 > 150 ? '#000' : '#fff';
+}
+
+// ---------- подписи и названия для шильюта ----------
+// project.shilut = { panelModel, typeColors: {тип: id цвета}, cabNames: {'шкаф|секция': имя}, dropCab, tpl: {тип: шаблон} }
+// В prefs пользователя: panelModels: [{ id, name }], shilutColors: [{ id, ru, he, bg, fg }]
+export const shilutOf = (project) => project?.shilut || {};
+export const shilutCabName = (project, cabinet, sid = '') => shilutOf(project).cabNames?.[`${cabinet}|${sid || ''}`]
+  || subNameOf(project, cabinet, sid) || subsOf(project?.racks?.[cabinet], cabinet).find((x) => (x.id || '') === (sid || ''))?.name || cabinet;
+const stripCab = (txt, cab) => (cab && (txt.startsWith(`${cab}-`) || txt.startsWith(`${cab}/`)) ? txt.slice(cab.length + 1) : txt);
+// Шаблон: {имя} — обозначение порта (без шкафа, если включено «убрать шкаф»), {номер} — всегда без шкафа, {шкаф}, {U}, {порт}
+export function shilutLabel(point, i, project, ctx) {
+  const e = panelOf(point)[i]; if (e?.label) return e.label;
+  const sh = shilutOf(project); const cab = point.cabinet || '';
+  let base = defaultPortLabels(point.label, rackPortsOf(point, ctx))[i] ?? point.label;
+  if (sh.dropCab) base = stripCab(base, cab);
+  const tpl = String(sh.tpl?.[point.typeId] || '').trim() || '{имя}';
+  return tpl.replace(/\{имя\}/g, base).replace(/\{номер\}/g, stripCab(base, cab)).replace(/\{шкаф\}/g, shilutCabName(project, cab, e?.s))
+    .replace(/\{U\}/g, String(e?.u ?? '')).replace(/\{порт\}/g, String(e?.p ?? ''));
 }
