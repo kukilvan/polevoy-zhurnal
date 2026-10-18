@@ -131,11 +131,15 @@ function afterCreate(pid, ui) {
   function drawings() {
     const rows = h('div', {}); const files = [];
     const paint = () => rows.replaceChildren(...files.map((x) => h('div', { class: 'pickrow' }, h('span', { style: { flex: 1 } }, x.name, x.fileId ? h('small', { class: 'mut' }, '  · с Диска') : null), x.floor)));
-    const addOne = async () => { const { pickPdf } = await import('./pdfpick.js'); const r = await pickPdf({ title: 'Тохнит для проекта', project: false }); if (!r) return;
-      if (files.some((x) => x.name === r.name)) { toast('Этот тохнит уже в списке'); return; }
-      files.push({ ...r, floor: h('input', { placeholder: 'этаж', style: { width: '90px' }, value: (r.name.match(/(-?\d+(?:\.\d+)?)/) || [])[1] || '' }) }); paint(); };
+    const addOne = async () => { const { pickPdf } = await import('./pdfpick.js'); const rs = await pickPdf({ title: 'Тохниты для проекта', project: false, multiple: true }); if (!rs?.length) return;
+      let dup = 0;
+      for (const r of rs) {
+        if (files.some((x) => x.name === r.name)) { dup++; continue; }
+        files.push({ ...r, floor: h('input', { placeholder: 'этаж', style: { width: '90px' }, value: (r.name.match(/(-?\d+(?:\.\d+)?)/) || [])[1] || '' }) });
+      }
+      if (dup) toast(`Уже в списке: ${dup}`); paint(); };
     return [h('div', { class: 'mut' }, 'Тохниты проекта: с устройства или уже лежащие на Google Диске (без повторной загрузки). Для каждого можно указать этаж.'),
-      h('button', { class: 'sec', onclick: addOne }, '➕ Добавить тохнит'), rows,
+      h('button', { class: 'sec', onclick: addOne }, '➕ Добавить тохниты'), rows,
       h('button', { onclick: async () => {
         if (!files.length) { next(); return; }
         const { addDrawing } = await import('../drawings.js'); const { makeWorker } = await import('./tohnitview.js');
