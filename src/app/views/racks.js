@@ -241,7 +241,8 @@ function rackEditor(ui, cab) {
     if (isX) { saveRack(cab, unblockPort(r, { s: sid, u: pnl.u, p: port })); setTimeout(() => ui.render(), 200); return; }
     const res = blockPort(r, pts, cab, { s: sid, u: pnl.u, p: port });
     saveRack(cab, res.rack); savePanels([...res.writes.entries()]);
-    if (res.dropped.length) toast(`Не поместились в панель ${pName(cab, pnl)} — теперь не расставлены: ${res.dropped.map((x) => x.label).slice(0, 8).join(', ')}${res.dropped.length > 8 ? '…' : ''}`);
+    const lst = (a) => `${a.map((x) => x.label).slice(0, 8).join(', ')}${a.length > 8 ? '…' : ''}`;
+    if (res.dropped.length || res.moved.length) toast(`${res.moved.length ? `Ушли в следующую панель: ${lst(res.moved)}. ` : ''}${res.dropped.length ? `Нет места нигде — не расставлены: ${lst(res.dropped)}` : ''}`);
     else if (res.writes.size) toast(`Точки сдвинуты: ${res.writes.size}`);
     setTimeout(() => ui.render(), 200);
   };
@@ -360,7 +361,7 @@ function rackEditor(ui, cab) {
         h('button', { class: 'sec', onclick: () => rackForm(cab, () => setTimeout(() => ui.render(), 200)) }, many ? '⚙️ Шкафы, размер и нумерация' : '⚙️ Размер и нумерация'))),
     blockMode ? h('div', { class: 'card', style: { borderColor: '#ff3b30', position: 'sticky', top: '53px', zIndex: 6 } },
       h('b', {}, '🚫 Закрытие портов'),
-      h('div', { class: 'mut' }, 'Нажмите на порт — на нём появится ✖ и точки в него не встанут. Точки этой панели сдвинутся на ближайшие свободные порты; кто не поместится — станет нерасставленным. Нажмите на ✖ — порт откроется (точки сами не сдвигаются).'),
+      h('div', { class: 'mut' }, 'Нажмите на порт — на нём появится ✖ и точки в него не встанут. Точки этой панели сдвинутся на ближайшие свободные порты; кто не поместится — уйдёт в следующую панель с точками такого же типа, а если места нет и там — станет нерасставленным. Нажмите на ✖ — порт откроется (точки сами не сдвигаются).'),
       h('div', { class: 'btns' }, h('button', { onclick: () => { blockMode = false; ui.render(); } }, '✅ Готово'))) : null,
     editMode ? h('div', { class: 'card', style: { borderColor: '#e0007a', position: 'sticky', top: '53px', zIndex: 6 } },
       h('b', {}, moving ? `✏️ Переношу: ${slotLabel(state.ctx.points.get(moving.id) || { label: '?' }, moving.i)}` : '✏️ Режим перестановки'),

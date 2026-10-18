@@ -118,3 +118,26 @@ test('убрать название шкафа — у каждого шкафа 
   assert.equal(shilutLabel(mk('1A'), 0, proj, ctx), 'C5'); assert.equal(shilutLabel(mk('2B'), 0, proj, ctx), '2B-C5');
   assert.equal(shilutLabel(mk('3C'), 0, { shilut: { dropCab: true } }, ctx), 'C5');
 });
+test('закрытый порт: лишние точки уходят в следующую панель такого же типа', () => {
+  const mk = (n, u, p, typeId = 'Cam') => ({ id: `${typeId}${n}`, label: `${typeId}${n}`, typeId, cabinet: 'X', panel: [{ u, p }] });
+  const rack = { height: 42, bottomUp: true, panels: [{ u: 38 }, { u: 37 }, { u: 36 }, { u: 30 }] };
+  const a = Array.from({ length: 24 }, (_, i) => mk(i + 1, 38, i + 1));
+  const b = [mk(25, 36, 1), mk(26, 36, 2)];
+  const wifi = [mk(1, 37, 1, 'AP')];
+  const r = blockPort(rack, [...a, ...b, ...wifi], 'X', { u: 38, p: 10 });
+  assert.equal(r.dropped.length, 0);
+  assert.deepEqual(r.writes.get('Cam24'), [{ u: 36, p: 1 }]);          // ушла в U36 (U37 — другой тип, пропущена), встала первой
+  assert.deepEqual(r.writes.get('Cam25'), [{ u: 36, p: 2 }]); assert.deepEqual(r.writes.get('Cam26'), [{ u: 36, p: 3 }]);
+  assert.deepEqual(r.writes.get('Cam10'), [{ u: 38, p: 11 }]);
+  assert.ok(!r.writes.has('AP1')); assert.deepEqual(r.moved.map((x) => x.id), ['Cam24']);
+  // следующая панель тоже забита — каскад дальше, а когда панелей больше нет — не расставлены
+  const full36 = Array.from({ length: 24 }, (_, i) => mk(100 + i, 36, i + 1));
+  const r2 = blockPort(rack, [...a, ...full36], 'X', { u: 38, p: 10 });
+  assert.deepEqual(r2.dropped.map((x) => x.id), ['Cam123']); assert.deepEqual(r2.writes.get('Cam123'), []);
+  assert.deepEqual(r2.writes.get('Cam24'), [{ u: 36, p: 1 }]); assert.deepEqual(r2.writes.get('Cam100'), [{ u: 36, p: 2 }]);
+  // в точку на 2 порта: переезжает целиком
+  const ap = (n, p) => ({ id: `W${n}`, label: `W${n}`, typeId: 'AP2', cabinet: 'X', panel: [{ u: 38, p }, { u: 38, p: p + 1 }] });
+  const wp = Array.from({ length: 12 }, (_, i) => ap(i, 1 + i * 2));
+  const r3 = blockPort({ ...rack, panels: [{ u: 38 }, { u: 36 }] }, [...wp, { id: 'W99', label: 'W99', typeId: 'AP2', cabinet: 'X', panel: [{ u: 36, p: 1 }, { u: 36, p: 2 }] }], 'X', { u: 38, p: 4 });
+  assert.deepEqual(r3.writes.get('W11'), [{ u: 36, p: 1 }, { u: 36, p: 2 }]); assert.deepEqual(r3.writes.get('W99'), [{ u: 36, p: 3 }, { u: 36, p: 4 }]);
+});

@@ -115,33 +115,67 @@ export const blockedOf = (rack) => new Set((rack?.blocked || []).map(slotKey));
 export const isBlocked = (rack, x) => blockedOf(rack).has(slotKey(x));
 export const unblockPort = (rack, x) => ({ ...rack, blocked: (rack.blocked || []).filter((b) => slotKey(b) !== slotKey(x)) });
 // Закрыть порт панели. Точки этой панели, что стояли на нём или мешают, сдвигаются вперёд на ближайшие свободные порты
-// (порядок сохраняется); кому не хватило места в панели — становятся нерасставленными (panel = []).
-// → { rack, writes: Map(id → panel[]), dropped: [точки] }
+// (порядок сохраняется). Кому не хватило места — переходят в начало следующей (в порядке шкафа) панели с точками такого же типа
+// (её точки при необходимости сдвигаются дальше, лишние идут ещё дальше); если подходящих панелей больше нет — становятся нерасставленными.
+// → { rack, writes: Map(id → panel[]), dropped: [точки без места], moved: [точки, ушедшие в другую панель] }
 export function blockPort(rack, points, cabinet, { s = '', u, p }) {
   const sec = s || '';
   const nb = sec ? { s: sec, u, p } : { u, p };
   const nextRack = { ...rack, blocked: [...(rack?.blocked || []).filter((b) => slotKey(b) !== slotKey(nb)), nb] };
   const blocked = blockedOf(nextRack);
-  const here = (x) => (x.s || '') === sec && x.u === u;
-  const units = points.filter((pt) => (pt.cabinet || '') === cabinet && panelOf(pt).some(here)).map((pt) => {
-    const arr = panelOf(pt).map((x) => ({ ...x }));
-    const idx = arr.map((x, i) => (here(x) ? i : -1)).filter((i) => i >= 0).sort((a, b) => arr[a].p - arr[b].p);
+  const cabPts = points.filter((pt) => (pt.cabinet || '') === cabinet);
+  const work = new Map(cabPts.map((pt) => [pt.id, panelOf(pt).map((x) => ({ ...x }))]));
+  const order = subsOf(rack, cabinet).flatMap((sub) => panelsInOrder(rack, sub)).map((x) => ({ s: x.s || '', u: x.u }));
+  const inPanel = (e, pn) => (e.s || '') === pn.s && e.u === pn.u;
+  const unitsOf = (pn) => cabPts.filter((pt) => work.get(pt.id).some((e) => inPanel(e, pn))).map((pt) => {
+    const arr = work.get(pt.id);
+    const idx = arr.map((x, i) => (inPanel(x, pn) ? i : -1)).filter((i) => i >= 0).sort((a, b) => arr[a].p - arr[b].p);
     return { pt, arr, idx, first: arr[idx[0]].p };
   }).sort((a, b) => a.first - b.first);
-  const taken = new Set(); const writes = new Map(); const dropped = [];
-  for (const un of units) {
-    const k = un.idx.length;
-    const ok = (ports) => ports.every((q) => q >= 1 && q <= PANEL_PORTS && !taken.has(q) && !blocked.has(slotKey({ s: sec, u, p: q })));
-    let ports = un.idx.map((i) => un.arr[i].p);
-    if (!ok(ports)) {
-      let st = un.first; while (st + k - 1 <= PANEL_PORTS && !ok(Array.from({ length: k }, (_, j) => st + j))) st++;
-      ports = st + k - 1 <= PANEL_PORTS ? Array.from({ length: k }, (_, j) => st + j) : null;
+  // Раскладка одной панели: каждая точка остаётся на своих портах, если они свободны и не закрыты, иначе — ближайшие свободные дальше
+  const layout = (pn) => {
+    const taken = new Set(); const dropped = [];
+    for (const un of unitsOf(pn)) {
+      const k = un.idx.length;
+      const ok = (ports) => ports.every((q) => q >= 1 && q <= PANEL_PORTS && !taken.has(q) && !blocked.has(slotKey({ s: pn.s, u: pn.u, p: q })));
+      let ports = un.idx.map((i) => un.arr[i].p);
+      if (!ok(ports)) {
+        let st = Math.max(un.first, 1); while (st + k - 1 <= PANEL_PORTS && !ok(Array.from({ length: k }, (_, j) => st + j))) st++;
+        ports = st + k - 1 <= PANEL_PORTS ? Array.from({ length: k }, (_, j) => st + j) : null;
+      }
+      if (!ports) { dropped.push(un); continue; }
+      ports.forEach((q) => taken.add(q));
+      un.idx.forEach((i, j) => { un.arr[i].p = ports[j]; });
     }
-    if (!ports) { dropped.push(un.pt); writes.set(un.pt.id, []); continue; }
-    ports.forEach((q) => taken.add(q));
-    if (ports.some((q, j) => q !== un.arr[un.idx[j]].p)) { un.idx.forEach((i, j) => { un.arr[i].p = ports[j]; }); writes.set(un.pt.id, un.arr); }
+    return dropped;
+  };
+  const finalDropped = []; const queue = new Map();
+  const spill = (dropped, from) => {
+    for (const un of dropped) {
+      let t = -1;
+      for (let k = from + 1; k < order.length && t < 0; k++) {
+        if (cabPts.some((pt) => pt.id !== un.pt.id && pt.typeId === un.pt.typeId && work.get(pt.id).some((e) => inPanel(e, order[k])))) t = k;
+      }
+      if (t < 0) { finalDropped.push(un.pt); work.set(un.pt.id, []); continue; }
+      un.idx.forEach((i) => { const e = un.arr[i]; e.u = order[t].u; if (order[t].s) e.s = order[t].s; else delete e.s; e.p = 0; });
+      if (!queue.has(t)) queue.set(t, []);
+      queue.get(t).push(un);
+    }
+  };
+  const startPn = { s: sec, u };
+  spill(layout(startPn), order.findIndex((x) => x.s === sec && x.u === u));
+  while (queue.size) {
+    const t = Math.min(...queue.keys()); queue.delete(t);
+    spill(layout(order[t]), t);
   }
-  return { rack: nextRack, writes, dropped };
+  const writes = new Map(); const moved = [];
+  cabPts.forEach((pt) => {
+    const a = work.get(pt.id); const o = panelOf(pt);
+    if (JSON.stringify(a) === JSON.stringify(o)) return;
+    writes.set(pt.id, a);
+    if (a.length && a.some((e, i) => (e.s || '') !== (o[i]?.s || '') || e.u !== o[i]?.u)) moved.push(pt);
+  });
+  return { rack: nextRack, writes, dropped: finalDropped, moved };
 }
 
 // Проверки плана шкафа: занятые дважды порты, точки на несуществующих панелях, панели вне шкафа и на одном U, число портов ≠ cat7
