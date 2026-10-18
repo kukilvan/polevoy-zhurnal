@@ -24,3 +24,25 @@ test('дубликаты портов и поиск', () => {
   assert.equal(cf.length, 1); assert.equal(cf[0].points.length, 2);
   assert.ok(matchesPanelQuery(a, 'U38-01') && matchesPanelQuery(a, '38-1') && !matchesPanelQuery(a, '38-2'));
 });
+import { autoFill, uOrder, panelsInOrder, rackProblems } from '../src/domain/rack.js';
+const ctx1 = { types: new Map([['Cam', { id: 'Cam', defaultCable: 'cat7', defaultCables: 1 }], ['AP2', { id: 'AP2', defaultCable: 'cat7', defaultCables: 2 }]]), cabinetSettings: [], devices: new Map(), cables: new Map() };
+test('авторазкладка по панелям', () => {
+  const pts = Array.from({ length: 30 }, (_, i) => ({ id: `c${i}`, label: `C${i}`, typeId: 'Cam' }));
+  const r = autoFill(pts, ctx1, [{ u: 38 }, { u: 37 }], new Set(['38|2']));
+  assert.deepEqual(r.assign.get('c0'), [{ u: 38, p: 1 }]);
+  assert.deepEqual(r.assign.get('c1'), [{ u: 38, p: 3 }]);
+  assert.deepEqual(r.assign.get('c23'), [{ u: 37, p: 1 }]);
+  assert.equal(r.left.length, 0);
+  const ap = [{ id: 'a', label: 'AP1', typeId: 'AP2' }];
+  const r2 = autoFill(ap, ctx1, [{ u: 5 }, { u: 4 }], new Set(), { start: 24 });
+  assert.deepEqual(r2.assign.get('a'), [{ u: 4, p: 1 }, { u: 4, p: 2 }]);
+  const r3 = autoFill(ap, ctx1, [{ u: 5 }], new Set(), { start: 24 });
+  assert.equal(r3.left.length, 1);
+});
+test('порядок U и проверки', () => {
+  assert.deepEqual(uOrder({ height: 3, bottomUp: true }), [3, 2, 1]);
+  assert.deepEqual(uOrder({ height: 3, bottomUp: false }), [1, 2, 3]);
+  assert.deepEqual(panelsInOrder({ height: 42, bottomUp: true, panels: [{ u: 10 }, { u: 38 }] }).map((x) => x.u), [38, 10]);
+  const pr = rackProblems({ height: 42, panels: [{ u: 38 }, { u: 38 }] }, [{ id: 'x', label: 'X', typeId: 'Cam', cabinet: '1A', panel: [{ u: 30, p: 1 }] }], ctx1);
+  assert.ok(pr.some((t) => t.includes('Две панели')) && pr.some((t) => t.includes('такой панели')));
+});

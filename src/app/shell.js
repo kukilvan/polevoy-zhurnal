@@ -1,4 +1,5 @@
 // Оболочка: верхняя панель, нижняя панель из 5 экранов, меню, переключение экранов.
+import { racksView } from './views/racks.js';
 import { projectWizard } from './views/wizard.js';
 import { startPool } from './pool.js';
 import { h, openModal, toast } from './ui.js';
@@ -26,7 +27,7 @@ import { soonView } from './views/soon.js';
 const TABS = [
   ['project', 'Проект', '🏗'], ['meter', 'Точки', '📏'], ['todos', 'Дела', '✅'], ['journal', 'Журнал', '📒'], ['doh', 'Дохот', '📝'], ['settings', 'Настройки', '⚙️'],
 ];
-const SCREEN_TITLES = { projects: 'Все проекты', month: 'Месяц', history: 'История', import: 'Импорт', install: 'Привязка установки', ref: 'Справочник', members: 'Участники', tables: 'Для руководства', guide: 'Как пользоваться', log: 'Журнал событий' };
+const SCREEN_TITLES = { projects: 'Все проекты', month: 'Месяц', history: 'История', import: 'Импорт', install: 'Привязка установки', ref: 'Справочник', members: 'Участники', tables: 'Для руководства', racks: 'Шкафы и шильют', guide: 'Как пользоваться', log: 'Журнал событий' };
 
 export function createShell({ user, onLogout, diag }) {
   const root = document.getElementById('app');
@@ -70,6 +71,7 @@ export function createShell({ user, onLogout, diag }) {
     if (ui.screen === 'ref') return refView();
     if (ui.screen === 'members') return membersView(ui);
     if (ui.screen === 'tables') return tablesView(ui);
+    if (ui.screen === 'racks') return racksView(ui);
     if (ui.screen === 'guide') return guideView(ui);
     if (ui.screen === 'month') return monthView(ui);
     if (ui.screen === 'history') return historyView(ui);

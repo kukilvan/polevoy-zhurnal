@@ -60,3 +60,55 @@ export function matchesPanelQuery(point, q) {
   if (errors.length || list.length !== 1) return false;
   return panelOf(point).some((x) => x.u === list[0].u && x.p === list[0].p);
 }
+
+// ---------- план шкафа ----------
+// project.racks[шкаф] = { height, bottomUp (U1 внизу), panels: [{ u }] }
+export const rackOf = (project, cabinet) => project?.racks?.[cabinet] || null;
+// U сверху вниз, как в шкафу
+export const uOrder = (rack) => { const n = Number(rack?.height) || 0; return Array.from({ length: n }, (_, i) => (rack.bottomUp === false ? i + 1 : n - i)); };
+export const panelsInOrder = (rack) => { const pos = new Map(uOrder(rack).map((u, i) => [u, i])); return [...(rack?.panels || [])].sort((a, b) => (pos.get(a.u) ?? 1e9) - (pos.get(b.u) ?? 1e9)); };
+// Точки шкафа, которым нужны порты панели
+export const rackPointsOf = (points, ctx, cabinet) => [...points].filter((p) => (p.cabinet || '') === cabinet && rackPortsOf(p, ctx) > 0);
+// Этаж шкафа — тот, что у большинства его точек
+export function cabinetFloor(points) {
+  const n = new Map(); points.forEach((p) => { const f = String(p.floor ?? '').trim(); if (f) n.set(f, (n.get(f) || 0) + 1); });
+  return [...n.entries()].sort((a, b) => b[1] - a[1])[0]?.[0] || '';
+}
+// Разложить точки (уже в нужном порядке) по панелям (в нужном порядке) с порта start первой панели; занятые порты пропускаются.
+// Порты одной точки — подряд в одной панели (если не влезает в остаток панели — со следующей). → { assign: Map(id → [{u,p}]), left: [точки] }
+export function autoFill(points, ctx, panels, occupied, { start = 1 } = {}) {
+  const busy = new Set(occupied); const assign = new Map(); const left = [];
+  let pi = 0; let port = start;
+  for (const pt of points) {
+    const n = rackPortsOf(pt, ctx); let done = false;
+    while (pi < panels.length && !done) {
+      const u = panels[pi].u;
+      let s = port;
+      while (s + n - 1 <= PANEL_PORTS) {
+        const ok = Array.from({ length: n }, (_, k) => !busy.has(`${u}|${s + k}`)).every(Boolean);
+        if (ok) break; s++;
+      }
+      if (s + n - 1 <= PANEL_PORTS) {
+        const list = Array.from({ length: n }, (_, k) => ({ u, p: s + k }));
+        list.forEach((x) => busy.add(`${x.u}|${x.p}`)); assign.set(pt.id, list); port = s + n; done = true;
+      } else { pi++; port = 1; }
+    }
+    if (!done) left.push(pt);
+  }
+  return { assign, left };
+}
+// Проверки плана шкафа: занятые дважды порты, точки на несуществующих панелях, панели вне шкафа и на одном U, число портов ≠ cat7
+export function rackProblems(rack, points, ctx) {
+  const out = [];
+  const us = new Set((rack?.panels || []).map((x) => x.u));
+  const h = Number(rack?.height) || 0;
+  const seenU = new Set();
+  (rack?.panels || []).forEach((x) => { if (seenU.has(x.u)) out.push(`Две панели на U${x.u}`); seenU.add(x.u); if (h && (x.u < 1 || x.u > h)) out.push(`Панель U${x.u} вне шкафа (${h}U)`); });
+  panelConflicts(points).forEach((c) => out.push(`Порт ${fmtPanelPort(c)} занят несколькими точками: ${c.points.map((p) => p.label).join(', ')}`));
+  points.forEach((pt) => {
+    const pl = panelOf(pt); if (!pl.length) return;
+    const bad = pl.filter((x) => !us.has(x.u)); if (bad.length) out.push(`${pt.label}: ${bad.map(fmtPanelPort).join(', ')} — такой панели в плане нет`);
+    const n = rackPortsOf(pt, ctx); if (pl.length !== n) out.push(`${pt.label}: портов в панели ${pl.length}, а кабелей cat7 ${n}`);
+  });
+  return out;
+}
