@@ -53,3 +53,8 @@ test('цвета шильюта по умолчанию', () => {
   assert.equal(defaultTypeColor('Дверь'), 'blue'); assert.equal(defaultTypeColor('TV'), '');
   assert.equal(typeColorOf({ shilut: { typeColors: { Камера: 'red' } } }, 'Камера').he, 'אדום');
 });
+import { compareLabels } from '../src/domain/points.js';
+test('умная сортировка обозначений', () => {
+  const l = ['1A-09-10', '1A/01-02', '1A-11-12', '1A/03-04', '1A-AP-03', '1A-AP01', '1A-AP-2', '1A-6.2', '1A-6.10', '1A-6.1', '2B-C200', '2B-C117'];
+  assert.deepEqual([...l].sort(compareLabels), ['1A/01-02', '1A/03-04', '1A-6.1', '1A-6.2', '1A-6.10', '1A-09-10', '1A-11-12', '1A-AP01', '1A-AP-2', '1A-AP-03', '2B-C117', '2B-C200']);
+});

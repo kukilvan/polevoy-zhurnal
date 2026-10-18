@@ -27,8 +27,21 @@ export function pointKey(label) {
 }
 
 // Естественное сравнение обозначений: числа внутри сравниваются как числа в любом месте (D2/2 < D2/10, GA1/C-9 < GA1/C-10, 07.In-3 < 07.In-12)
+// Разделители («-», «/», «_», «.», пробел) и ведущие нули не влияют: «1A/01-02» < «1A-09-10», «AP-3» = «AP03» по порядку.
 const natCollator = new Intl.Collator('ru', { numeric: true, sensitivity: 'base' });
-export const compareLabels = (x, y) => natCollator.compare(String(x ?? ''), String(y ?? '')) || (String(x ?? '') < String(y ?? '') ? -1 : String(x ?? '') > String(y ?? '') ? 1 : 0);
+const labelTokens = (x) => (String(x ?? '').match(/\d+|[^\d\s\-/_.\\|,:;]+/g) || []).map((t) => (/^\d+$/.test(t) ? Number(t) : t));
+export function compareLabels(x, y) {
+  const a = labelTokens(x); const b = labelTokens(y);
+  for (let i = 0; i < Math.min(a.length, b.length); i++) {
+    const p = a[i]; const q = b[i];
+    if (typeof p === 'number' && typeof q === 'number') { if (p !== q) return p - q; continue; }
+    if (typeof p === 'number') return -1;
+    if (typeof q === 'number') return 1;
+    const c = natCollator.compare(p, q); if (c) return c;
+  }
+  if (a.length !== b.length) return a.length - b.length;
+  return natCollator.compare(String(x ?? ''), String(y ?? '')) || (String(x ?? '') < String(y ?? '') ? -1 : String(x ?? '') > String(y ?? '') ? 1 : 0);
+}
 
 // Сравнение точек: шкаф → тип → обозначение (естественно, по числам).
 export function comparePoints(a, b) {
