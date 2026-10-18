@@ -1,9 +1,12 @@
 name: Server tables
 
 # Каждую ночь в 00:00 UTC (03:00 по Израилю летом, 02:00 зимой) обновляются таблицы для руководства, у которых включено автообновление.
+# Повтор в 07:20 UTC (10:20 по Израилю) — сразу после сброса суточного лимита Firebase (полночь по Тихоокеанскому времени).
+# Он работает, только если ночной запуск сегодня не удался (например, лимит чтения был исчерпан накануне).
 on:
   schedule:
     - cron: '0 0 * * *'
+    - cron: '20 7 * * *'
   workflow_dispatch:
 
 permissions:
@@ -17,12 +20,25 @@ jobs:
   tables:
     runs-on: ubuntu-latest
     steps:
+      - name: Нужен ли повтор
+        id: gate
+        run: |
+          if [ "${{ github.event.schedule }}" = "20 7 * * *" ]; then
+            ok=$(gh api "repos/${{ github.repository }}/actions/workflows/server-tables.yml/runs?created=>=$(date -u +%F)&status=success" -q '.total_count')
+            if [ "$ok" != "0" ]; then echo "skip=1" >> "$GITHUB_OUTPUT"; echo "::notice::Сегодня таблицы уже обновлены — повтор не нужен"; fi
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
       - uses: actions/checkout@v4
+        if: steps.gate.outputs.skip != '1'
       - uses: actions/setup-node@v4
+        if: steps.gate.outputs.skip != '1'
         with:
           node-version: 22
-      - run: npm i --no-save firebase-admin@13 google-auth-library@9 mupdf@1.28.1
+      - if: steps.gate.outputs.skip != '1'
+        run: npm i --no-save firebase-admin@13 google-auth-library@9 mupdf@1.28.1
       - name: Обновить таблицы
+        if: steps.gate.outputs.skip != '1'
         run: node scripts/server-tables.mjs
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}

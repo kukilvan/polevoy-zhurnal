@@ -3,12 +3,13 @@
 import { h, openModal, toast } from '../ui.js';
 import { drawingsOf, drawingTitle, loadDrawing, listDrivePdfs, downloadDriveFile } from '../drawings.js';
 
-export function pickPdf({ title = 'Тохнит (PDF)', project = true } = {}) {
+export function pickPdf({ title = 'Тохнит (PDF)', project = true, extra = [] } = {}) {  // extra — только что добавленные чертежи (могли ещё не дойти до списка проекта)
   return new Promise((resolve) => {
     let done = false; const finish = (v) => { if (done) return; done = true; c(); resolve(v); };
     const drive = h('div', {});
     const input = h('input', { type: 'file', accept: '.pdf,application/pdf', style: { display: 'none' }, onchange: async () => { const f = input.files?.[0]; if (f) finish({ name: f.name, buf: await f.arrayBuffer() }); } });
-    const own = project ? drawingsOf() : [];
+    const own = project ? [...drawingsOf(), ...extra] : [];
+    const seen = new Set(); for (let i = own.length - 1; i >= 0; i--) { const k = own[i].id || own[i].name; if (seen.has(k)) own.splice(i, 1); else seen.add(k); }
     const showDrive = async () => {
       drive.replaceChildren(h('div', { class: 'mut' }, 'Ищу на Google Диске…'));
       try {

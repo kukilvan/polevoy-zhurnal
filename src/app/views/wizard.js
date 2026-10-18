@@ -8,7 +8,6 @@ import { POOL_KINDS, POOL_TITLES, poolMaps, depsOf, isSystemType, mainTable, wit
 import { bare } from '../../domain/typelib.js';
 import { pool, poolReady, onPool } from '../pool.js';
 import { typeFilterOptions } from '../typegroups.js';
-import { drawingsOf, drawingTitle } from '../drawings.js';
 
 const nameOf = (kind, x) => (kind === 'types' || kind === 'cables' ? x.id : x.name || x.id);
 const FREE_WORKS = ['Протяжка', 'Перетяжка', 'Перенос', 'Время', 'Доп. работа'];  // работы не по составу точек — отмечены сразу
@@ -128,6 +127,7 @@ function afterCreate(pid, ui) {
         if (n) toast(`Приглашено: ${n}`); next();
       } }, 'Пригласить и дальше')];
   }
+  const added = []; // чертежи, добавленные на шаге «Чертежи» (для выбора на шаге «Точки»)
   function drawings() {
     const rows = h('div', {}); const files = [];
     const paint = () => rows.replaceChildren(...files.map((x) => h('div', { class: 'pickrow' }, h('span', { style: { flex: 1 } }, x.name, x.fileId ? h('small', { class: 'mut' }, '  · с Диска') : null), x.floor)));
@@ -141,18 +141,20 @@ function afterCreate(pid, ui) {
         const { addDrawing } = await import('../drawings.js'); const { makeWorker } = await import('./tohnitview.js');
         for (const x of files) {
           try { const wk = makeWorker(); const o = await wk.call('openDoc', { data: x.buf.slice(0) }); wk.stop();
-            await addDrawing(x.buf, { name: x.name, floor: x.floor.value.trim(), pages: o.pages, fileId: x.fileId || null }); } catch (e) { toast(`${x.name}: ${e.message}`); }
+            const d = await addDrawing(x.buf, { name: x.name, floor: x.floor.value.trim(), pages: o.pages, fileId: x.fileId || null }); if (d) added.push(d); } catch (e) { toast(`${x.name}: ${e.message}`); }
         }
         toast(`Чертежей добавлено: ${files.length}`); next();
       } }, 'Добавить и дальше')];
   }
   function points() {
-    const ds = drawingsOf();
-    return [h('div', { class: 'mut' }, 'Точки можно добавить сразу: из файла (после разбора тохнита) или разобрать тохнит проекта. Откроется своё окно; после него нажмите «Дальше».'),
+    return [h('div', { class: 'mut' }, 'Точки можно добавить сразу: из файла (после разбора тохнита) или разобрать тохнит — из этого проекта, с Google Диска или с устройства. Откроется своё окно; после него нажмите «Дальше».'),
       h('div', { class: 'btns' },
         h('button', { class: 'sec', onclick: () => import('./pointsfile.js').then((m) => m.pointsFromFile()) }, '📥 Точки из файла'),
-        ...ds.map((d) => h('button', { class: 'sec', onclick: async () => { const { loadDrawing } = await import('../drawings.js'); const m = await import('./tohnitview.js'); try { m.pointsFromDrawing({ drawing: d, buf: await loadDrawing(d) }); } catch (e) { toast(e.message); } } }, `📐 Разобрать «${drawingTitle(d)}»`)),
-        h('button', { class: 'sec', onclick: () => import('./tohnitview.js').then((m) => m.pointsFromDrawing()) }, ds.length ? '📐 Другой тохнит…' : '📐 Из чертежа (PDF)')),
+        h('button', { class: 'sec', onclick: async () => {
+          const { pickPdf } = await import('./pdfpick.js'); const r = await pickPdf({ title: '📐 Какой тохнит разобрать', extra: added }); if (!r) return;
+          const m = await import('./tohnitview.js');
+          m.pointsFromDrawing(r.drawing ? { drawing: r.drawing, buf: r.buf } : { file: r });
+        } }, '📐 Из чертежа')),
       h('button', { onclick: next }, 'Дальше')];
   }
   function managers() {
