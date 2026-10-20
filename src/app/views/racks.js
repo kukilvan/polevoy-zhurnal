@@ -7,15 +7,16 @@ import {
   PANEL_PORTS, rackPortsOf, panelOf, fmtPanelPort, defaultPortLabels, rackOf, panelsInOrder, rackPointsOf,
   cabinetFloor, autoFill, rackProblems, typeColorOf, slotKey, subsOf, blockedOf, blockPort, unblockPort, shilutLabel, shilutOf,
 } from '../../domain/rack.js';
-import { pointCard } from './points.js';
+import { pointCard, bulkEditForm, renameForm } from './points.js';
 import { shilutSettings, panelModels, modelName } from './shilutsettings.js';
 import { rackTableCard } from './racktable.js';
-import { markShilutForPoints } from './doh.js';
+import { markShilutForPoints, addWorkForPoints } from './doh.js';
 
 let openCab = null;   // открытый шкаф
 let moving = null;    // перенос порта: { id, i }
 let editMode = false; // режим перестановки: нажал точку → нажал порт, без окон
 let blockMode = false; // режим «закрыть порты»: нажал порт → на нём крестик (или снял)
+let pickSel = null;   // режим «Выбрать точки» (изменить / переименовать / добавить работу): Set id точек шкафа
 let shMode = null;    // режим «Шилют готов» на одной панели: { key: 'секция|U', sel: Set('точка:порт') }
 
 const sortRu = (a, b) => a.localeCompare(b, 'ru', { numeric: true });
@@ -66,7 +67,7 @@ export function racksView(ui) {
     noCab ? h('div', { class: 'card l-warn' }, `Точек cat7 без шкафа: ${noCab.pts} — их нельзя поставить в панель, пока не указан шкаф.`) : null,
     h('div', { class: 'card', style: { padding: 0 } }, cabs.length ? cabs.map((c) => {
       const x = byCab.get(c); const r = rackOf(p, c);
-      return h('div', { class: 'item', onclick: () => { openCab = c; moving = null; blockMode = false; ui.render(); } },
+      return h('div', { class: 'item', onclick: () => { openCab = c; moving = null; blockMode = false; pickSel = null; ui.render(); } },
         h('div', { class: 'name' }, `🗄 Шкаф ${c}`, h('div', { class: 'sub' }, `точек cat7: ${x.pts} (портов ${x.ports}) · расставлено ${x.placed} из ${x.pts}${r ? ` · ${subsOf(r, c).map((x) => `${subsOf(r, c).length > 1 ? `${x.name} ` : ''}${x.height}U`).join(' + ')}, панелей ${r.panels?.length || 0}` : ' · плана ещё нет'}`)),
         h('span', { style: { fontSize: '20px' } }, x.placed === x.pts && x.pts ? '✅' : '›'));
     }) : h('div', { class: 'empty' }, 'Нет точек с кабелями cat7 и шкафом')));
@@ -224,7 +225,7 @@ function placeModal(cab, ui, { u = null, s: sid = '', p = 1 } = {}) {
 function rackEditor(ui, cab) {
   const p = currentProject(); const r = rackOf(p, cab);
   const pts = cabPoints(cab);
-  const back = h('button', { class: 'sec', onclick: () => { openCab = null; moving = null; editMode = false; blockMode = false; shMode = null; ui.render(); } }, '← Все шкафы');
+  const back = h('button', { class: 'sec', onclick: () => { openCab = null; moving = null; editMode = false; blockMode = false; shMode = null; pickSel = null; ui.render(); } }, '← Все шкафы');
   if (!r) {
     return h('div', {}, back,
       h('div', { class: 'card', style: { marginTop: '10px' } }, h('b', {}, `Шкаф ${cab}`), h('div', { class: 'mut', style: { margin: '6px 0' } }, `Точек cat7: ${pts.length}. Плана шкафа ещё нет: укажите размер и нумерацию U (или несколько шкафов в одном), затем мастер разложит точки по панелям.`),
@@ -283,10 +284,28 @@ function rackEditor(ui, cab) {
         h('button', { class: 'sec', disabled: none, onclick: () => { const l = shPorts(); setHave(l, false); shDone('Отметка «есть шилют» снята'); } }, '↩ Нет шилюта'),
         h('button', { class: 'sec', onclick: () => { shMode = null; ui.render(); } }, 'Готово')));
   };
+  // выбор точек шкафа: изменить как в «Точки», переименовать, добавить работу как в «Дох»
+  const pickBar = () => {
+    for (const id of [...pickSel]) if (!state.ctx.points.has(id)) pickSel.delete(id);
+    const ids = [...pickSel]; const done = () => { pickSel.clear(); setTimeout(() => ui.render(), 300); };
+    const inCab = [...new Set(cabPoints(cab).map((x) => x.id))];
+    return h('div', { class: 'card', style: { borderColor: '#0a84ff', position: 'sticky', top: '53px', zIndex: 6 } },
+      h('b', {}, `☑ Выбрано точек: ${ids.length}`),
+      h('div', { class: 'mut' }, 'Нажимайте порты — выбирается вся точка (все её порты). «☐ Панель» в заголовке панели выбирает точки панели целиком.'),
+      h('div', { class: 'btns' },
+        h('button', { class: 'sec', onclick: () => { inCab.forEach((id) => pickSel.add(id)); ui.render(); } }, 'Все в шкафу'),
+        h('button', { class: 'sec', onclick: () => { pickSel.clear(); ui.render(); } }, 'Снять')),
+      h('div', { class: 'btns' },
+        h('button', { disabled: !ids.length, onclick: () => bulkEditForm(ids, done) }, '✏️ Изменить'),
+        h('button', { disabled: !ids.length, onclick: () => renameForm(ids, done) }, '🏷 Переименовать'),
+        h('button', { disabled: !ids.length, onclick: () => addWorkForPoints(ids) }, `➕ Работа (${ids.length})`)),
+      h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => { pickSel = null; ui.render(); } }, '✅ Готово')));
+  };
   const cellTap = (pnl, port) => {
     const sid = pnl.s || ''; const u = pnl.u;
     const at = slots.get(slotKey({ s: sid, u, p: port }));
     const isX = blocked.has(slotKey({ s: sid, u, p: port }));
+    if (pickSel) { if (!at) return; if (pickSel.has(at.pt.id)) pickSel.delete(at.pt.id); else pickSel.add(at.pt.id); ui.render(); return; }
     if (shMode) {
       if (shMode.key !== shKey(pnl)) { toast('Режим шилюта открыт на другой панели — нажмите «Готово» там'); return; }
       if (!at) return;
@@ -340,7 +359,7 @@ function rackEditor(ui, cab) {
       const col = at ? typeColorOf(currentProject(), at.pt.typeId, getRepo().prefs?.shilutColors || []) : null;
       const mark = at ? checkMark(at.pt) : null;
       const stuck = at ? !!infoOf(at.pt)?.shilut : false; const have = at ? (at.pt.shHave || []).includes(at.i) : false;
-      const picked = !!(shMode && at && shMode.key === shKey(pnl) && shMode.sel.has(`${at.pt.id}:${at.i}`));
+      const picked = !!(shMode && at && shMode.key === shKey(pnl) && shMode.sel.has(`${at.pt.id}:${at.i}`)) || !!(pickSel && at && pickSel.has(at.pt.id));
       return h('div', { title: at ? `${slotLabel(at.pt, at.i)} (${at.pt.typeId})${mark ? (mark.bad ? ' — проверка: не работает' : ' — проверена') : ''}${have ? ' — шилют есть' : ''}${stuck ? ' — шилют поклеен' : ''}` : 'свободно', onclick: () => cellTap(pnl, k + 1),
         style: { position: 'relative', cursor: 'pointer', border: `1px solid ${mv ? '#e0007a' : 'var(--line)'}`, borderWidth: mv ? '2px' : '1px', borderRadius: '6px', outline: mv ? '3px solid #e0007a' : picked ? '3px solid #0a84ff' : 'none', outlineOffset: '1px', padding: '2px 4px', minHeight: '38px',
           background: col ? col.bg : at ? `hsla(${hue},70%,50%,.18)` : 'transparent', color: col ? col.fg : 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', overflow: 'hidden' } },
@@ -356,8 +375,10 @@ function rackEditor(ui, cab) {
       h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', flexWrap: 'wrap' } },
         h('b', {}, `U${pnl.u}`, h('span', { class: 'mut', style: { fontWeight: 400 } }, `${modelName(pnl.m || shilutOf(p).panelModel) ? ` · ${modelName(pnl.m || shilutOf(p).panelModel)}` : ''} · занято ${n}/${PANEL_PORTS}${nx ? ` · закрыто ${nx}` : ''}${types.length ? ` · ${types.join(', ')}` : ''}`)),
         h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap' } },
+          pickSel ? (() => { const ids = [...new Set(used.filter(Boolean).map((x) => x.pt.id))]; const all = ids.length > 0 && ids.every((id) => pickSel.has(id));
+            return h('button', { class: all ? '' : 'sec', style: { padding: '4px 10px' }, title: 'Выбрать / снять все точки панели', disabled: !ids.length, onclick: () => { ids.forEach((id) => (all ? pickSel.delete(id) : pickSel.add(id))); ui.render(); } }, all ? '☑ Панель' : '☐ Панель'); })() : null,
           h('button', { class: shMode?.key === shKey(pnl) ? '' : 'sec', style: { padding: '4px 10px' }, title: 'Отметить шилют: есть / поклеен', onclick: () => {
-            if (shMode?.key === shKey(pnl)) shMode = null; else { shMode = { key: shKey(pnl), sel: new Set() }; editMode = false; blockMode = false; moving = null; }
+            if (shMode?.key === shKey(pnl)) shMode = null; else { shMode = { key: shKey(pnl), sel: new Set() }; editMode = false; blockMode = false; pickSel = null; moving = null; }
             ui.render();
           } }, '🏷 Шилют готов'),
           h('button', { class: 'sec', style: { padding: '4px 10px' }, title: 'Переставить по порядку номеров с 1-го порта', onclick: async () => {
@@ -408,12 +429,14 @@ function rackEditor(ui, cab) {
       h('b', {}, `${p.name} · ${floor ? `этаж ${floor} · ` : ''}шкаф ${cab}`),
       h('div', { class: 'mut', style: { margin: '4px 0' } }, `${many ? `${subs.length} шкафа: ${subs.map((x) => `${x.name} ${x.height}U`).join(', ')}` : `${subs[0].height}U · ${subs[0].bottomUp === false ? 'U1 вверху' : 'U1 внизу'}`} · панелей ${r.panels?.length || 0} · точек cat7 ${pts.length}, расставлено ${pts.length - free.length}`),
       h('div', { class: 'btns' },
-        h('button', { class: editMode ? '' : 'sec', onclick: () => { editMode = !editMode; blockMode = false; shMode = null; moving = null; ui.render(); } }, editMode ? '✅ Готово' : '✏️ Редактировать'),
-        h('button', { class: blockMode ? '' : 'sec', onclick: () => { blockMode = !blockMode; editMode = false; shMode = null; moving = null; ui.render(); } }, blockMode ? '✅ Готово' : '🚫 Закрыть порты'),
+        h('button', { class: editMode ? '' : 'sec', onclick: () => { editMode = !editMode; blockMode = false; shMode = null; pickSel = null; moving = null; ui.render(); } }, editMode ? '✅ Готово' : '✏️ Редактировать'),
+        h('button', { class: pickSel ? '' : 'sec', onclick: () => { pickSel = pickSel ? null : new Set(); editMode = false; blockMode = false; shMode = null; moving = null; ui.render(); } }, pickSel ? '✅ Готово' : '☑ Выбрать точки'),
+        h('button', { class: blockMode ? '' : 'sec', onclick: () => { blockMode = !blockMode; editMode = false; shMode = null; pickSel = null; moving = null; ui.render(); } }, blockMode ? '✅ Готово' : '🚫 Закрыть порты'),
         h('button', { class: 'sec', onclick: () => wizard(cab, ui) }, '🧙 Мастер'),
         h('button', { class: 'sec', onclick: addPanel }, '➕ Панель'),
         h('button', { class: 'sec', onclick: () => shilutSettings(ui) }, '🎨 Шильют'),
         h('button', { class: 'sec', onclick: () => rackForm(cab, () => setTimeout(() => ui.render(), 200)) }, many ? '⚙️ Шкафы, размер и нумерация' : '⚙️ Размер и нумерация'))),
+    pickSel ? pickBar() : null,
     blockMode ? h('div', { class: 'card', style: { borderColor: '#ff3b30', position: 'sticky', top: '53px', zIndex: 6 } },
       h('b', {}, '🚫 Закрытие портов'),
       h('div', { class: 'mut' }, 'Нажмите на порт — на нём появится ✖ и точки в него не встанут. Точки этой панели сдвинутся на ближайшие свободные порты; кто не поместится — уйдёт в следующую панель с точками такого же типа, а если места нет и там — станет нерасставленным. Нажмите на ✖ — порт откроется (точки сами не сдвигаются).'),
