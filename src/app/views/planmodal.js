@@ -15,6 +15,9 @@ import { exportNumberedPdf, publishNumbered } from './plannumbers.js';
 import { linkPoints } from './planlink.js';
 import { choosePoint } from './pointchooser.js';
 import { bulkEditForm, renameForm } from './points.js';
+import { doorCfgOf, doorCfgShort } from '../../domain/index.js';
+// подпись точки на плане: у двери с конфигурацией — ещё ЭМ / МХ
+const tagOf = (p) => { const c = doorCfgOf(p, state.ctx); const sh = c ? doorCfgShort(state.ctx, c) : ''; return sh ? `${p.label} ${sh}` : p.label; };
 import { typeMatch, typeFilterOptions } from '../typegroups.js';
 
 export { STATUS_COLORS, statusColor } from '../../domain/index.js';
@@ -156,15 +159,15 @@ export function planModal({ point = null, placeFor = null } = {}) {
             if (sel.has(p.id)) outline(g, api, p.pos, '#00b7ff', { width: 3, pad: 1.5 + 3 / api.view.s });
             if (!isText(p.pos)) {
               const k = posKey(p.pos); const same = byKey.get(k);  // несколько точек на одной отметке — одна подпись
-              if (same) { same.labels.push(p.label); continue; }
+              if (same) { same.labels.push(tagOf(p)); continue; }
               const [x, y] = api.toScr(p.pos.x, p.pos.y); const r = Math.max(5, (Math.max(p.pos.w || 8, p.pos.h || 8) / 2 + 1.5) * api.view.s); circles.push([x, y, r]);
-              const t = { p, col, x, y, r, labels: [p.label] }; byKey.set(k, t); if (on && big) tags.push(t);
+              const t = { p, col, x, y, r, labels: [tagOf(p)] }; byKey.set(k, t); if (on && big) tags.push(t);
             } else {
               // надпись на чертеже: своя подпись не нужна, если точка одна и называется так же; иначе (несколько точек, другое название) — подпись
               const k = posKey(p.pos); const same = byKey.get(k);
-              if (same) { same.labels.push(p.label); same.need = true; continue; }
+              if (same) { same.labels.push(tagOf(p)); same.need = true; continue; }
               const [x, y] = api.toScr(p.pos.x, p.pos.y); const hw = (p.pos.w / 2 + 2) * api.view.s; const hh2 = (p.pos.h / 2 + 2) * api.view.s; frames.push([x - hw, y - hh2, x + hw, y + hh2]);
-              const t = { p, col, x, y, r: Math.max(hw, hh2), labels: [p.label], textPos: true, need: !!(p.pos.text && p.pos.text !== p.label) }; byKey.set(k, t); if (on && big) tags.push(t);
+              const t = { p, col, x, y, r: Math.max(hw, hh2), labels: [tagOf(p)], textPos: true, need: !!(p.pos.text && p.pos.text !== p.label) }; byKey.set(k, t); if (on && big) tags.push(t);
             }
           }
           placeTags(g, api, tags.filter((t) => !t.textPos || t.need), circles, frames);

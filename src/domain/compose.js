@@ -5,6 +5,8 @@
 // Точка может иметь свой состав (point.devices). Тип без поля devices работает по старой схеме (status.js).
 // Работа в дохе отмечается на точку; entry.deviceIds (если есть) — только для этих устройств, entry.cableId — только этот вид кабеля.
 
+import { doorCfgOf } from './doorcfg.js';
+
 const blank = (v) => v === undefined || v === null || v === '';
 const maxDate = (rows) => rows.reduce((m, r) => (r.date && (!m || r.date > m) ? r.date : m), '');
 export const STAGES = ['Протяжка', 'Хивут', 'Установка', 'Проверка', 'Шилют'];
@@ -14,6 +16,7 @@ export const isComposedType = (type) => Array.isArray(type?.devices) || (Array.i
 export function compositionOf(point, ctx) {
   const type = ctx.types.get(point.typeId);
   if (Array.isArray(point.devices)) return point.devices;
+  const cfg = doorCfgOf(point, ctx); if (cfg) return cfg.devices;   // дверь с конфигурацией: состав из неё
   return isComposedType(type) ? (type.devices || []) : null;
 }
 const cleanList = (list) => (Array.isArray(list) ? list : [])
@@ -28,13 +31,15 @@ export function pointCablesOf(point, ctx) {
 // point.cableOverride: [{ cable, count }] — свои кабели точки целиком (вместо кабелей устройств и типа), например «RJ45 X2» = 2 кабеля
 const hasOverride = (point) => Array.isArray(point?.cableOverride);
 function partsOf(point, ctx, comp) {
+  // у двери с конфигурацией кабели — из конфигурации (на всю дверь), а не от устройств
+  const cfgCables = !hasOverride(point) && !Array.isArray(point.devices) ? doorCfgOf(point, ctx)?.cables : null;
   // у точки устройство может быть изменено: свои кабели (cables) и/или работы (workIds) вместо заданных в «Устройствах»
   const parts = (comp || []).map((e) => {
     const base = ctx.devices?.get(e.deviceId);
     const dev = base && { ...base, cables: Array.isArray(e.cables) ? e.cables : base.cables, workIds: Array.isArray(e.workIds) ? e.workIds : base.workIds };
-    return { deviceId: e.deviceId, count: Number(e.count) || 0, dev: dev && hasOverride(point) ? { ...dev, cables: [] } : dev };
+    return { deviceId: e.deviceId, count: Number(e.count) || 0, dev: dev && (hasOverride(point) || cfgCables) ? { ...dev, cables: [] } : dev };
   }).filter((x) => x.dev && x.count > 0);
-  const pc = hasOverride(point) ? cleanList(point.cableOverride) : pointCablesOf(point, ctx);
+  const pc = hasOverride(point) ? cleanList(point.cableOverride) : cfgCables ? cleanList(cfgCables) : pointCablesOf(point, ctx);
   if (pc.length) parts.push({ deviceId: POINT_CABLES, count: 1, dev: { name: 'Кабели точки', cables: pc, workIds: [] } });
   return parts;
 }

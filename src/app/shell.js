@@ -3,6 +3,7 @@ import { racksView } from './views/racks.js';
 import { sheetsView } from './views/sheetslist.js';
 import { projectWizard } from './views/wizard.js';
 import { startPool } from './pool.js';
+import { startDoorPool } from './doorpool.js';
 import { h, openModal, toast } from './ui.js';
 import { state, subscribe, currentProject, ready, getRepo, setCurrentProject, pendingCount } from './store.js';
 import { projectsView, projectForm } from './views/projects.js';
@@ -153,7 +154,7 @@ export function createShell({ user, onLogout, diag }) {
   window.addEventListener('online', () => { state.online = true; render(); });
   window.addEventListener('offline', () => { state.online = false; render(); });
   const unsub = subscribe(() => { render(); if (ready()) { maybeWelcome(ui, user); if (currentProject()?.serverEmail) import('./views/managersfolder.js').then((m) => m.ensureServerAccess()).catch(() => {}); } });
-  startPool();  // общий пул: слушать, входящие администратора, отправка нового из проекта
+  startPool(); startDoorPool();  // общий пул: слушать, входящие администратора, отправка нового из проекта
   render();
 
   // Возврат с Google после выдачи доступа (iPhone): дожидаемся загрузки проекта и запускаем обновление таблицы руководства

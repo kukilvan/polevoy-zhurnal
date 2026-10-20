@@ -10,6 +10,12 @@ service cloud.firestore {
     match /pool_devices/{id} { allow read: if signedIn(); allow write: if poolAdmin(); }
     match /pool_cables/{id} { allow read: if signedIn(); allow write: if poolAdmin(); }
     match /pool_catalog/{id} { allow read: if signedIn(); allow write: if poolAdmin(); }
+    // Конфигурации дверей: новую разновидность записывает любой участник, удаляет (помечает deleted) только администратор пула
+    match /pool_doorcfg/{id} {
+      allow read: if signedIn();
+      allow create, update: if poolAdmin() || (signedIn() && request.resource.data.get('deleted', false) == false);
+      allow delete: if poolAdmin();
+    }
     // Входящие пула: приложение каждого пользователя присылает новое и изменённое; читает и решает только администратор
     match /pool_inbox/{id} {
       allow read, delete: if poolAdmin();
