@@ -1,11 +1,12 @@
 // «Таблицы»: свои Google Таблицы с Диска под своими названиями — список в приложении, нажатие открывает таблицу.
-// Список хранится в личных настройках (sheetLinks: [{ id, name }]) и один на все проекты.
+// Список закрепляется за проектом (project.sheetLinks: [{ id, name }]) — у каждого проекта свои таблицы.
 import { h, openModal, toast, confirmDialog, formModal } from '../ui.js';
-import { getRepo } from '../store.js';
+import { getRepo, currentProject } from '../store.js';
 import { getToken, realApi, clearToken } from '../google.js';
 
 const mem = () => new URLSearchParams(location.search).get('mem');
-const linksOf = () => getRepo().prefs?.sheetLinks || [];
+const linksOf = () => currentProject()?.sheetLinks || [];
+const saveLinks = (list) => getRepo().saveProject(currentProject().id, { sheetLinks: list });
 const urlOf = (id) => `https://docs.google.com/spreadsheets/d/${id}/edit`;
 const when = (iso) => { try { return new Date(iso).toLocaleDateString('ru-RU'); } catch { return ''; } };
 
@@ -58,25 +59,29 @@ function nameThem(pick) {
     ...pick.map((f, i) => h('div', { class: 'field' }, h('label', {}, f.name), inputs[i])),
     h('div', { class: 'btns' }, h('button', { onclick: () => {
       const add = pick.map((f, i) => ({ id: f.id, name: inputs[i].value.trim() || f.name }));
-      getRepo().saveUserPrefs({ sheetLinks: [...linksOf(), ...add.filter((x) => !linksOf().some((y) => y.id === x.id))] });
+      saveLinks([...linksOf(), ...add.filter((x) => !linksOf().some((y) => y.id === x.id))]);
       c(); toast(`Добавлено таблиц: ${add.length}`);
     } }, 'Сохранить'))), { sticky: true });
 }
 
 export function sheetsView(ui) {
-  const list = linksOf();
+  const list = linksOf(); const old = getRepo().prefs?.sheetLinks || [];
   const redraw = () => setTimeout(() => ui.render(), 300);
   return h('div', {},
     h('div', { class: 'card' },
-      h('div', { class: 'mut', style: { marginBottom: '8px' } }, 'Свои Google Таблицы с Диска под своими названиями. Нажатие открывает таблицу в Google Таблицах. Список общий для всех проектов.'),
-      h('div', { class: 'btns', style: { marginTop: 0 } }, h('button', { onclick: () => addSheetsFlow() }, '➕ Добавить'))),
+      h('div', { class: 'mut', style: { marginBottom: '8px' } }, 'Свои Google Таблицы с Диска под своими названиями. Нажатие открывает таблицу в Google Таблицах. Список — у каждого проекта свой.'),
+      h('div', { class: 'btns', style: { marginTop: 0 } }, h('button', { onclick: () => addSheetsFlow() }, '➕ Добавить')),
+      // таблицы, добавленные в первой версии (общий список в личных настройках) — перенести в этот проект
+      old.length ? h('div', { style: { marginTop: '8px' } }, h('button', { class: 'sec', onclick: () => {
+        saveLinks([...list, ...old.filter((x) => !list.some((y) => y.id === x.id))]); getRepo().saveUserPrefs({ sheetLinks: [] }); redraw();
+      } }, `⤵ Перенести сюда добавленные раньше (${old.length})`)) : null),
     list.length ? h('div', { class: 'card', style: { padding: 0 } }, ...list.map((s) => h('div', { class: 'item', style: { display: 'flex', alignItems: 'center', gap: '8px' } },
       h('div', { class: 'name', style: { flex: 1, minWidth: 0, cursor: 'pointer' }, onclick: () => window.open(urlOf(s.id), '_blank') }, `📊 ${s.name}`),
       h('button', { class: 'sec', style: { padding: '4px 10px' }, title: 'Переименовать', onclick: () => formModal({ title: 'Название таблицы', values: { name: s.name }, fields: [{ key: 'name', label: 'Название', type: 'text', required: true }],
-        onSubmit: (v) => { getRepo().saveUserPrefs({ sheetLinks: linksOf().map((x) => (x.id === s.id ? { ...x, name: String(v.name).trim() || x.name } : x)) }); redraw(); } }) }, '✏️'),
+        onSubmit: (v) => { saveLinks(linksOf().map((x) => (x.id === s.id ? { ...x, name: String(v.name).trim() || x.name } : x))); redraw(); } }) }, '✏️'),
       h('button', { class: 'sec', style: { padding: '4px 10px' }, title: 'Убрать из списка', onclick: async () => {
         if (!(await confirmDialog(`Убрать «${s.name}» из списка? Сама таблица на Диске останется.`, { yes: 'Убрать', danger: true }))) return;
-        getRepo().saveUserPrefs({ sheetLinks: linksOf().filter((x) => x.id !== s.id) }); redraw();
+        saveLinks(linksOf().filter((x) => x.id !== s.id)); redraw();
       } }, '🗑'))))
       : h('div', { class: 'empty' }, 'Таблиц пока нет — «➕ Добавить»'),
     h('div', { class: 'mut', style: { margin: '10px 2px', fontSize: '13px' } }, 'Работа без интернета: у Google нет способа включить «Доступно офлайн» из приложения — это делается в самой Google Таблицах (⋮ у таблицы → «Доступно офлайн»), один раз для каждой таблицы.'));

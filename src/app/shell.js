@@ -66,9 +66,9 @@ export function createShell({ user, onLogout, diag }) {
     if (ui.screen === 'log') return logView(ui, diag);
     if (!state.projectsLoaded) return h('div', { class: 'empty' }, 'Загрузка…');
     if (ui.screen === 'projects') return projectsView(ui);
-    if (ui.screen === 'sheets') return sheetsView(ui);
     if (!currentProject()) return projectView(ui); // «Создать проект»
     if (!ready()) return h('div', { class: 'empty' }, 'Загрузка данных проекта…');
+    if (ui.screen === 'sheets') return sheetsView(ui);
     if (ui.screen === 'install') return installView();
     if (ui.screen === 'ref') return refView();
     if (ui.screen === 'members') return membersView(ui);

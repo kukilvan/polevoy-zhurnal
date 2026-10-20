@@ -356,7 +356,7 @@ export function settingsView(ui) {
       row('🔧', 'Привязка установки', 'Что считается установкой для каждого типа точек', () => ui.open('install')),
       row('👔', 'Для руководства', `Папка со ссылкой · таблиц: ${tablesOf(p).length} · основная: ${mainTable(p).name}`, () => ui.open('tables')),
       row('🗄', 'Шкафы и шильют', `План шкафа: точки cat7 по панелям и портам${Object.keys(p.racks || {}).length ? ` · планов: ${Object.keys(p.racks).length}` : ''}`, () => ui.open('racks')),
-      row('📊', 'Таблицы', `Свои Google Таблицы с Диска${(getRepo().prefs?.sheetLinks || []).length ? ` · добавлено: ${getRepo().prefs.sheetLinks.length}` : ''}`, () => ui.open('sheets')),
+      row('📊', 'Таблицы', `Google Таблицы проекта «${p.name}»${(p.sheetLinks || []).length ? ` · добавлено: ${p.sheetLinks.length}` : ''}`, () => ui.open('sheets')),
       row('👥', 'Участники', `${(p.memberEmails || []).length} в проекте`, () => ui.open('members')),
       row('✏️', 'Данные проекта', 'Название, помощник, иврит, примечание', () => projectForm(p, ui)),
       row('📁', 'Все проекты', null, () => ui.open('projects'))),
