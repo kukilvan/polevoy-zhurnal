@@ -1,7 +1,8 @@
 // Таблицы для руководства: приложение само создаёт Google Таблицу (без шаблона) и записывает готовые значения.
 import { buildReport } from '../domain/index.js';
 
-const rgb = (hex) => ({ red: parseInt(hex.slice(1, 3), 16) / 255, green: parseInt(hex.slice(3, 5), 16) / 255, blue: parseInt(hex.slice(5, 7), 16) / 255 });
+// «#fff» и «#ffffff» — одинаково (короткая запись раньше давала красный)
+const rgb = (hex) => { let h = String(hex || '#000000').replace('#', ''); if (h.length === 3) h = [...h].map((c) => c + c).join(''); const n = (i) => (parseInt(h.slice(i, i + 2), 16) || 0) / 255; return { red: n(0), green: n(2), blue: n(4) }; };
 const colLetter = (n) => { let s = ''; let x = n + 1; while (x > 0) { const m = (x - 1) % 26; s = String.fromCharCode(65 + m) + s; x = Math.floor((x - 1) / 26); } return s; };
 const esc = (t) => String(t).replace(/'/g, "''");
 

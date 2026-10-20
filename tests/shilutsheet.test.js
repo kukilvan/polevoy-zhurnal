@@ -152,3 +152,12 @@ test('шильют делится на листы: к заказу и уже е�
   assert.ok(!r2.sheets.some((s) => s.key === 'shilut') && r2.sheets.some((s) => s.key === 'shilut-have'));
   assert.ok(r2.warnings.some((w) => w.includes('Весь шильют уже есть')));
 });
+
+test('цвета оформления листов: белый текст на красном/синем/чёрном не превращается в красный', async () => {
+  const { rackSheetRequests } = await import('../src/app/racksheet.js');
+  const P = [mk('Вайфай', '1A-AP1', '1A', 5, 1)];
+  const { sheets } = buildRackSheets(proj({ typeColors: { Вайфай: 'red' } }), ctx, P, { ...prefs, mode: MODES.split });
+  const reqs = sheets.flatMap((s, i) => rackSheetRequests(i, s));
+  const fgs = reqs.map((r) => r.repeatCell).filter((r) => r?.cell?.userEnteredFormat?.backgroundColor?.red === 1 && r.cell.userEnteredFormat.textFormat?.foregroundColor).map((r) => r.cell.userEnteredFormat.textFormat.foregroundColor);
+  assert.ok(fgs.length > 0); fgs.forEach((c) => assert.deepEqual(c, { red: 1, green: 1, blue: 1 }));
+});

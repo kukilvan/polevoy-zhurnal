@@ -6,7 +6,7 @@ import { hashOf } from '../domain/managers.js';
 import { rebuildRackSheets } from './racksheet.js';
 
 export const RACK_TITLE = 'תכנון ארונות ושילוט';
-const RACK_V = 1;  // версия оформления листов: при изменении все таблицы пересоберутся
+const RACK_V = 2;  // версия оформления листов: при изменении все таблицы пересоберутся
 
 export const rackAuto = (project) => !!project?.rackTable?.fileId && project.rackTable.auto !== false;
 

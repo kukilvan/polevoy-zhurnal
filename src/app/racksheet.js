@@ -1,5 +1,6 @@
 // Оформление и запись листов шкафов в Google Таблицу (значения пишутся прямо в ячейки, без ссылок между листами).
-const rgb = (hex) => ({ red: parseInt(hex.slice(1, 3), 16) / 255, green: parseInt(hex.slice(3, 5), 16) / 255, blue: parseInt(hex.slice(5, 7), 16) / 255 });
+// «#fff» и «#ffffff» — одинаково (короткая запись раньше давала красный)
+const rgb = (hex) => { let h = String(hex || '#000000').replace('#', ''); if (h.length === 3) h = [...h].map((c) => c + c).join(''); const n = (i) => (parseInt(h.slice(i, i + 2), 16) || 0) / 255; return { red: n(0), green: n(2), blue: n(4) }; };
 const esc = (t) => String(t).replace(/'/g, "''");
 const LINE = { style: 'SOLID', color: rgb('#8a8a8a') };
 
