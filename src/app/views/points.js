@@ -301,18 +301,13 @@ export function pointCard(startPoint, { fromPlan = false } = {}) {
       ['Длина', hasLen ? `${p.length} м на 1 кабель${info.metrage ? ` (всего ${Math.round(info.metrage * 100) / 100} м)` : ''}` : ''],
       ['Конфигурация', usesConfig(ctx.types.get(p.typeId)) ? cfg?.name : ''], ['Порт в свитче', p.port], ['Порт в панели', panelText(p, proj)], ['Серийный номер', p.serial], ['MAC', p.mac], ['Причина задержки', p.delayReasonId], ['Примечание', p.note],
     ].filter(([, v]) => v);
+    const left = leftTasksOf(p);
     const rows = (ctx.journalByPoint.get(p.id) || []).map((r) => ({ ...r, work: `${ctx.catalog.get(r.workId)?.name || r.action || '?'}${r.action === 'Протяжка' && r.cableId ? ` (${r.cableId})` : ''}` }))
       .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.order - a.order));
     body.replaceChildren(
       h('div', { style: { margin: '2px 0 10px' } }, h('span', { class: statusClass(info.status) }, info.status)),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px', fontSize: '14px' } },
         facts.flatMap(([k, v]) => [h('span', { class: 'mut' }, k), h('span', { style: { fontWeight: 600 } }, String(v))])),
-      info.composed ? (() => { // что осталось по устройствам
-        const miss = missingDetails(info, ctx);
-        return h('div', { style: { marginTop: '10px', fontSize: '14px' } },
-          h('div', { class: 'group', style: { padding: '4px 0' } }, miss.length ? 'Осталось сделать' : 'Всё сделано ✅'),
-          miss.map((m) => h('div', {}, h('span', { class: 'mut' }, `${m.stage}: `), m.items.join(', '))));
-      })() : null,
       h('div', { class: 'btns' },
         h('button', { onclick: () => { close(); setTimeout(() => addWorkForPoint(p.id), 60); } }, '➕ Добавить работу на эту точку')),
       h('div', { class: 'btns' },
@@ -328,13 +323,14 @@ export function pointCard(startPoint, { fromPlan = false } = {}) {
           getRepo().save(currentProject().id, [{ coll: 'points', id: p.id, data: { pos } }]);
           toast(on ? (ic ? 'Значок типа нарисован' : 'Значок у типа не задан — задайте в плане «📌 Значки типов»') : 'Значок убран'); close();
         } }, p.pos.icon ? '🖼 Убрать значок типа' : '🖼 Нарисовать значок типа') : null),
-      h('div', { class: 'group', style: { padding: '12px 0 6px' } }, `История работ (${rows.length})`),
-      rows.length ? h('div', {}, rows.map((r) => {
-        const who = whoIs(proj, r.by);
-        return h('div', { class: 'item', style: { cursor: 'default' } },
-          h('div', { class: 'name' }, r.work,
-            h('div', { class: 'sub' }, `${dateText(r.date)}${r.result === 'Не работает' ? ' · не работает' : ''}${r.fromEdit ? ' · правка' : ''}${who ? ` · ${who}` : ''}`)));
-      })) : h('div', { class: 'empty' }, 'По этой точке работ пока не отмечено'));
+      // работы по точке: сверху — что ещё не сделано (цвет по этапу), ниже — сделанное зелёным (дата, кто, правка)
+      h('div', { class: 'group', style: { padding: '12px 0 6px' } }, `Работы: осталось ${left.length} · сделано ${rows.length}`),
+      left.length ? h('div', {}, left.map((t) => h('div', { class: `wk todo ${t.chip || ''}` }, h('b', {}, t.label), h('span', { class: 'wk-st' }, 'осталось')))) : h('div', { class: 'wk done' }, h('b', {}, '✅ Всё сделано')),
+      ...rows.map((r) => {
+        const who = whoIs(proj, r.by); const bad = r.result === 'Не работает';
+        return h('div', { class: `wk ${bad ? 'bad' : 'done'}` }, h('b', {}, `${bad ? '✖' : '✔'} ${r.work}`),
+          h('div', { class: 'wk-sub' }, [dateText(r.date), bad ? 'не работает' : '', r.fromEdit ? 'правка' : '', who].filter(Boolean).join(' · ')));
+      }));
   };
   render();
   close = openModal(startPoint.label, body);

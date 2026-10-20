@@ -163,3 +163,13 @@ html, body { overflow-x: hidden; }
 /* шкаф: телефон — 4 строки по 6 портов, компьютер — все 24 в одну линию (как панель) */
 .rackgrid { display: grid; grid-template-columns: repeat(6, minmax(0, 1fr)); gap: 4px; margin-top: 8px; }
 @media (min-width: 1000px) { .rackgrid { grid-template-columns: repeat(24, minmax(0, 1fr)); gap: 3px; } .wrap.wide { max-width: 1500px; } }
+
+/* карточка точки: работы — осталось (цвет этапа) и сделано (зелёным) */
+.wk { border-left: 4px solid var(--warn); background: rgba(245,158,11,.12); border-radius: 8px; padding: 8px 10px; margin: 4px 0; display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 2px 8px; }
+.wk b { font-size: 15px; } .wk-st { font-size: 12px; font-weight: 700; color: var(--mut); } .wk-sub { width: 100%; font-size: 13px; color: var(--mut); }
+.wk.todo.pul { border-color: var(--err); background: rgba(239,68,68,.12); }
+.wk.todo.hiv { border-color: var(--hiv-b); background: var(--hiv-bg); }
+.wk.todo.ins { border-color: var(--ins-b); background: var(--ins-bg); }
+.wk.todo.chk { border-color: var(--chk-b); background: var(--chk-bg); }
+.wk.done { border-color: var(--ok); background: rgba(34,197,94,.14); }
+.wk.bad { border-color: var(--err); background: rgba(239,68,68,.14); }
