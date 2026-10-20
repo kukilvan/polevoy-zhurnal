@@ -634,6 +634,11 @@ test('добавление точек из файла: дубли пропуск
   ] })));
   assert.deepEqual(p3.add.map((p) => p.cabinet || ''), ['2B', '']); assert.deepEqual(p3.skipped, ['1A-01']); assert.equal(p3.errors.length, 1);
   assert.equal(p3.alsoIn.get('2B\u00001A-01'), '1A');
+  // требование шкафа: точки без шкафа не добавляются, а возвращаются списком
+  const p4 = planPointsImport(ctx, parsePointsFile(JSON.stringify({ format: 'polevoy-points-1', points: [{ label: 'N1', typeId: 'Камера' }, { label: 'N2', typeId: 'Камера', cabinet: '2B' }] })), new Map(), { requireCabinet: true });
+  assert.deepEqual(p4.add.map((p) => p.label), ['N2']); assert.deepEqual(p4.noCabinet.map((p) => p.label), ['N1']);
+  const p5 = planPointsImport(ctx, parsePointsFile(JSON.stringify({ format: 'polevoy-points-1', cabinet: '1A', points: [{ label: '1A-01', typeId: 'Камера' }, { label: 'N1', typeId: 'Камера' }] })), new Map(), { requireCabinet: true });
+  assert.deepEqual([p5.add.map((p) => p.label), p5.skipped, p5.noCabinet.length], [['N1'], ['1A-01'], 0]);   // шкаф файла подставляется
   let n = 0; const ops = pointsImportOps(plan, () => `id${n++}`);
   assert.deepEqual(ops.map((o) => o.coll), ['types', 'types', 'points', 'points', 'points', 'points']);
   assert.equal(ops[2].data.floor, '1');

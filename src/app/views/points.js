@@ -135,7 +135,7 @@ export function pointForm(point, { onDone } = {}) {
   const fields = [
     { key: 'label', label: 'Обозначение', required: true, hint: 'Например: 1A-01-02' },
     { key: 'planName', label: 'Имя в плане заказчика (по тохниту)' },
-    pickOrNewField('cabinet', 'Шкаф', { empty: '— без шкафа —' }), pickOrNewField('floor', 'Этаж', { empty: '— без этажа —' }),
+    pickOrNewField('cabinet', 'Шкаф', { empty: point ? '— без шкафа —' : '— выберите шкаф —', hint: point ? '' : 'Новую точку нужно привязать к шкафу' }), pickOrNewField('floor', 'Этаж', { empty: '— без этажа —' }),
     { key: 'typeId', label: 'Тип', type: 'select', required: true, options: typeOptions(), emptyLabel: 'Выберите тип' },
     compField(point),
     cablesField(point),
@@ -156,6 +156,7 @@ export function pointForm(point, { onDone } = {}) {
     } }] : [],
     onSubmit: (v) => {
       const label = v.label;
+      if (!point && !v.cabinet) { toast('Укажите шкаф — новая точка добавляется только с шкафом'); return false; }
       const dup = [...state.ctx.points.values()].find((p) => p.id !== point?.id && sameLabelClash(p, { label, cabinet: v.cabinet }));
       if (dup) { toast(v.cabinet ? 'Точка с таким обозначением уже есть в этом шкафу' : 'Точка с таким обозначением уже есть среди точек без шкафа'); return false; }
       const idOn = hasIdType(v.typeId);
@@ -200,7 +201,7 @@ export function generatorForm() {
     { key: 'typeId', label: 'Тип', type: 'select', required: true, options: typeOptions(), emptyLabel: 'Выберите тип' },
     compField(null),
     cablesField(null),
-    pickOrNewField('cabinet', 'Шкаф', { empty: '— без шкафа —' }), pickOrNewField('floor', 'Этаж', { empty: '— без этажа —' }),
+    pickOrNewField('cabinet', 'Шкаф', { empty: '— выберите шкаф —', hint: 'Точки добавляются только с шкафом' }), pickOrNewField('floor', 'Этаж', { empty: '— без этажа —' }),
     { key: 'configId', label: 'Конфигурация двери', type: 'select', options: configOptions(), visible: (v) => isDoorType(v.typeId) && !composedType(v.typeId) },
   ];
   const labelsOf = (v) => generateLabels({ prefix: v.prefix ?? '', from: v.from, to: v.to, step: v.step ?? 1, digits: v.digits ?? 0, suffixes: parseSuffixes(v.suffixes), pair: !!v.pair });
@@ -210,9 +211,10 @@ export function generatorForm() {
     onSubmit: async (v) => {
       const labels = labelsOf(v);
       if (!labels.length) { toast('Нечего создавать: проверьте «от», «до» и шаг'); return false; }
-      const have = new Set([...state.ctx.points.values()].map((p) => p.label));
+      if (!v.cabinet) { toast('Укажите шкаф — точки добавляются только с шкафом'); return false; }
+      const have = new Set([...state.ctx.points.values()].filter((p) => (p.cabinet || '') === v.cabinet).map((p) => p.label));   // дубль — только в том же шкафу
       const fresh = labels.filter((l) => !have.has(l));
-      if (!fresh.length) { toast('Все такие точки уже есть'); return false; }
+      if (!fresh.length) { toast('Все такие точки уже есть в этом шкафу'); return false; }
       if (fresh.length > 100 && !(await confirmDialog(`Создать ${fresh.length} точек?`, { yes: 'Создать' }))) return false;
       repo.save(pid, fresh.map((label) => ({ coll: 'points', data: {
         label, cabinet: v.cabinet, floor: v.floor, typeId: v.typeId, configId: isDoorType(v.typeId) ? v.configId : undefined,
@@ -480,6 +482,11 @@ function bulkEditForm(ids, done) {
     ],
     onSubmit: (v) => {
       if (!v.cabinet && !v.floor && !v.typeId && !v.setCables && v.length === undefined && !v.clearLength && !v.delayReasonId && !v.noteAdd && !v.configId && v.portFrom === undefined && !v.clearPort) { toast('Ничего не выбрано для изменения'); return false; }
+      if (v.cabinet) {   // в шкафу не должно появиться двух точек с одним обозначением
+        const sel = ids.map((id) => state.ctx.points.get(id)).filter(Boolean); const seenL = new Set();
+        const bad = sel.find((pt) => { if (seenL.has(pt.label)) return true; seenL.add(pt.label); return [...state.ctx.points.values()].some((x) => !ids.includes(x.id) && sameLabelClash(x, { label: pt.label, cabinet: v.cabinet })); });
+        if (bad) { toast(`«${bad.label}» уже есть в шкафу ${v.cabinet} — перенести нельзя`); return false; }
+      }
       const portOf = new Map();
       if (v.portFrom !== undefined) {
         const step = v.portStep === undefined || !(v.portStep > 0) ? 1 : v.portStep;

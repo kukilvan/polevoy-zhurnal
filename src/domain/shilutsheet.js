@@ -71,22 +71,24 @@ function planSheet(project, ctx, points, c, { colors, modelName }) {
 const padTo = (list) => [...list, ...Array(PANEL_PORTS - list.length).fill('')];
 
 // Раскладка очередей одного типа по столбцам шильюта (режим «по 24»):
-// • очередь из 12 и больше точек (в том числе полная панель из 24) — отдельный столбец;
-// • короткие очереди (меньше 12) собираются вместе, независимо от шкафа, чтобы заполнить столбцы по 24 строки; очередь не режется;
-//   сначала крупные, мелочь — в оставшееся место (best fit); внутри столбца очереди идут в порядке панелей.
-// → [[очередь, …], …]: сначала столбцы с большими очередями (в порядке панелей), потом сборные.
+// • очередь из 12 и больше точек (в том числе полная панель из 24) — начинает свой столбец и идёт в нём первой;
+// • короткие очереди (меньше 12) добавляются в свободное место столбцов — в том числе после больших очередей (12, 18, 21…) —
+//   или собираются вместе в новые столбцы, независимо от шкафа; очередь не режется. Сначала крупные, мелочь — в оставшееся место
+//   (best fit: туда, где остаётся меньше пустых строк); внутри столбца после большой очереди — остальные в порядке панелей.
+// → [[очередь, …], …]: сначала столбцы с большими очередями (в порядке панелей), потом сборные из коротких.
 export const BIG_QUEUE = 12;
 export function packQueues(queues, cap = PANEL_PORTS) {
-  const big = queues.filter((q) => q.labels.length >= BIG_QUEUE).sort((a, b) => a.idx - b.idx).map((q) => [q]);
-  const bins = [];
-  [...queues].filter((q) => q.labels.length < BIG_QUEUE).sort((a, b) => b.labels.length - a.labels.length || a.idx - b.idx).forEach((q) => {
+  const bins = queues.filter((q) => q.labels.length >= BIG_QUEUE).sort((a, b) => a.idx - b.idx).map((q) => ({ big: q, used: q.labels.length, qs: [] }));
+  const small = [...queues].filter((q) => q.labels.length < BIG_QUEUE).sort((a, b) => b.labels.length - a.labels.length || a.idx - b.idx);
+  const nBig = bins.length;
+  small.forEach((q) => {
     let best = null;
     for (const b of bins) { const left = cap - b.used - q.labels.length; if (left >= 0 && (!best || left < cap - best.used - q.labels.length)) best = b; }
-    if (!best) { best = { used: 0, qs: [] }; bins.push(best); }
+    if (!best) { best = { big: null, used: 0, qs: [] }; bins.push(best); }
     best.qs.push(q); best.used += q.labels.length;
   });
-  const packed = bins.map((b) => b.qs.sort((x, y) => x.idx - y.idx)).sort((a, b) => a[0].idx - b[0].idx);
-  return [...big, ...packed];
+  const cols = bins.map((b) => [...(b.big ? [b.big] : []), ...b.qs.sort((x, y) => x.idx - y.idx)]);
+  return [...cols.slice(0, nBig), ...cols.slice(nBig).sort((a, b) => a[0].idx - b[0].idx)];
 }
 
 // ---------- лист шильюта ----------

@@ -21,9 +21,36 @@ export function pointsFromFile() {
 }
 
 // Предпросмотр добавления точек (общий для файла и для разбора чертежа в приложении)
+// Точки без шкафа не добавляются: предпросмотр просит указать им шкаф (один на все такие точки) — иначе они остаются за бортом.
+const cabOfRaw = (f, data) => String(f.cabinet || data.cabinet || '').trim();
 export function importPreview(data, title, close) {
-  const plan = planPointsImport(state.ctx, data, poolBundles());
-  const off = new Set(); // снятые точки
+  const root = h('div', {}); let assign = ''; const off = new Set();
+  const render = () => {
+    const d = assign ? { ...data, points: data.points.map((f) => (cabOfRaw(f, data) ? f : { ...f, cabinet: assign })) } : data;
+    root.replaceChildren(previewBody(d, title, close, { off, missing: data.points.filter((f) => !cabOfRaw(f, data)), assign, setAssign: (v) => { assign = v; render(); } }));
+  };
+  render();
+  return root;
+}
+
+// выбор шкафа для точек без шкафа
+function cabinetAsk(missing, assign, setAssign) {
+  const cabs = [...new Set([...state.ctx.points.values()].map((p) => p.cabinet).filter(Boolean))].sort((a, b) => a.localeCompare(b, 'ru', { numeric: true }));
+  const NEW = '__new';
+  const sel = h('select', { style: { flex: 1, minWidth: 0 } }, h('option', { value: '' }, '— не добавлять —'), ...cabs.map((c) => h('option', { value: c }, `Шкаф ${c}`)), h('option', { value: NEW }, '✏️ Новый шкаф…'));
+  const inp = h('input', { type: 'text', placeholder: 'Название шкафа', autocapitalize: 'characters', style: { flex: 1, minWidth: 0, display: 'none' }, onchange: () => setAssign(inp.value.trim()) });
+  if (assign && !cabs.includes(assign)) { sel.value = NEW; inp.style.display = ''; inp.value = assign; } else sel.value = assign || '';
+  sel.onchange = () => { if (sel.value === NEW) { inp.style.display = ''; inp.focus(); } else setAssign(sel.value); };
+  return h('div', { class: 'card', style: { margin: '10px 0', borderColor: assign ? '' : '#ff9f0a' } },
+    h('b', {}, assign ? `Шкаф «${assign}» для точек без шкафа` : `Точек без шкафа: ${missing.length}`),
+    h('div', { class: 'mut', style: { margin: '4px 0' } }, 'Точки добавляются только с указанным шкафом (так не появляются дубли). Укажите шкаф для них — или оставьте «не добавлять».'),
+    h('div', { style: { display: 'flex', gap: '8px' } }, sel, inp),
+    h('details', { style: { marginTop: '6px' } }, h('summary', { style: { cursor: 'pointer', fontSize: '14px' } }, 'Какие точки'), h('div', { style: { fontSize: '14px', maxHeight: '140px', overflow: 'auto' } }, missing.map((f) => h('div', {}, `${f.label} · ${f.typeId || '—'}`)))));
+}
+
+function previewBody(data, title, close, { off, missing, assign, setAssign }) {
+  const plan = planPointsImport(state.ctx, data, poolBundles(), { requireCabinet: true });
+  const offKey = (p) => `${p.cabinet || ''}\u0000${p.label}`;
   const list = (title, items, cls) => (items.length ? h('div', { style: { margin: '8px 0' } }, h('b', { class: cls }, `${title} (${items.length})`),
     h('div', { style: { fontSize: '14px', maxHeight: '160px', overflow: 'auto' } }, items.map((x) => h('div', {}, x)))) : null);
   // точки, которые уже есть в проекте, но без места на этом чертеже — отметить их место (связать с чертежом)
@@ -37,9 +64,9 @@ export function importPreview(data, title, close) {
   const linkCb = h('input', { type: 'checkbox', checked: true, onchange: () => label() });
   const goBtn = h('button', {});
   const nLink = () => (linkCb.checked ? toLink.length : 0);
-  const label = () => { const n = plan.add.length - off.size; goBtn.textContent = n > 0 ? `➕ Добавить точек: ${n}${nLink() ? ` · отметить на чертеже: ${nLink()}` : ''}` : nLink() ? `📍 Отметить на чертеже: ${nLink()}` : '➕ Добавить точек: 0'; goBtn.disabled = n <= 0 && !nLink(); };
+  const label = () => { const n = plan.add.filter((p) => !off.has(offKey(p))).length; goBtn.textContent = n > 0 ? `➕ Добавить точек: ${n}${nLink() ? ` · отметить на чертеже: ${nLink()}` : ''}` : nLink() ? `📍 Отметить на чертеже: ${nLink()}` : '➕ Добавить точек: 0'; goBtn.disabled = n <= 0 && !nLink(); };
   goBtn.onclick = () => {
-    const ops = pointsImportOps({ ...plan, add: plan.add.filter((p) => !off.has(p)) }, newId, data);
+    const ops = pointsImportOps({ ...plan, add: plan.add.filter((p) => !off.has(offKey(p))) }, newId, data);
     const linkOps = nLink() ? toLink.map(({ f, p }) => ({ coll: 'points', id: p.id, data: { pos: posOf(f, data) } })) : [];
     getRepo().save(currentProject().id, [...ops.map((o) => ({ ...o, data: { ...o.data, deleted: false } })), ...linkOps]);
     toast(`Добавлено точек: ${ops.filter((o) => o.coll === 'points').length}${linkOps.length ? `, отмечено на чертеже: ${linkOps.length}` : ''}`); close?.();
@@ -50,10 +77,10 @@ export function importPreview(data, title, close) {
   const groups = new Map(); plan.add.forEach((p) => { const k = `${p.cabinet || 'без шкафа'} · ${p.typeId}`; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p); });
   const groupEls = [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0], 'ru', { numeric: true })).map(([k, list]) => {
     const boxes = list.map((p) => {
-      const cb = h('input', { type: 'checkbox', checked: true, onchange: () => { cb.checked ? off.delete(p) : off.add(p); sync(); label(); } });
+      const cb = h('input', { type: 'checkbox', checked: !off.has(offKey(p)), onchange: () => { cb.checked ? off.delete(offKey(p)) : off.add(offKey(p)); sync(); label(); } });
       return { p, cb, el: h('label', { class: 'pickrow' }, cb, h('span', {}, p.label, warnOf.has(p.label) ? h('small', { class: 'l-warn' }, ` ⚠️ ${warnOf.get(p.label)}`) : null, p.planName && p.planName !== p.label ? h('small', { class: 'mut' }, ` · ${p.planName}`) : null, plan.alsoIn?.has(`${p.cabinet || ''}\u0000${p.label}`) ? h('small', { class: 'mut' }, ` · такое же есть: ${plan.alsoIn.get(`${p.cabinet || ''}\u0000${p.label}`)}`) : null)) };
     });
-    const all = h('input', { type: 'checkbox', checked: true, onchange: () => { boxes.forEach((b) => { b.cb.checked = all.checked; all.checked ? off.delete(b.p) : off.add(b.p); }); sync(); label(); } });
+    const all = h('input', { type: 'checkbox', checked: true, onchange: () => { boxes.forEach((b) => { b.cb.checked = all.checked; all.checked ? off.delete(offKey(b.p)) : off.add(offKey(b.p)); }); sync(); label(); } });
     const cnt = h('span', {});
     const sync = () => { const on = boxes.filter((b) => b.cb.checked).length; all.checked = on === boxes.length; all.indeterminate = on > 0 && on < boxes.length; cnt.textContent = ` ${k}: ${on}${on < boxes.length ? ` из ${boxes.length}` : ''}`; };
     sync();
@@ -74,6 +101,7 @@ export function importPreview(data, title, close) {
     plan.warnings.length ? h('div', { class: 'l-warn', style: { margin: '8px 0' } }, `⚠️ Подозрительные обозначения: ${plan.warnings.length} — отмечены ⚠️ в группах выше; снимите галочку, если это не точка.`) : null,
     toLink.length ? h('label', { class: 'pickrow', style: { margin: '8px 0' } }, linkCb, h('span', {}, `📍 Уже есть в проекте, но без места на этом чертеже: ${toLink.length} (${toLink.slice(0, 6).map((x) => x.p.label).join(', ')}${toLink.length > 6 ? '…' : ''}) — отметить их место на чертеже`)) : null,
     list('Уже есть в проекте (то же обозначение в том же шкафу) — пропущены', plan.skipped),
+    missing.length ? cabinetAsk(missing, assign, setAssign) : null,
     h('div', { class: 'btns' }, goBtn)].filter(Boolean);
   return h('div', {}, ...parts);
 }

@@ -34,7 +34,8 @@ export function labelProblems(label) {
 
 // pool — общий пул типов (Map id → комплект): тип, которого нет ни в проекте, ни в файле, берётся оттуда;
 // нет и там — создаётся пустой тип с этим названием (состав потом настраивается в «Типах точек»)
-export function planPointsImport(ctx, data, pool = new Map()) {
+// requireCabinet: точки без шкафа не добавляются, а попадают в noCabinet (приложение просит указать им шкаф)
+export function planPointsImport(ctx, data, pool = new Map(), { requireCabinet = false } = {}) {
   const fileTypes = new Map((data.types || []).map((t) => [s(t.id), t]));
   const fileDevices = new Map((data.devices || []).map((d) => [s(d.id), d]));
   // одинаковые обозначения допустимы в разных шкафах (и в шкафу + без шкафа): «уже есть» — только то же обозначение в том же шкафу
@@ -43,7 +44,7 @@ export function planPointsImport(ctx, data, pool = new Map()) {
   const cabsOf = new Map(); [...ctx.points.values()].forEach((p) => { if (!cabsOf.has(p.label)) cabsOf.set(p.label, new Set()); cabsOf.get(p.label).add(p.cabinet || ''); });
   const alsoIn = new Map();   // точка к добавлению → в каких шкафах такое обозначение уже есть
   const seen = new Set();
-  const add = []; const skipped = []; const errors = []; const warnings = [];
+  const add = []; const skipped = []; const errors = []; const warnings = []; const noCabinet = [];
   const fromPool = new Map(); const blank = new Set();
   data.points.forEach((raw, i) => {
     const p = { ...raw, label: s(raw.label), typeId: s(raw.typeId), cabinet: s(raw.cabinet) || s(data.cabinet), floor: s(raw.floor) || s(data.floor), planName: s(raw.planName), note: s(raw.note) };
@@ -53,6 +54,7 @@ export function planPointsImport(ctx, data, pool = new Map()) {
     if (!ctx.types.has(p.typeId) && !fileTypes.has(p.typeId)) {
       if (!fromPool.has(p.typeId) && !blank.has(p.typeId)) (pool.get(p.typeId) ? fromPool.set(p.typeId, pool.get(p.typeId)) : blank.add(p.typeId));
     }
+    if (requireCabinet && !p.cabinet) { noCabinet.push(p); return; }
     if (seen.has(key(p))) { errors.push(`${where}: обозначение повторяется в файле${p.cabinet ? ` (шкаф ${p.cabinet})` : ''}`); return; }
     seen.add(key(p));
     if (have.has(key(p))) { skipped.push(p.label); return; }
@@ -67,7 +69,7 @@ export function planPointsImport(ctx, data, pool = new Map()) {
   const byType = {}; add.forEach((p) => { const k = `${p.cabinet || 'без шкафа'} · ${p.typeId}`; byType[k] = (byType[k] || 0) + 1; });
   const poolTypes = [...fromPool.values()].filter((b) => add.some((p) => p.typeId === b.type.id));
   const blankTypes = [...blank].filter((id) => add.some((p) => p.typeId === id));
-  return { add, skipped, errors, warnings, newTypes, newDevices, byType, poolTypes, blankTypes, alsoIn, ctx };
+  return { add, skipped, errors, warnings, newTypes, newDevices, byType, poolTypes, blankTypes, alsoIn, noCabinet, ctx };
 }
 
 // Место точки на листе чертежа (для будущего плана в приложении): pt PDF от левого верхнего угла + размер листа и имя файла

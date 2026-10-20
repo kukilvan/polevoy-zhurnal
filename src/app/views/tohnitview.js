@@ -155,9 +155,10 @@ export function pointsFromDrawing({ drawing = null, buf: preBuf = null, file = n
           await new Promise((res) => { const t = setTimeout(res, 1500); const un = subscribe(() => { if (state.ctx !== before) { clearTimeout(t); un(); res(); } }); });
           toast(`Изменено: ${upd.length}, удалено: ${del.length}`);
         }
-        const byL = new Map([...state.ctx.points.values()].map((x) => [x.label, x]));
-        const unplaced = r.data.points.filter((p) => byL.has(p.label) && byL.get(p.label).pos?.sheet !== drawing.name && !(drawing.aliases || []).includes(byL.get(p.label).pos?.sheet));
-        if (!iconPts().length && r.data.points.every((p) => byL.has(p.label)) && !unplaced.length) { toast('Новых точек нет — все уже на чертеже'); markScanned(drawing); onDone?.(); close(); return; }
+        // то же обозначение в том же шкафу (у подписи без шкафа — любое с таким обозначением)
+        const mine = (p) => [...state.ctx.points.values()].find((x) => x.label === p.label && (!p.cabinet || (x.cabinet || '') === p.cabinet));
+        const unplaced = r.data.points.filter((p) => mine(p) && mine(p).pos?.sheet !== drawing.name && !(drawing.aliases || []).includes(mine(p).pos?.sheet));
+        if (!iconPts().length && r.data.points.every((p) => mine(p)) && !unplaced.length) { toast('Новых точек нет — все уже на чертеже'); markScanned(drawing); onDone?.(); close(); return; }
       }
       const keep = r.learned.filter((e) => remember.has(e.cluster) && e.type !== UNSORTED_TYPE).map(({ project: _p, ...e }) => e);  // запоминается для всех проектов
       out.replaceChildren(importPreview({ ...r.data, points: [...r.data.points, ...iconPts()] }, fileName, async () => {

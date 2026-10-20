@@ -361,7 +361,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
       let tid = ''; let cab = fCab || near?.cabinet || ''; let edited = false;
       const name = h('input', { placeholder: 'Название точки', oninput: () => { edited = true; hint.textContent = ''; } });
       const hint = h('small', { class: 'mut' });
-      const cabSel = h('select', { onchange: () => { cab = cabSel.value; cp.setType(tid, cab); suggest(); } }, h('option', { value: '' }, '— без шкафа —'), ...cabs.map((x) => h('option', { value: x, selected: x === cab }, `Шкаф ${x}`)));
+      const cabSel = h('select', { onchange: () => { cab = cabSel.value; cp.setType(tid, cab); suggest(); } }, h('option', { value: '' }, '— выберите шкаф —'), ...cabs.map((x) => h('option', { value: x, selected: x === cab }, `Шкаф ${x}`)));
       const cp = cablesPicker({ compact: true });
       const iconCb = h('input', { type: 'checkbox', checked: false });
       const iconNote = h('small', { class: 'mut' });
@@ -379,7 +379,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
         h('label', {}, 'Кабели'), cp.el, iconRow,
         h('div', { class: 'btns' }, h('button', { onclick: () => {
           const label = name.value.trim();
-          if (!tid) { toast('Выберите тип'); return; } if (!label) { toast('Впишите название'); return; }
+          if (!tid) { toast('Выберите тип'); return; } if (!cab) { toast('Выберите шкаф — точка добавляется только с шкафом'); return; } if (!label) { toast('Впишите название'); return; }
           if (pts.some((p) => sameLabelClash(p, { label, cabinet: cab }))) { toast(cab ? `«${label}» уже есть в шкафу ${cab}` : `«${label}» уже есть среди точек без шкафа`); return; }
           const data = { label, typeId: tid, pos: posFor(tid, iconCb.checked), note: 'добавлено на плане' };
           if (cab) data.cabinet = cab; if (d.floor) data.floor = d.floor; const ov = cp.override(); if (ov) data.cableOverride = ov;

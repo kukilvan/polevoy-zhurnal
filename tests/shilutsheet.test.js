@@ -51,11 +51,11 @@ test('лист шильюта, режим fill: очереди из панеле
   const p = proj(); p.racks['1A'].blocked = [];
   const { sheets } = buildRackSheets(p, ctx, [...many, ...pts().slice(5)], { ...prefs, mode: MODES.fill });
   const sl = sheets.find((s) => s.kind === 'shilut');
-  // очереди камер: 20 (U9), 10 (U8), 2 (шкаф 2B): очередь из 20 — отдельный столбец, 10 и 2 — вместе, в порядке панелей
+  // очереди камер: 20 (U9), 10 (U8), 2 (шкаф 2B): очередь из 20 идёт первой, в её свободные 4 строки встаёт очередь из 2; 10 — отдельным столбцом
   assert.deepEqual(sl.rows[3].slice(1), ['ירוק', 'ירוק']);
   const col = (i) => sl.rows.slice(4).map((r) => r[i]).filter(Boolean);
-  assert.equal(col(1).length, 20); assert.equal(col(1)[0], '1A-C1'); assert.equal(col(1)[19], '1A-C20');
-  assert.deepEqual(col(2), [...Array.from({ length: 10 }, (_, i) => `1A-C${21 + i}`), '2B-C1', '2B-C2']);
+  assert.equal(col(1).length, 22); assert.equal(col(1)[0], '1A-C1'); assert.equal(col(1)[19], '1A-C20'); assert.deepEqual(col(1).slice(20), ['2B-C1', '2B-C2']);
+  assert.deepEqual(col(2), Array.from({ length: 10 }, (_, i) => `1A-C${21 + i}`));
   const p2 = proj(); const r2 = buildRackSheets(p2, ctx, pts(), { ...prefs, mode: MODES.fill }).sheets.find((s) => s.kind === 'shilut');
   assert.ok(!r2.rows.flat().includes('X'));
 });
@@ -67,8 +67,8 @@ test('раскладка очередей по 24: полная панель и 
   assert.deepEqual(lens(packQueues([Q(0, 8, 'a'), Q(1, 6, 'b'), Q(2, 8, 'c'), Q(3, 6, 'd')])), [[8, 6, 8], [6]]);
   // в оставшиеся 2 места попадает короткая очередь из 2 (или одиночки)
   assert.deepEqual(lens(packQueues([Q(0, 8, 'a'), Q(1, 6, 'b'), Q(2, 8, 'c'), Q(3, 6, 'd'), Q(4, 2, 'e')])), [[8, 6, 8, 2], [6]]);
-  // полная панель (24) и очереди 12+ — отдельные столбцы, остальное — вместе
-  assert.deepEqual(lens(packQueues([Q(0, 24, 'f'), Q(1, 5, 'a'), Q(2, 12, 'g'), Q(3, 11, 'b'), Q(4, 13, 'h'), Q(5, 7, 'c')])), [[24], [12], [13], [5, 11, 7]]);
+  // полная панель (24) и очереди 12+ начинают свои столбцы; мелочь добирает свободное место (в 24 — нет места)
+  assert.deepEqual(lens(packQueues([Q(0, 24, 'f'), Q(1, 5, 'a'), Q(2, 12, 'g'), Q(3, 11, 'b'), Q(4, 13, 'h'), Q(5, 7, 'c')])), [[24], [12, 5, 7], [13, 11]]);
   // внутри столбца очереди в порядке панелей, а сами очереди не переставляются
   const cols = packQueues([Q(5, 3, 'z'), Q(1, 9, 'y'), Q(3, 4, 'x')]);
   assert.deepEqual(cols[0].map((q) => q.idx), [1, 3, 5]);
