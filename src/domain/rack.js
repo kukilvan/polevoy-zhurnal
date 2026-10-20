@@ -242,13 +242,23 @@ export const dropCabOf = (project, cab) => { const sh = shilutOf(project); retur
 export const shilutCabName = (project, cabinet, sid = '') => shilutOf(project).cabNames?.[`${cabinet}|${sid || ''}`]
   || subNameOf(project, cabinet, sid) || subsOf(project?.racks?.[cabinet], cabinet).find((x) => (x.id || '') === (sid || ''))?.name || cabinet;
 const stripCab = (txt, cab) => (cab && (txt.startsWith(`${cab}-`) || txt.startsWith(`${cab}/`)) ? txt.slice(cab.length + 1) : txt);
-// Шаблон: {имя} — обозначение порта (без шкафа, если включено «убрать шкаф»), {номер} — всегда без шкафа, {шкаф}, {U}, {порт}
+const hasCab = (txt, names) => names.some((n) => n && String(txt).toLowerCase().startsWith(String(n).toLowerCase()));
+// Подпись порта в шильюте. Пока не включено «убрать название шкафа», подпись всегда начинается с названия шкафа:
+// если у обозначения точки своего шкафа нет — добавляется (название шкафа/секции или своё из настроек), есть — остаётся как записано
+// (своё название из настроек заменяет его). Шаблон даёт гибкость: {имя} — обозначение порта, {номер} — без шкафа, {шкаф}, {U}, {порт};
+// если в шаблоне есть {шкаф} — расположение названия шкафа определяет шаблон, и приставка не добавляется.
 export function shilutLabel(point, i, project, ctx) {
   const e = panelOf(point)[i]; if (e?.label) return e.label;
-  const sh = shilutOf(project); const cab = point.cabinet || '';
+  const sh = shilutOf(project); const cab = point.cabinet || ''; const sid = e?.s || '';
+  const name = shilutCabName(project, cab, sid);
+  const custom = String(sh.cabNames?.[`${cab}|${sid}`] || '').trim();
+  const drop = dropCabOf(project, cab);
   let base = defaultPortLabels(point.label, rackPortsOf(point, ctx))[i] ?? point.label;
-  if (dropCabOf(project, cab)) base = stripCab(base, cab);
+  if (drop) base = stripCab(base, cab);
+  else if (cab && custom && custom !== cab && stripCab(base, cab) !== base) base = `${custom}${base.slice(cab.length)}`;
   const tpl = String(sh.tpl?.[point.typeId] || '').trim() || '{имя}';
-  return tpl.replace(/\{имя\}/g, base).replace(/\{номер\}/g, stripCab(base, cab)).replace(/\{шкаф\}/g, shilutCabName(project, cab, e?.s))
+  let out = tpl.replace(/\{имя\}/g, base).replace(/\{номер\}/g, stripCab(base, cab)).replace(/\{шкаф\}/g, name)
     .replace(/\{U\}/g, String(e?.u ?? '')).replace(/\{порт\}/g, String(e?.p ?? ''));
+  if (!drop && cab && !tpl.includes('{шкаф}') && !hasCab(out, [cab, name, custom])) out = `${name}-${out}`;
+  return out;
 }

@@ -141,3 +141,28 @@ test('закрытый порт: лишние точки уходят в сле�
   const r3 = blockPort({ ...rack, panels: [{ u: 38 }, { u: 36 }] }, [...wp, { id: 'W99', label: 'W99', typeId: 'AP2', cabinet: 'X', panel: [{ u: 36, p: 1 }, { u: 36, p: 2 }] }], 'X', { u: 38, p: 4 });
   assert.deepEqual(r3.writes.get('W11'), [{ u: 36, p: 1 }, { u: 36, p: 2 }]); assert.deepEqual(r3.writes.get('W99'), [{ u: 36, p: 3 }, { u: 36, p: 4 }]);
 });
+test('подпись шильюта: название шкафа добавляется, если его нет; шаблоны не дублируют', () => {
+  const ctx = { cables: new Map([['cat7', {}]]), types: new Map([['T', { cables: [{ cable: 'cat7', count: 1 }] }]]), configs: new Map() };
+  const mk = (label, cab = 'CCTV1', s) => ({ id: label, label, typeId: 'T', cabinet: cab, panel: [s ? { u: 1, p: 1, s } : { u: 1, p: 1 }] });
+  const proj = (sh = {}, subs = null) => ({ racks: { CCTV1: { height: 42, subs, panels: [] } }, shilut: sh });
+  // есть шкаф — как записано; нет — добавляется
+  assert.equal(shilutLabel(mk('CCTV1-TV01'), 0, proj(), ctx), 'CCTV1-TV01');
+  assert.equal(shilutLabel(mk('TV01'), 0, proj(), ctx), 'CCTV1-TV01');
+  assert.equal(shilutLabel(mk('INT DESK', '1A'), 0, { racks: {} }, ctx), '1A-INT DESK');
+  // шаблон с {шкаф} — не дублируется; шаблон без {шкаф} — шкаф добавляется
+  assert.equal(shilutLabel(mk('TV01'), 0, proj({ tpl: { T: '{шкаф}-{имя}' } }), ctx), 'CCTV1-TV01');
+  assert.equal(shilutLabel(mk('1'), 0, proj({ tpl: { T: 'B{номер}' } }), ctx), 'CCTV1-B1');
+  // галка «убрать» — без шкафа, приставка не добавляется
+  assert.equal(shilutLabel(mk('TV01'), 0, proj({ dropCabs: { CCTV1: true } }), ctx), 'TV01');
+  assert.equal(shilutLabel(mk('CCTV1-TV01'), 0, proj({ dropCabs: { CCTV1: true } }), ctx), 'TV01');
+  // своё название шкафа в настройках: подменяет и приставку у обозначений
+  assert.equal(shilutLabel(mk('CCTV1-TV01'), 0, proj({ cabNames: { 'CCTV1|': 'C1' } }), ctx), 'C1-TV01');
+  assert.equal(shilutLabel(mk('TV01'), 0, proj({ cabNames: { 'CCTV1|': 'C1' } }), ctx), 'C1-TV01');
+  // несколько шкафов в одном: название секции
+  const subs = [{ id: '', name: 'CCTV1-BMS', height: 42 }, { id: 's2', name: 'CCTV1', height: 42 }];
+  assert.equal(shilutLabel(mk('B01'), 0, proj({}, subs), ctx), 'CCTV1-BMS-B01');
+  assert.equal(shilutLabel(mk('TV01', 'CCTV1', 's2'), 0, proj({}, subs), ctx), 'CCTV1-TV01');
+  assert.equal(shilutLabel(mk('CCTV1-TV02', 'CCTV1', 's2'), 0, proj({}, subs), ctx), 'CCTV1-TV02');
+  // ручная подпись важнее всего
+  assert.equal(shilutLabel({ ...mk('TV01'), panel: [{ u: 1, p: 1, label: 'моя' }] }, 0, proj(), ctx), 'моя');
+});

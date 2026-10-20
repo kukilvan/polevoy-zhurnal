@@ -72,7 +72,7 @@ test('смешанные типы в одной панели — отдельн�
   const mixed = [mk('Камера', 'C1', '1A', 9, 1), mk('Вайфай', 'AP1', '1A', 9, 2), mk('Камера', 'C2', '1A', 9, 5), mk('Вайфай', 'AP2', '1A', 9, 9)];
   const sl = buildRackSheets(p, ctx, mixed, { ...prefs, mode: MODES.split }).sheets.find((s) => s.kind === 'shilut');
   assert.deepEqual(sl.rows[3].slice(1), ['ירוק', '', 'אדום']);
-  assert.deepEqual(sl.rows.slice(4, 7).map((r) => r[1]), ['C1', 'C2', '']); assert.deepEqual(sl.rows.slice(4, 7).map((r) => r[3]), ['AP1', 'AP2', '']);
+  assert.deepEqual(sl.rows.slice(4, 7).map((r) => r[1]), ['1A-C1', '1A-C2', '']); assert.deepEqual(sl.rows.slice(4, 7).map((r) => r[3]), ['1A-AP1', '1A-AP2', '']);   // у обозначений нет шкафа — добавлен
 });
 test('таблица для руководства: создаётся в папке «Для руководства», обновляется только при изменениях, сервер не создаёт новых файлов', async () => {
   const { syncRackTable, RACK_TITLE, rackAuto } = await import('../src/app/racktablecore.js');
