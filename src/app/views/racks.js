@@ -1,7 +1,7 @@
 // «🗄 Шкафы и шильют»: план шкафа — какие точки cat7 в каких панелях (U) и портах (1–24).
 // Мастер раскладывает точки по типам в панели на указанных U; дальше — ручная правка: поставить с любого порта, переставить, убрать.
 import { h, openModal, toast, confirmDialog, formModal } from '../ui.js';
-import { state, getRepo, currentProject } from '../store.js';
+import { state, getRepo, currentProject, infoOf } from '../store.js';
 import { comparePoints } from '../../domain/index.js';
 import {
   PANEL_PORTS, rackPortsOf, panelOf, fmtPanelPort, defaultPortLabels, rackOf, panelsInOrder, rackPointsOf,
@@ -21,6 +21,12 @@ const HUES = [205, 140, 45, 0, 275, 175, 25, 320, 95, 240];
 const hueOf = (typeId) => { let x = 0; for (const ch of String(typeId)) x = (x * 31 + ch.charCodeAt(0)) >>> 0; return HUES[x % HUES.length]; };
 const allPoints = () => [...state.ctx.points.values()];
 const cabPoints = (cab) => rackPointsOf(allPoints(), state.ctx, cab);
+// Отметка проверки точки у порта: проверена — зелёная птичка, проверка была и не работает — красный крестик (на белой подложке — видно на любом цвете)
+const checkMark = (pt) => {
+  const info = infoOf(pt); if (!info) return null;
+  const bad = info.checkResult === 'Не работает'; if (!bad && !info.checked) return null;
+  return { bad, el: h('span', { style: { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: '13px', height: '13px', borderRadius: '50%', background: '#fff', color: bad ? '#ff3b30' : '#1db954', fontSize: '10px', lineHeight: '10px', fontWeight: 800, boxShadow: '0 0 0 1px rgba(0,0,0,.25)' } }, bad ? '✖' : '✔') };
+};
 const slotLabel = (pt, i) => shilutLabel(pt, i, currentProject(), state.ctx) || pt.label;
 const shortLabel = (txt, cab) => (cab && (txt.startsWith(`${cab}-`) || txt.startsWith(`${cab}/`)) ? txt.slice(cab.length + 1) : txt);
 // «секция|U|порт» → { pt, i } для точек шкафа
@@ -298,10 +304,12 @@ function rackEditor(ui, cab) {
       }
       const hue = at ? hueOf(at.pt.typeId) : 0;
       const col = at ? typeColorOf(currentProject(), at.pt.typeId, getRepo().prefs?.shilutColors || []) : null;
-      return h('div', { title: at ? `${slotLabel(at.pt, at.i)} (${at.pt.typeId})` : 'свободно', onclick: () => cellTap(pnl, k + 1),
+      const mark = at ? checkMark(at.pt) : null;
+      return h('div', { title: at ? `${slotLabel(at.pt, at.i)} (${at.pt.typeId})${mark ? (mark.bad ? ' — проверка: не работает' : ' — проверена') : ''}` : 'свободно', onclick: () => cellTap(pnl, k + 1),
         style: { cursor: 'pointer', border: `1px solid ${mv ? '#e0007a' : 'var(--line)'}`, borderWidth: mv ? '2px' : '1px', borderRadius: '6px', outline: mv ? '3px solid #e0007a' : 'none', outlineOffset: '1px', padding: '2px 4px', minHeight: '38px',
           background: col ? col.bg : at ? `hsla(${hue},70%,50%,.18)` : 'transparent', color: col ? col.fg : 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', overflow: 'hidden' } },
-        h('small', { class: col ? '' : 'mut', style: { fontSize: '10px', lineHeight: '12px', opacity: col ? 0.75 : 1 } }, String(k + 1)),
+        h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' } },
+          h('small', { class: col ? '' : 'mut', style: { fontSize: '10px', lineHeight: '12px', opacity: col ? 0.75 : 1 } }, String(k + 1)), mark?.el),
         h('span', { style: { fontSize: '12px', lineHeight: '14px', wordBreak: 'break-all', fontWeight: at ? 600 : 400 } }, at ? shortLabel(slotLabel(at.pt, at.i), cab) : ''));
     });
     return h('div', { class: 'card', style: { margin: '8px 0' } },
@@ -376,5 +384,5 @@ function rackEditor(ui, cab) {
       h('div', { class: 'mut', style: { margin: '4px 0' } }, [...byType.entries()].map(([t, n]) => `${t}: ${n}`).join(' · ')),
       h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => placeModal(cab, ui) }, '➕ Поставить в панель…'))) : null,
     ...subs.map(subBlock),
-    h('div', { class: 'mut', style: { margin: '10px 2px', fontSize: '13px' } }, 'Нажмите на свободный порт — поставить точки с него; на занятый — переставить, убрать или открыть точку. 🔢 — упорядочить панель по номерам. 🚫 — закрыть порты крестиком (сломанные, зарезервированные).'));
+    h('div', { class: 'mut', style: { margin: '10px 2px', fontSize: '13px' } }, 'Нажмите на свободный порт — поставить точки с него; на занятый — переставить, убрать или открыть точку. 🔢 — упорядочить панель по номерам. 🚫 — закрыть порты крестиком (сломанные, зарезервированные). Значок у номера порта: ✔ — точка проверена, ✖ — проверка показала, что не работает.'));
 }
