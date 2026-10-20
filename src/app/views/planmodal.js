@@ -14,6 +14,7 @@ import { createViewer } from './planview.js';
 import { exportNumberedPdf, publishNumbered } from './plannumbers.js';
 import { linkPoints } from './planlink.js';
 import { choosePoint } from './pointchooser.js';
+import { bulkEditForm, renameForm } from './points.js';
 import { typeMatch, typeFilterOptions } from '../typegroups.js';
 
 export { STATUS_COLORS, statusColor } from '../../domain/index.js';
@@ -216,6 +217,8 @@ export function planModal({ point = null, placeFor = null } = {}) {
         bar.replaceChildren(h('b', {}, `Выбрано: ${sel.size}`),
           h('button', { class: rectSel ? '' : 'sec', onclick: () => { rectSel = !rectSel; selBar(); } }, rectSel ? '▭ Рамкой (вкл.)' : '▭ Рамкой'),
           h('button', { disabled: !sel.size, onclick: () => { addWorkForPoints([...sel]); } }, `➕ Работа на выбранные (${sel.size})`),
+          h('button', { disabled: !sel.size, onclick: () => bulkEditForm([...sel], () => { selBar(); viewer.draw(); }) }, `✏️ Изменить (${sel.size})`),
+          h('button', { disabled: !sel.size, onclick: () => renameForm([...sel], () => { selBar(); viewer.draw(); }) }, '🏷 Переименовать'),
           h('button', { class: 'sec', onclick: () => { sel.clear(); selBar(); viewer.draw(); } }, 'Снять'));
       };
       const bar = h('div', { class: 'card', style: { display: 'none', margin: '6px 0', padding: '8px', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } });

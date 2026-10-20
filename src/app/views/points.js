@@ -413,7 +413,7 @@ function remainingModal() {
 let selMode = false; const selected = new Set();
 
 // Групповое переименование: убрать/заменить часть названия, сдвинуть номер, добавить в начало/конец — с предпросмотром и проверкой повторов
-function renameForm(ids, done) {
+export function renameForm(ids, done) {
   const pts = ids.map((id) => state.ctx.points.get(id)).filter(Boolean).sort(comparePoints);
   const others = [...state.ctx.points.values()].filter((p) => !ids.includes(p.id));
   // общее начало у всех выбранных — подсказка «убрать»
@@ -458,7 +458,7 @@ function renameForm(ids, done) {
   calc();
 }
 
-function bulkEditForm(ids, done) {
+export function bulkEditForm(ids, done) {
   const repo = getRepo(); const pid = currentProject().id;
   formModal({
     title: `Изменить точек: ${ids.length}`, submitLabel: 'Применить',
