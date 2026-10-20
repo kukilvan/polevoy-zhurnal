@@ -37,7 +37,7 @@ test('лист плана шкафа: Unit, нумерация, X, цвета', 
 test('лист шильюта, режим split: столбцы по панелям, без пропусков строк, зазоры', () => {
   const { sheets } = buildRackSheets(proj(), ctx, pts(), { ...prefs, mode: MODES.split });
   const sl = sheets.find((s) => s.kind === 'shilut');
-  assert.equal(sl.rtl, true); assert.equal(sl.title, 'שילוט');
+  assert.equal(sl.rtl, true); assert.equal(sl.title, 'שילוט להזמנה');
   // шкаф 1A: камеры — панели U9 и U8 (два столбца подряд), зазор 1, вайфай (U5); между шкафами 2 зазора; 2B: камеры
   const hdr = sl.rows[1].slice(1); assert.deepEqual(hdr, [HE_TOTAL, HE_TOTAL, '', HE_TOTAL, '', '', HE_TOTAL]);
   assert.deepEqual(sl.rows[3].slice(1), ['ירוק', 'ירוק', '', 'אדום', '', '', 'ירוק']);
@@ -135,4 +135,20 @@ test('объединять по цвету: разные типы одного �
   assert.deepEqual(on[0], ['1A-K1', '1A-K2', '1A-K3', '1A-I1', '1A-I2']);
   const sp = cols(buildRackSheets(pj, ctx2, P, { ...prefs, mode: MODES.split, mergeColors: true }));
   assert.ok(sp.some((c) => c.length === 3));                                  // в разных панелях столбцы остаются отдельными
+});
+
+test('шильют делится на листы: к заказу и уже есть (отмечено «есть шилют»)', () => {
+  const P = pts();
+  P[0].shHave = [0]; P[1].shHave = [0]; P[3].shHave = [0];           // 1A-C1, 1A-C2, 1A-C25 — уже есть
+  const r = buildRackSheets(proj(), ctx, P, { ...prefs, mode: MODES.split });
+  const need = r.sheets.find((s) => s.key === 'shilut'); const have = r.sheets.find((s) => s.key === 'shilut-have');
+  assert.equal(need.title, 'שילוט להזמנה'); assert.equal(have.title, 'שילוט קיים');
+  const labels = (sl) => sl.rows.slice(4).flat().filter((x) => x && x !== '');
+  assert.deepEqual(labels(have).sort(), ['1A-C1', '1A-C2', '1A-C25']);
+  assert.ok(!labels(need).includes('1A-C1') && labels(need).includes('1A-C3') && labels(need).includes('2B-C1'));
+  // fill: тоже два листа; всё напечатано — листа «к заказу» нет и есть предупреждение
+  const all = P.map((p) => ({ ...p, shHave: p.panel.map((_, i) => i) }));
+  const r2 = buildRackSheets(proj(), ctx, all, { ...prefs, mode: MODES.fill });
+  assert.ok(!r2.sheets.some((s) => s.key === 'shilut') && r2.sheets.some((s) => s.key === 'shilut-have'));
+  assert.ok(r2.warnings.some((w) => w.includes('Весь шильют уже есть')));
 });

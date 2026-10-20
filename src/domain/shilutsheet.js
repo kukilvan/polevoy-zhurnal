@@ -4,9 +4,12 @@ import {
   PANEL_PORTS, panelOf, rackPortsOf, rackOf, subsOf, uOrder, panelsInOrder, rackPointsOf, cabinetFloor,
   blockedOf, shilutLabel, shilutCabName, shilutOf, typeColorOf, rackProblems,
 } from './rack.js';
+import { pointInfo } from './status.js';
 
 const natural = (a, b) => String(a).localeCompare(String(b), 'ru', { numeric: true });
 export const HE_TOTAL = 'כולל שקעים';
+export const SHEET_NEED = 'שילוט להזמנה';   // ещё не напечатан — лист для заказа
+export const SHEET_HAVE = 'שילוט קיים';      // уже напечатан / поклеен
 export const MODES = { fill: 'fill', split: 'split' };
 
 // Шкафы (секции), у которых есть план: [{ key, cab, sid, sub, rack, floor, name, count }]
@@ -25,11 +28,13 @@ export function cabinetsOf(project, points, ctx) {
 }
 
 // «U|порт» → { pt, i, label } для точек секции
+// have — шильют этого порта уже есть: отмечен «есть шилют» (point.shHave — номера портов точки) или уже поклеен (работа «Шилют» в доходе)
+export const hasShilut = (pt, i, ctx) => (Array.isArray(pt.shHave) && pt.shHave.includes(i)) || (!!ctx.journalByPoint && !!pointInfo(pt, ctx).shilut);
 function portsOf(project, ctx, points, c) {
   const m = new Map();
   rackPointsOf(points, ctx, c.cab).forEach((pt) => panelOf(pt).forEach((x, i) => {
     if ((x.s || '') !== c.sid) return;
-    m.set(`${x.u}|${x.p}`, { pt, i, label: shilutLabel(pt, i, project, ctx) });
+    m.set(`${x.u}|${x.p}`, { pt, i, label: shilutLabel(pt, i, project, ctx), have: hasShilut(pt, i, ctx) });
   }));
   return m;
 }
@@ -95,14 +100,15 @@ export function packQueues(queues, cap = PANEL_PORTS) {
 // Режим fill: точки одного типа из выбранных шкафов — очередями из панелей (см. packQueues); 1 пустой столбец между типами.
 // Режим split: как стоит в панелях — столбец на каждую панель (и тип); подписи подряд без пропусков строк; 1 пустой столбец между типами, 2 между шкафами.
 // mergeColors: типы с одним цветом считаются одним типом (общие столбцы / очереди)
-function shilutSheet(project, ctx, points, cabs, { mode, colors, modelName, mergeColors }) {
+function shilutSheet(project, ctx, points, cabs, { mode, colors, modelName, mergeColors, have, title, key }) {
+  const portsHere = (c) => new Map([...portsOf(project, ctx, points, c)].filter(([, v]) => v.have === have));   // только шильют нужного листа
   const sh = shilutOf(project); const defModel = modelName(sh.panelModel) || '';
   const colorHe = (typeId) => typeColorOf(project, typeId, colors);
   const gk = (typeId) => (mergeColors && colorHe(typeId) ? `color:${colorHe(typeId).id}` : typeId);   // ключ столбца: тип или (по галке) цвет
   const cols = []; // { gap: n } или { typeId, model, cells: [24] }
   if (mode === MODES.split) {
     cabs.forEach((c, ci) => {
-      const placed = portsOf(project, ctx, points, c);
+      const placed = portsHere(c);
       const typeOrder = []; const byType = new Map();
       panelsInOrder(c.rack, c.sub).forEach((pn) => {
         const here = new Map();
@@ -120,7 +126,7 @@ function shilutSheet(project, ctx, points, cabs, { mode, colors, modelName, merg
     // «Очередь» — точки одного типа (цвета) из одной панели, в том порядке, как стоят в панели. Очередь не режется и не переставляется.
     const groups = new Map(); let idx = 0;
     cabs.forEach((c) => {
-      const placed = portsOf(project, ctx, points, c);
+      const placed = portsHere(c);
       panelsInOrder(c.rack, c.sub).forEach((pn) => {
         const here = new Map();
         for (let p = 1; p <= PANEL_PORTS; p++) { const at = placed.get(`${pn.u}|${p}`); if (!at) continue; const k = gk(at.pt.typeId); if (!here.has(k)) here.set(k, { typeId: at.pt.typeId, labels: [] }); here.get(k).labels.push(at.label); }
@@ -142,7 +148,7 @@ function shilutSheet(project, ctx, points, cabs, { mode, colors, modelName, merg
   for (let i = 0; i < PANEL_PORTS; i++) rows.push(['', ...cols.map((x) => (x.cells ? x.cells[i] : ''))]);
   const colorCells = []; cols.forEach((x, i) => { if (x.cells) { const col = colorHe(x.typeId); if (col) colorCells.push({ r: 3, c0: i + 1, c1: i + 2, bg: col.bg, fg: col.fg, bold: true }); } });
   return {
-    kind: 'shilut', key: 'shilut', title: 'שילוט', rtl: true, rows, frozenRows: 0, frozenCols: 0,
+    kind: 'shilut', key, title, rtl: true, rows, frozenRows: 0, frozenCols: 0,
     widths: [26, ...cols.map((x) => (x.cells ? 120 : 20))],
     rowHeights: [{ r0: 0, r1: 1, px: 12 }],
     stripCols: cols.map((x, i) => (x.cells ? i + 1 : -1)).filter((i) => i >= 0), stripRows: [1, 4 + PANEL_PORTS], fills: colorCells,
@@ -162,9 +168,13 @@ export function buildRackSheets(project, ctx, points, { mode = MODES.fill, cabs:
     while (names.has(t.toLowerCase())) t = `${base} ${n++}`;
     names.add(t.toLowerCase()); s.title = t; sheets.push(s);
   });
-  const sl = shilutSheet(project, ctx, points, chosen.filter((c) => c.count > 0), { mode, colors, modelName, mergeColors });
-  if (sl) { let t = sl.title; let n = 2; while (names.has(t.toLowerCase())) t = `${sl.title} ${n++}`; sl.title = t; sheets.push(sl); }
-  else if (chosen.length) warnings.push('В выбранных шкафах нет расставленных точек — лист шильюта не создан');
+  // шильют делится на два листа: ещё не напечатан (его заказывают) и уже есть (напечатан или поклеен)
+  const cabsWith = chosen.filter((c) => c.count > 0); const o = { mode, colors, modelName, mergeColors };
+  const slNeed = shilutSheet(project, ctx, points, cabsWith, { ...o, have: false, title: SHEET_NEED, key: 'shilut' });
+  const slHave = shilutSheet(project, ctx, points, cabsWith, { ...o, have: true, title: SHEET_HAVE, key: 'shilut-have' });
+  [slNeed, slHave].forEach((sl) => { if (!sl) return; let t = sl.title; let n = 2; while (names.has(t.toLowerCase())) t = `${sl.title} ${n++}`; names.add(t.toLowerCase()); sl.title = t; sheets.push(sl); });
+  if (!slNeed && !slHave && chosen.length) warnings.push('В выбранных шкафах нет расставленных точек — лист шильюта не создан');
+  else if (!slNeed && slHave) warnings.push('Весь шильют уже есть — листа «к заказу» нет');
   // предупреждения
   const typesIn = new Set(); chosen.forEach((c) => rackPointsOf(points, ctx, c.cab).forEach((pt) => { if (panelOf(pt).some((x) => (x.s || '') === c.sid)) typesIn.add(pt.typeId); }));
   const noColor = [...typesIn].filter((t) => !typeColorOf(project, t, colors)); if (noColor.length) warnings.push(`Не выбран цвет шильюта: ${noColor.join(', ')}`);

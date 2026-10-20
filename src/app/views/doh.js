@@ -268,6 +268,33 @@ export function addWorkForPoints(pointIds, preset = {}) {
     || { id: newId(), date: today, helper: p.helper, helperHe: p.helperHe, _new: true };
   entryForm(day, null, { ...preset, pointIds: [...pointIds] });
 }
+// «Шилют поклеен» одним нажатием (из панели шкафа): запись работы «Шилют» в сегодняшний день, без формы.
+// Работа подбирается как в «Несколько работ»: у точки из устройств — открытая задача «Шилют», у старых точек — работа типа «Шилют» для её типа.
+// → { made: записей, done: [метки: уже поклеены], none: [метки: у типа нет работы «Шилют»] }
+export function markShilutForPoints(pointIds) {
+  const ctx = state.ctx; const repo = getRepo(); const p = currentProject(); const today = todayIso();
+  const pts = [...new Set(pointIds)].map((id) => ctx.points.get(id)).filter(Boolean);
+  const works = [...ctx.catalog.values()].filter((w) => w.active !== false && w.workType === 'Шилют');
+  const byWork = new Map(); const done = []; const none = [];
+  const put = (w, pt) => { if (!byWork.has(w.id)) byWork.set(w.id, []); byWork.get(w.id).push(pt.id); };
+  pts.forEach((pt) => {
+    if (compositionOf(pt, ctx)) {
+      const fit = works.filter((w) => workFits(pt, ctx, w));
+      const open = fit.filter((w) => (openTasksFor(pt, ctx, w) || []).length > 0);
+      if (open.length) open.forEach((w) => put(w, pt)); else if (fit.length) done.push(pt.label); else none.push(pt.label);
+    } else {
+      const w = works.find((x) => (x.forTypes || []).includes(pt.typeId));
+      if (!w) none.push(pt.label); else if (infoOf(pt).shilut) done.push(pt.label); else put(w, pt);
+    }
+  });
+  if (!byWork.size) return { made: 0, done, none };
+  const day = daysSorted().find((d) => d.date === today); const dayId = day?.id || newId();
+  const ops = day ? [] : [{ coll: 'days', id: dayId, data: { date: today, helper: p.helper || 'сам', helperHe: p.helperHe || 'сам' } }];
+  const made = [];
+  byWork.forEach((ids, workId) => { const id = newId(); ops.push({ coll: 'entries', id, data: { dayId, workType: 'Шилют', workId, pointIds: ids } }); made.push([id, ids]); });
+  repo.save(p.id, ops); made.forEach(([id, ids]) => syncJournal(id, ids)); bumpLastWork(today);
+  return { made: made.length, done, none };
+}
 export function addWorkForPoint(pointId) {
   const p = currentProject(); const today = todayIso();
   const day = daysSorted().find((d) => d.date === today)
