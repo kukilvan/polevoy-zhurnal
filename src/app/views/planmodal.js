@@ -4,7 +4,7 @@ import { pickPdf } from './pdfpick.js';
 import { h, openModal, toast, confirmDialog } from '../ui.js';
 import { state, currentProject, infoOf, getRepo, subscribe } from '../store.js';
 import { drawingsOf, drawingTitle, drawingFor, loadDrawing, addDrawing, pushDrawing, removeDrawing, updateDrawing, posKey } from '../drawings.js';
-import { missingStages, comparePoints, nextLabel, combineLabels } from '../../domain/index.js';
+import { missingStages, comparePoints, nextLabel, combineLabels, sameLabelClash } from '../../domain/index.js';
 import { newId } from '../repo.js';
 import { typePicker } from './tohnitview.js';
 import { cablesPicker } from './cablespick.js';
@@ -344,7 +344,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
     }
     function bind() {
       choosePoint({ title: '🔗 Какая это точка?', renameLabel: sn?.kind === 'text' ? sn.label : '', onPick: (p, { rename }) => {
-        if (rename && [...state.ctx.points.values()].some((x) => x.id !== p.id && x.label === sn.label)) { toast(`«${sn.label}» уже есть в проекте — переименовать нельзя`); return false; }
+        if (rename && [...state.ctx.points.values()].some((x) => x.id !== p.id && sameLabelClash(x, { label: sn.label, cabinet: p.cabinet }))) { toast(`«${sn.label}» уже есть в этом шкафу — переименовать нельзя`); return false; }
         const data = { pos: posFor(p.typeId) };
         if (rename) { data.label = sn.label; data.planName = p.label; } else if (sn?.kind === 'text' && p.label !== sn.label) data.planName = sn.label;
         getRepo().save(currentProject().id, [{ coll: 'points', id: p.id, data }]);
@@ -380,7 +380,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
         h('div', { class: 'btns' }, h('button', { onclick: () => {
           const label = name.value.trim();
           if (!tid) { toast('Выберите тип'); return; } if (!label) { toast('Впишите название'); return; }
-          if (pts.some((p) => p.label === label)) { toast(`«${label}» уже есть в проекте`); return; }
+          if (pts.some((p) => sameLabelClash(p, { label, cabinet: cab }))) { toast(cab ? `«${label}» уже есть в шкафу ${cab}` : `«${label}» уже есть среди точек без шкафа`); return; }
           const data = { label, typeId: tid, pos: posFor(tid, iconCb.checked), note: 'добавлено на плане' };
           if (cab) data.cabinet = cab; if (d.floor) data.floor = d.floor; const ov = cp.override(); if (ov) data.cableOverride = ov;
           const id = newId(); getRepo().save(currentProject().id, [{ coll: 'points', id, data }]);
@@ -448,7 +448,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
   // выбор точки проекта для подписи: поиск, тип, шкаф; по умолчанию — точки без места на чертеже
   function chooseFor(d, m) {
     choosePoint({ title: `🔗 Точка для «${m.label}»`, typeId: m.typeId, renameLabel: m.label, onPick: (p, { rename }) => {
-      if (rename && [...state.ctx.points.values()].some((x) => x.id !== p.id && x.label === m.label)) { toast(`«${m.label}» уже есть в проекте — переименовать нельзя`); return false; }
+      if (rename && [...state.ctx.points.values()].some((x) => x.id !== p.id && sameLabelClash(x, { label: m.label, cabinet: p.cabinet }))) { toast(`«${m.label}» уже есть в этом шкафу — переименовать нельзя`); return false; }
       const data = { pos: { ...m.pos, sheet: d.name } };
       if (rename) { data.label = m.label; data.planName = p.label; } else if (p.label !== m.label) data.planName = m.label;
       getRepo().save(currentProject().id, [{ coll: 'points', id: p.id, data }]);

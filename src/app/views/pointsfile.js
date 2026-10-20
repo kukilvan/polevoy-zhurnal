@@ -10,7 +10,7 @@ export function pointsFromFile() {
   const input = h('input', { type: 'file', accept: '.json,application/json,text/plain', style: { display: 'none' } });
   const out = h('div', {});
   const close = openModal('Точки из файла', h('div', {},
-    h('div', { class: 'mut' }, 'Файл .json с точками (например, после разбора тохнита). Точки добавятся к проекту; уже существующие (то же обозначение) пропускаются. Перед добавлением — предпросмотр.'),
+    h('div', { class: 'mut' }, 'Файл .json с точками (например, после разбора тохнита). Точки добавятся к проекту; уже существующие (то же обозначение в том же шкафу) пропускаются; такое же обозначение в другом шкафу — не помеха. Перед добавлением — предпросмотр.'),
     h('div', { class: 'btns' }, h('button', { onclick: () => input.click() }, '📂 Выбрать файл'), input), out), { sticky: true });
   input.addEventListener('change', async () => {
     const file = input.files?.[0]; if (!file) return;
@@ -29,15 +29,17 @@ export function importPreview(data, title, close) {
   // точки, которые уже есть в проекте, но без места на этом чертеже — отметить их место (связать с чертежом)
   const sheetName = data?.sheet?.pdf || '';
   const drawingNames = new Set(drawingsOf().flatMap((d) => [d.name, ...(d.aliases || [])]));
-  const byLabel = new Map([...state.ctx.points.values()].map((p) => [p.label, p]));
-  const toLink = sheetName ? data.points.filter((f) => f.pos && byLabel.has(String(f.label).trim())).map((f) => ({ f, p: byLabel.get(String(f.label).trim()) }))
+  const keyOf = (label, cab) => `${cab || ''}\u0000${label}`;
+  const byLabel = new Map([...state.ctx.points.values()].map((p) => [keyOf(p.label, p.cabinet), p]));
+  const fKey = (f) => keyOf(String(f.label).trim(), String(f.cabinet || data.cabinet || '').trim());   // то же обозначение в том же шкафу
+  const toLink = sheetName ? data.points.filter((f) => f.pos && byLabel.has(fKey(f))).map((f) => ({ f, p: byLabel.get(fKey(f)) }))
     .filter(({ p }) => p.pos?.sheet !== sheetName && !(p.pos?.sheet && drawingNames.has(p.pos.sheet) && p.pos.sheet !== sheetName)) : [];
   const linkCb = h('input', { type: 'checkbox', checked: true, onchange: () => label() });
   const goBtn = h('button', {});
   const nLink = () => (linkCb.checked ? toLink.length : 0);
   const label = () => { const n = plan.add.length - off.size; goBtn.textContent = n > 0 ? `➕ Добавить точек: ${n}${nLink() ? ` · отметить на чертеже: ${nLink()}` : ''}` : nLink() ? `📍 Отметить на чертеже: ${nLink()}` : '➕ Добавить точек: 0'; goBtn.disabled = n <= 0 && !nLink(); };
   goBtn.onclick = () => {
-    const ops = pointsImportOps({ ...plan, add: plan.add.filter((p) => !off.has(p.label)) }, newId, data);
+    const ops = pointsImportOps({ ...plan, add: plan.add.filter((p) => !off.has(p)) }, newId, data);
     const linkOps = nLink() ? toLink.map(({ f, p }) => ({ coll: 'points', id: p.id, data: { pos: posOf(f, data) } })) : [];
     getRepo().save(currentProject().id, [...ops.map((o) => ({ ...o, data: { ...o.data, deleted: false } })), ...linkOps]);
     toast(`Добавлено точек: ${ops.filter((o) => o.coll === 'points').length}${linkOps.length ? `, отмечено на чертеже: ${linkOps.length}` : ''}`); close?.();
@@ -48,10 +50,10 @@ export function importPreview(data, title, close) {
   const groups = new Map(); plan.add.forEach((p) => { const k = `${p.cabinet || 'без шкафа'} · ${p.typeId}`; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(p); });
   const groupEls = [...groups.entries()].sort((a, b) => a[0].localeCompare(b[0], 'ru', { numeric: true })).map(([k, list]) => {
     const boxes = list.map((p) => {
-      const cb = h('input', { type: 'checkbox', checked: true, onchange: () => { cb.checked ? off.delete(p.label) : off.add(p.label); sync(); label(); } });
-      return { p, cb, el: h('label', { class: 'pickrow' }, cb, h('span', {}, p.label, warnOf.has(p.label) ? h('small', { class: 'l-warn' }, ` ⚠️ ${warnOf.get(p.label)}`) : null, p.planName && p.planName !== p.label ? h('small', { class: 'mut' }, ` · ${p.planName}`) : null)) };
+      const cb = h('input', { type: 'checkbox', checked: true, onchange: () => { cb.checked ? off.delete(p) : off.add(p); sync(); label(); } });
+      return { p, cb, el: h('label', { class: 'pickrow' }, cb, h('span', {}, p.label, warnOf.has(p.label) ? h('small', { class: 'l-warn' }, ` ⚠️ ${warnOf.get(p.label)}`) : null, p.planName && p.planName !== p.label ? h('small', { class: 'mut' }, ` · ${p.planName}`) : null, plan.alsoIn?.has(`${p.cabinet || ''}\u0000${p.label}`) ? h('small', { class: 'mut' }, ` · такое же есть: ${plan.alsoIn.get(`${p.cabinet || ''}\u0000${p.label}`)}`) : null)) };
     });
-    const all = h('input', { type: 'checkbox', checked: true, onchange: () => { boxes.forEach((b) => { b.cb.checked = all.checked; all.checked ? off.delete(b.p.label) : off.add(b.p.label); }); sync(); label(); } });
+    const all = h('input', { type: 'checkbox', checked: true, onchange: () => { boxes.forEach((b) => { b.cb.checked = all.checked; all.checked ? off.delete(b.p) : off.add(b.p); }); sync(); label(); } });
     const cnt = h('span', {});
     const sync = () => { const on = boxes.filter((b) => b.cb.checked).length; all.checked = on === boxes.length; all.indeterminate = on > 0 && on < boxes.length; cnt.textContent = ` ${k}: ${on}${on < boxes.length ? ` из ${boxes.length}` : ''}`; };
     sync();
@@ -71,7 +73,7 @@ export function importPreview(data, title, close) {
     list('❌ Ошибки — эти строки не добавятся', plan.errors, 'l-error'),
     plan.warnings.length ? h('div', { class: 'l-warn', style: { margin: '8px 0' } }, `⚠️ Подозрительные обозначения: ${plan.warnings.length} — отмечены ⚠️ в группах выше; снимите галочку, если это не точка.`) : null,
     toLink.length ? h('label', { class: 'pickrow', style: { margin: '8px 0' } }, linkCb, h('span', {}, `📍 Уже есть в проекте, но без места на этом чертеже: ${toLink.length} (${toLink.slice(0, 6).map((x) => x.p.label).join(', ')}${toLink.length > 6 ? '…' : ''}) — отметить их место на чертеже`)) : null,
-    list('Уже есть в проекте — пропущены', plan.skipped),
+    list('Уже есть в проекте (то же обозначение в том же шкафу) — пропущены', plan.skipped),
     h('div', { class: 'btns' }, goBtn)].filter(Boolean);
   return h('div', {}, ...parts);
 }

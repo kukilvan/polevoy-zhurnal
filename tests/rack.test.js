@@ -185,6 +185,6 @@ test('одинаковые названия: занято только в том
   assert.equal(sameLabelClash({ label: 'A5', cabinet: '1A' }, { label: 'A5', cabinet: '1A' }), true);
   assert.equal(sameLabelClash({ label: 'A5', cabinet: '1A' }, { label: 'A5', cabinet: '2B' }), false);
   assert.equal(sameLabelClash({ label: 'A5', cabinet: '' }, { label: 'A5', cabinet: '1A' }), false);
-  assert.equal(sameLabelClash({ label: 'A5' }, { label: 'A5' }), false);
+  assert.equal(sameLabelClash({ label: 'A5' }, { label: 'A5' }), true);       // два без шкафа — одно место
   assert.equal(sameLabelClash({ label: 'A5', cabinet: '1A' }, { label: 'A6', cabinet: '1A' }), false);
 });

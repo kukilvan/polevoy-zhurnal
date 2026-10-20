@@ -46,19 +46,33 @@ test('лист шильюта, режим split: столбцы по панел�
   assert.ok(!sl.rows.flat().includes('X'));
   assert.equal(sl.rows.length, 4 + 24);
 });
-test('лист шильюта, режим fill: по 24 одного типа через шкафы, без пропусков', () => {
+test('лист шильюта, режим fill: очереди из панелей, порядок как в панелях', () => {
   const many = Array.from({ length: 30 }, (_, i) => mk('Камера', `1A-C${i + 1}`, '1A', i < 20 ? 9 : 8, i < 20 ? i + 1 : i - 19));
   const p = proj(); p.racks['1A'].blocked = [];
   const { sheets } = buildRackSheets(p, ctx, [...many, ...pts().slice(5)], { ...prefs, mode: MODES.fill });
   const sl = sheets.find((s) => s.kind === 'shilut');
-  // камер: 30 + 2 из шкафа 2B = 32 → столбец из 24 и столбец из 8 (+ вайфай нет: он только в pts().slice(0,5), не включён)
-  const types = sl.rows[3].slice(1); assert.deepEqual(types, ['ירוק', 'ירוק']);
-  const c1 = sl.rows.slice(4).map((r) => r[1]); const c2 = sl.rows.slice(4).map((r) => r[2]);
-  assert.equal(c1.filter(Boolean).length, 24); assert.equal(c2.filter(Boolean).length, 8);
-  assert.deepEqual(c2.slice(0, 8), ['1A-C25', '1A-C26', '1A-C27', '1A-C28', '1A-C29', '1A-C30', '2B-C1', '2B-C2']);
-  // закрытый порт в fill пропускается: пустых мест внутри нет
+  // очереди камер: 20 (U9), 10 (U8), 2 (шкаф 2B): очередь из 20 — отдельный столбец, 10 и 2 — вместе, в порядке панелей
+  assert.deepEqual(sl.rows[3].slice(1), ['ירוק', 'ירוק']);
+  const col = (i) => sl.rows.slice(4).map((r) => r[i]).filter(Boolean);
+  assert.equal(col(1).length, 20); assert.equal(col(1)[0], '1A-C1'); assert.equal(col(1)[19], '1A-C20');
+  assert.deepEqual(col(2), [...Array.from({ length: 10 }, (_, i) => `1A-C${21 + i}`), '2B-C1', '2B-C2']);
   const p2 = proj(); const r2 = buildRackSheets(p2, ctx, pts(), { ...prefs, mode: MODES.fill }).sheets.find((s) => s.kind === 'shilut');
   assert.ok(!r2.rows.flat().includes('X'));
+});
+test('раскладка очередей по 24: полная панель и очереди от 12 — отдельно, короткие объединяются без разрезания', async () => {
+  const { packQueues } = await import('../src/domain/shilutsheet.js');
+  const Q = (idx, n, tag) => ({ idx, labels: Array.from({ length: n }, (_, i) => `${tag}${i + 1}`) });
+  const lens = (cols) => cols.map((c) => c.map((q) => q.labels.length));
+  // пример: две очереди по 8 и две по 6 → 8+8+6 (в порядке панелей) и отдельно 6 (вторая шестёрка в 2 свободных места не лезет)
+  assert.deepEqual(lens(packQueues([Q(0, 8, 'a'), Q(1, 6, 'b'), Q(2, 8, 'c'), Q(3, 6, 'd')])), [[8, 6, 8], [6]]);
+  // в оставшиеся 2 места попадает короткая очередь из 2 (или одиночки)
+  assert.deepEqual(lens(packQueues([Q(0, 8, 'a'), Q(1, 6, 'b'), Q(2, 8, 'c'), Q(3, 6, 'd'), Q(4, 2, 'e')])), [[8, 6, 8, 2], [6]]);
+  // полная панель (24) и очереди 12+ — отдельные столбцы, остальное — вместе
+  assert.deepEqual(lens(packQueues([Q(0, 24, 'f'), Q(1, 5, 'a'), Q(2, 12, 'g'), Q(3, 11, 'b'), Q(4, 13, 'h'), Q(5, 7, 'c')])), [[24], [12], [13], [5, 11, 7]]);
+  // внутри столбца очереди в порядке панелей, а сами очереди не переставляются
+  const cols = packQueues([Q(5, 3, 'z'), Q(1, 9, 'y'), Q(3, 4, 'x')]);
+  assert.deepEqual(cols[0].map((q) => q.idx), [1, 3, 5]);
+  assert.deepEqual(cols[0][0].labels.slice(0, 2), ['y1', 'y2']);
 });
 test('выбор шкафов и предупреждения', () => {
   const r = buildRackSheets(proj({ typeColors: {}, panelModel: '' }), ctx, pts(), { models: [], colors: [], mode: MODES.fill, cabs: ['2B|'] });

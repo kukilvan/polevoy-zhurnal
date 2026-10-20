@@ -3,7 +3,7 @@
 // Что на чертеже осталось без пары — «Не размеченые» (видны в плане по фильтру; там же скрыть или связать вручную).
 import { h, openModal, toast } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
-import { posOf } from '../../domain/index.js';
+import { posOf, sameLabelClash } from '../../domain/index.js';
 import { makeWorker, userCatalog } from './tohnitview.js';
 import { importPreview } from './pointsfile.js';
 import { drawingFor, updateDrawing, posKey } from '../drawings.js';
@@ -35,10 +35,9 @@ export async function linkPoints(d, buf, { onDone } = {}) {
     const fresh = unlinked; let freshLeft = fresh;  // после «Добавить как новые» — пусто
 
     // похожие пары: подтвердить
-    const labels = new Set(pts.map((p) => p.label));
     const rows = similar.map((s) => {
       const same = h('input', { type: 'checkbox', checked: s.kind === 'same' });
-      const canRename = !labels.has(s.f.label);
+      const canRename = !pts.some((x) => x.id !== s.p.id && sameLabelClash(x, { label: s.f.label, cabinet: s.p.cabinet }));
       const ren = h('input', { type: 'checkbox', checked: false, disabled: !canRename });
       const img = h('div', { style: { minHeight: '40px' } });
       const pad = 40; const p0 = s.f.pos; const clip = [p0.x - p0.w / 2 - pad, p0.y - p0.h / 2 - pad, p0.x + p0.w / 2 + pad, p0.y + p0.h / 2 + pad]; const zoom = Math.min(6, 300 / (clip[2] - clip[0]));
@@ -50,7 +49,7 @@ export async function linkPoints(d, buf, { onDone } = {}) {
       return { s, same, ren, el: h('div', { class: 'card', style: { margin: '6px 0' } },
         h('div', { style: { fontWeight: 600 } }, `${s.p.label}  ↔  ${s.f.label} (на чертеже)`), img,
         h('label', { class: 'pickrow' }, same, h('span', {}, 'Это одна и та же точка')),
-        h('label', { class: 'pickrow' }, ren, h('span', {}, canRename ? `Переименовать точку в «${s.f.label}» (как на чертеже)` : `Переименовать нельзя — «${s.f.label}» уже есть в проекте`))) };
+        h('label', { class: 'pickrow' }, ren, h('span', {}, canRename ? `Переименовать точку в «${s.f.label}» (как на чертеже)` : `Переименовать нельзя — «${s.f.label}» уже есть в этом шкафу`))) };
     });
     const msg = `Связано с чертежом: ${ops.length}${already ? `, уже были связаны: ${already}` : ''}. Похожих названий: ${similar.length}. Не размеченых на чертеже: ${fresh.length}.`;
     const box = h('div', {});

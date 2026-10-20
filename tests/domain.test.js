@@ -618,8 +618,8 @@ test('добавление точек из файла: дубли пропуск
   assert.throws(() => parsePointsFile('{"format":"x"}'));
   const ctx = make({ points: [cam] });
   const data = parsePointsFile(JSON.stringify({ format: 'polevoy-points-1', floor: '1', points: [
-    { label: '1A-01', typeId: 'Камера' }, { label: '1A-C2', typeId: 'Камера', cabinet: '1A' }, { label: 'H240', typeId: 'Камера' },
-    { label: '1A-INT1', typeId: 'Интерком', cabinet: '1A' }, { label: 'X1', typeId: 'Нет такого' }, { label: '1A-C2', typeId: 'Камера' },
+    { label: '1A-01', typeId: 'Камера', cabinet: '1A' }, { label: '1A-C2', typeId: 'Камера', cabinet: '1A' }, { label: 'H240', typeId: 'Камера' },
+    { label: '1A-INT1', typeId: 'Интерком', cabinet: '1A' }, { label: 'X1', typeId: 'Нет такого' }, { label: '1A-C2', typeId: 'Камера', cabinet: '1A' },
   ], types: [{ id: 'Интерком', nameHe: 'אינטרקום', devices: [] , cables: [{ cable: 'cat7', count: 1 }] }] }));
   const plan = planPointsImport(ctx, data);
   assert.deepEqual(plan.add.map((p) => p.label), ['1A-C2', 'H240', '1A-INT1', 'X1']);
@@ -628,6 +628,12 @@ test('добавление точек из файла: дубли пропуск
   assert.deepEqual(plan.blankTypes, ['Нет такого']);
   assert.ok(plan.warnings.some((w) => w.startsWith('H240')));
   assert.deepEqual(plan.newTypes.map((t) => t.id), ['Интерком']);
+  // то же обозначение в другом шкафу или без шкафа — не помеха; в том же шкафу — пропуск
+  const p3 = planPointsImport(ctx, parsePointsFile(JSON.stringify({ format: 'polevoy-points-1', points: [
+    { label: '1A-01', typeId: 'Камера', cabinet: '2B' }, { label: '1A-01', typeId: 'Камера' }, { label: '1A-01', typeId: 'Камера', cabinet: '1A' }, { label: '1A-01', typeId: 'Камера', cabinet: '2B' },
+  ] })));
+  assert.deepEqual(p3.add.map((p) => p.cabinet || ''), ['2B', '']); assert.deepEqual(p3.skipped, ['1A-01']); assert.equal(p3.errors.length, 1);
+  assert.equal(p3.alsoIn.get('2B\u00001A-01'), '1A');
   let n = 0; const ops = pointsImportOps(plan, () => `id${n++}`);
   assert.deepEqual(ops.map((o) => o.coll), ['types', 'types', 'points', 'points', 'points', 'points']);
   assert.equal(ops[2].data.floor, '1');

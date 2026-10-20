@@ -68,10 +68,31 @@ function planSheet(project, ctx, points, c, { colors, modelName }) {
   };
 }
 
+const padTo = (list) => [...list, ...Array(PANEL_PORTS - list.length).fill('')];
+
+// Раскладка очередей одного типа по столбцам шильюта (режим «по 24»):
+// • очередь из 12 и больше точек (в том числе полная панель из 24) — отдельный столбец;
+// • короткие очереди (меньше 12) собираются вместе, независимо от шкафа, чтобы заполнить столбцы по 24 строки; очередь не режется;
+//   сначала крупные, мелочь — в оставшееся место (best fit); внутри столбца очереди идут в порядке панелей.
+// → [[очередь, …], …]: сначала столбцы с большими очередями (в порядке панелей), потом сборные.
+export const BIG_QUEUE = 12;
+export function packQueues(queues, cap = PANEL_PORTS) {
+  const big = queues.filter((q) => q.labels.length >= BIG_QUEUE).sort((a, b) => a.idx - b.idx).map((q) => [q]);
+  const bins = [];
+  [...queues].filter((q) => q.labels.length < BIG_QUEUE).sort((a, b) => b.labels.length - a.labels.length || a.idx - b.idx).forEach((q) => {
+    let best = null;
+    for (const b of bins) { const left = cap - b.used - q.labels.length; if (left >= 0 && (!best || left < cap - best.used - q.labels.length)) best = b; }
+    if (!best) { best = { used: 0, qs: [] }; bins.push(best); }
+    best.qs.push(q); best.used += q.labels.length;
+  });
+  const packed = bins.map((b) => b.qs.sort((x, y) => x.idx - y.idx)).sort((a, b) => a[0].idx - b[0].idx);
+  return [...big, ...packed];
+}
+
 // ---------- лист шильюта ----------
-// Режим fill: все точки одного типа из выбранных шкафов подряд по 24 в столбце, без пропусков; 1 пустой столбец между типами.
+// Режим fill: точки одного типа из выбранных шкафов — очередями из панелей (см. packQueues); 1 пустой столбец между типами.
 // Режим split: как стоит в панелях — столбец на каждую панель (и тип); подписи подряд без пропусков строк; 1 пустой столбец между типами, 2 между шкафами.
-// mergeColors: типы с одним цветом идут общими столбцами (внутри цвета — по типам, потом как в панелях)
+// mergeColors: типы с одним цветом считаются одним типом (общие столбцы / очереди)
 function shilutSheet(project, ctx, points, cabs, { mode, colors, modelName, mergeColors }) {
   const sh = shilutOf(project); const defModel = modelName(sh.panelModel) || '';
   const colorHe = (typeId) => typeColorOf(project, typeId, colors);
@@ -94,28 +115,22 @@ function shilutSheet(project, ctx, points, cabs, { mode, colors, modelName, merg
       typeOrder.forEach((t, ti) => { if (ti > 0) cols.push({ gap: 1 }); cols.push(...byType.get(t)); });
     });
   } else {
-    const typeOrder = []; const seqs = new Map(); const rank = new Map();
+    // «Очередь» — точки одного типа (цвета) из одной панели, в том порядке, как стоят в панели. Очередь не режется и не переставляется.
+    const groups = new Map(); let idx = 0;
     cabs.forEach((c) => {
-      const placed = portsOf(project, ctx, points, c); const blocked = blockedOf(c.rack);
+      const placed = portsOf(project, ctx, points, c);
       panelsInOrder(c.rack, c.sub).forEach((pn) => {
-        for (let p = 1; p <= PANEL_PORTS; p++) {
-          if (blocked.has(`${c.sid}|${pn.u}|${p}`)) continue;
-          const at = placed.get(`${pn.u}|${p}`); if (!at) continue;
-          const k = gk(at.pt.typeId);
-          if (!seqs.has(k)) { seqs.set(k, []); typeOrder.push({ k, typeId: at.pt.typeId }); }
-          if (!rank.has(at.pt.typeId)) rank.set(at.pt.typeId, rank.size);
-          seqs.get(k).push({ label: at.label, model: modelName(pn.m || sh.panelModel) || defModel, t: at.pt.typeId });
+        const here = new Map();
+        for (let p = 1; p <= PANEL_PORTS; p++) { const at = placed.get(`${pn.u}|${p}`); if (!at) continue; const k = gk(at.pt.typeId); if (!here.has(k)) here.set(k, { typeId: at.pt.typeId, labels: [] }); here.get(k).labels.push(at.label); }
+        for (const [k, { typeId, labels }] of here) {
+          if (!groups.has(k)) groups.set(k, { typeId, queues: [] });
+          groups.get(k).queues.push({ idx: idx++, labels, model: modelName(pn.m || sh.panelModel) || defModel });
         }
       });
     });
-    typeOrder.forEach(({ k, typeId }, ti) => {
+    [...groups.values()].forEach(({ typeId, queues }, ti) => {
       if (ti > 0) cols.push({ gap: 1 });
-      const seq = seqs.get(k);
-      if (mergeColors) seq.sort((a, b) => rank.get(a.t) - rank.get(b.t));   // в общем цвете одинаковые типы идут рядом (порядок сохраняется)
-      for (let i = 0; i < seq.length; i += PANEL_PORTS) {
-        const chunk = seq.slice(i, i + PANEL_PORTS);
-        cols.push({ typeId, model: chunk[0].model, cells: [...chunk.map((x) => x.label), ...Array(PANEL_PORTS - chunk.length).fill('')] });
-      }
+      packQueues(queues).forEach((col) => cols.push({ typeId, model: col[0].model, cells: padTo(col.flatMap((q) => q.labels)) }));
     });
   }
   if (!cols.some((x) => x.cells)) return null;

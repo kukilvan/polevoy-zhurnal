@@ -37,7 +37,11 @@ export function labelProblems(label) {
 export function planPointsImport(ctx, data, pool = new Map()) {
   const fileTypes = new Map((data.types || []).map((t) => [s(t.id), t]));
   const fileDevices = new Map((data.devices || []).map((d) => [s(d.id), d]));
-  const have = new Map([...ctx.points.values()].map((p) => [p.label, p]));
+  // одинаковые обозначения допустимы в разных шкафах (и в шкафу + без шкафа): «уже есть» — только то же обозначение в том же шкафу
+  const key = (p) => `${p.cabinet || ''}\u0000${p.label}`;
+  const have = new Map([...ctx.points.values()].map((p) => [key(p), p]));
+  const cabsOf = new Map(); [...ctx.points.values()].forEach((p) => { if (!cabsOf.has(p.label)) cabsOf.set(p.label, new Set()); cabsOf.get(p.label).add(p.cabinet || ''); });
+  const alsoIn = new Map();   // точка к добавлению → в каких шкафах такое обозначение уже есть
   const seen = new Set();
   const add = []; const skipped = []; const errors = []; const warnings = [];
   const fromPool = new Map(); const blank = new Set();
@@ -49,9 +53,10 @@ export function planPointsImport(ctx, data, pool = new Map()) {
     if (!ctx.types.has(p.typeId) && !fileTypes.has(p.typeId)) {
       if (!fromPool.has(p.typeId) && !blank.has(p.typeId)) (pool.get(p.typeId) ? fromPool.set(p.typeId, pool.get(p.typeId)) : blank.add(p.typeId));
     }
-    if (seen.has(p.label)) { errors.push(`${where}: обозначение повторяется в файле`); return; }
-    seen.add(p.label);
-    if (have.has(p.label)) { skipped.push(p.label); return; }
+    if (seen.has(key(p))) { errors.push(`${where}: обозначение повторяется в файле${p.cabinet ? ` (шкаф ${p.cabinet})` : ''}`); return; }
+    seen.add(key(p));
+    if (have.has(key(p))) { skipped.push(p.label); return; }
+    const other = [...(cabsOf.get(p.label) || [])]; if (other.length) alsoIn.set(key(p), other.map((c) => c || 'без шкафа').join(', '));
     const bad = labelProblems(p.label); if (bad.length) warnings.push(`${p.label}: ${bad.join(', ')}`);
     (Array.isArray(p.devices) ? p.devices : []).forEach((d) => { if (!ctx.devices.has(d.deviceId) && !fileDevices.has(d.deviceId)) errors.push(`${where}: устройства «${d.deviceId}» нет`); });
     add.push(p);
@@ -62,7 +67,7 @@ export function planPointsImport(ctx, data, pool = new Map()) {
   const byType = {}; add.forEach((p) => { const k = `${p.cabinet || 'без шкафа'} · ${p.typeId}`; byType[k] = (byType[k] || 0) + 1; });
   const poolTypes = [...fromPool.values()].filter((b) => add.some((p) => p.typeId === b.type.id));
   const blankTypes = [...blank].filter((id) => add.some((p) => p.typeId === id));
-  return { add, skipped, errors, warnings, newTypes, newDevices, byType, poolTypes, blankTypes, ctx };
+  return { add, skipped, errors, warnings, newTypes, newDevices, byType, poolTypes, blankTypes, alsoIn, ctx };
 }
 
 // Место точки на листе чертежа (для будущего плана в приложении): pt PDF от левого верхнего угла + размер листа и имя файла

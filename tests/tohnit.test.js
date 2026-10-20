@@ -156,6 +156,15 @@ test('план: связывание — точные, похожие (разд�
   assert.deepEqual(r.unlinked.map((x) => x.label), ['Z9-9']);
 });
 
+test('план: одинаковое обозначение в разных шкафах — это разные точки', async () => {
+  const { matchLabels } = await import('../src/tohnit/linking.js');
+  const P = (id, label, cabinet) => ({ id, label, cabinet });
+  const f = (label, cabinet) => ({ label, cabinet, pos: { page: 0, x: 1, y: 1, w: 10, h: 5 } });
+  const r = matchLabels([P('a', 'C5', '1A'), P('b', 'C5', '2B'), P('c', 'C7', '1A')], [f('C5', '2B'), f('C5', '1A'), f('C7', '2B'), f('C7', '')]);
+  assert.deepEqual(r.exact.map((x) => `${x.f.cabinet}:${x.p.id}`), ['2B:b', '1A:a', ':c']);   // C7 в 2B не липнет к C7 из 1A
+  assert.deepEqual(r.unlinked.map((x) => `${x.label}/${x.cabinet}`), ['C7/2B']);
+});
+
 test('сервер: PDF с номерами пересобирается только при изменениях', async () => {
   const mupdf = await import('mupdf');
   const src = new mupdf.PDFDocument(); src.insertPage(-1, src.addPage([0, 0, 400, 300], 0, src.addObject(src.newDictionary()), '')); const pdf = src.saveToBuffer('').asUint8Array();

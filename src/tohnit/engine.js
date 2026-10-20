@@ -250,9 +250,10 @@ export function buildPoints(spans, rules, opts = {}) {
     p.cabinet = cab;
   }
   // дубли: одно обозначение в разных местах → #2; в одном месте — склеиваем
-  const byl = new Map(); for (const p of pts) { if (!byl.has(p.label)) byl.set(p.label, []); byl.get(p.label).push(p); }
+  const byl = new Map(); for (const p of pts) { const k = `${p.cabinet || ''}\u0000${p.label}`; if (!byl.has(k)) byl.set(k, []); byl.get(k).push(p); }   // одно обозначение в разных шкафах — разные точки
   const final = []; const dups = [];
-  for (const [lab, lst] of byl) {
+  for (const lst of byl.values()) {
+    const lab = lst[0].label;
     const keep = [lst[0]];
     for (const p of lst.slice(1)) if (keep.every((k) => Math.abs(p.s.x0 - k.s.x0) > 3 || Math.abs(p.s.y0 - k.s.y0) > 3 || p.s.page !== k.s.page)) keep.push(p);
     if (keep.length > 1) dups.push(`${lab}: ${keep.length} раза`);
