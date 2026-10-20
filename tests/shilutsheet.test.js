@@ -139,7 +139,7 @@ test('объединять по цвету: разные типы одного �
 
 test('шильют делится на листы: к заказу и уже есть (отмечено «есть шилют»)', () => {
   const P = pts();
-  P[0].shHave = [0]; P[1].shHave = [0]; P[3].shHave = [0];           // 1A-C1, 1A-C2, 1A-C25 — уже есть
+  P[0].shHave = [0]; P[1].shHave = [0]; P[3].shHave = [0];           // 1A-C1, 1A-C2, 1A-C25 — отмечены «есть шилют»
   const r = buildRackSheets(proj(), ctx, P, { ...prefs, mode: MODES.split });
   const need = r.sheets.find((s) => s.key === 'shilut'); const have = r.sheets.find((s) => s.key === 'shilut-have');
   assert.equal(need.title, 'שילוט להזמנה'); assert.equal(have.title, 'שילוט קיים');

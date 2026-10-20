@@ -4,12 +4,11 @@ import {
   PANEL_PORTS, panelOf, rackPortsOf, rackOf, subsOf, uOrder, panelsInOrder, rackPointsOf, cabinetFloor,
   blockedOf, shilutLabel, shilutCabName, shilutOf, typeColorOf, rackProblems,
 } from './rack.js';
-import { pointInfo } from './status.js';
 
 const natural = (a, b) => String(a).localeCompare(String(b), 'ru', { numeric: true });
 export const HE_TOTAL = 'כולל שקעים';
 export const SHEET_NEED = 'שילוט להזמנה';   // ещё не напечатан — лист для заказа
-export const SHEET_HAVE = 'שילוט קיים';      // уже напечатан / поклеен
+export const SHEET_HAVE = 'שילוט קיים';      // отмечено «есть шилют»
 export const MODES = { fill: 'fill', split: 'split' };
 
 // Шкафы (секции), у которых есть план: [{ key, cab, sid, sub, rack, floor, name, count }]
@@ -28,13 +27,14 @@ export function cabinetsOf(project, points, ctx) {
 }
 
 // «U|порт» → { pt, i, label } для точек секции
-// have — шильют этого порта уже есть: отмечен «есть шилют» (point.shHave — номера портов точки) или уже поклеен (работа «Шилют» в доходе)
-export const hasShilut = (pt, i, ctx) => (Array.isArray(pt.shHave) && pt.shHave.includes(i)) || (!!ctx.journalByPoint && !!pointInfo(pt, ctx).shilut);
+// have — шильют этого порта уже есть: отмечен «есть шилют» (point.shHave — номера портов точки).
+// «Поклеен» (работа «Шилют» в доходе) на наличие не влияет — это отдельные отметки.
+export const hasShilut = (pt, i) => Array.isArray(pt.shHave) && pt.shHave.includes(i);
 function portsOf(project, ctx, points, c) {
   const m = new Map();
   rackPointsOf(points, ctx, c.cab).forEach((pt) => panelOf(pt).forEach((x, i) => {
     if ((x.s || '') !== c.sid) return;
-    m.set(`${x.u}|${x.p}`, { pt, i, label: shilutLabel(pt, i, project, ctx), have: hasShilut(pt, i, ctx) });
+    m.set(`${x.u}|${x.p}`, { pt, i, label: shilutLabel(pt, i, project, ctx), have: hasShilut(pt, i) });
   }));
   return m;
 }
@@ -168,7 +168,7 @@ export function buildRackSheets(project, ctx, points, { mode = MODES.fill, cabs:
     while (names.has(t.toLowerCase())) t = `${base} ${n++}`;
     names.add(t.toLowerCase()); s.title = t; sheets.push(s);
   });
-  // шильют делится на два листа: ещё не напечатан (его заказывают) и уже есть (напечатан или поклеен)
+  // шильют делится на два листа: нет «есть шилют» (его заказывают) и есть
   const cabsWith = chosen.filter((c) => c.count > 0); const o = { mode, colors, modelName, mergeColors };
   const slNeed = shilutSheet(project, ctx, points, cabsWith, { ...o, have: false, title: SHEET_NEED, key: 'shilut' });
   const slHave = shilutSheet(project, ctx, points, cabsWith, { ...o, have: true, title: SHEET_HAVE, key: 'shilut-have' });

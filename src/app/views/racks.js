@@ -270,17 +270,17 @@ function rackEditor(ui, cab) {
     const allOn = all.length > 0 && all.every((k) => shMode.sel.has(k)); const none = !shMode.sel.size;
     return h('div', { style: { margin: '8px 0', padding: '8px', border: '1px solid #0a84ff', borderRadius: '8px' } },
       h('b', {}, `🏷 Шилют панели ${pName(cab, pnl)}: выбрано портов ${shMode.sel.size}`),
-      h('div', { class: 'mut', style: { margin: '4px 0', fontSize: '13px' } }, 'Нажимайте на порты — они отмечаются птичкой. «Есть шилют» — он напечатан и лежит у вас. «Поклеил» — ещё и записывается в дох как работа «Шилют» у этих точек.'),
+      h('div', { class: 'mut', style: { margin: '4px 0', fontSize: '13px' } }, 'Нажимайте на порты — они отмечаются птичкой. «Есть шилют» — он напечатан и лежит у вас (идёт в таблицу «шилют есть»). «Поклеил» — записывается в дох как работа «Шилют»; на «есть шилют» не влияет.'),
       h('div', { class: 'btns', style: { marginTop: '6px' } },
         h('button', { class: 'sec', onclick: () => { if (allOn) shMode.sel.clear(); else all.forEach((k) => shMode.sel.add(k)); ui.render(); } }, allOn ? 'Снять выделение' : 'Выделить панель целиком'),
         h('button', { disabled: none, onclick: () => { const l = shPorts(); setHave(l, true); shDone(`Есть шилют: ${l.length}`); } }, '📦 Есть шилют'),
         h('button', { disabled: none, onclick: () => {
           const l = shPorts(); const pts = [...new Map(l.map(([pt]) => [pt.id, pt])).values()];
-          setHave(l, true); const r = markShilutForPoints(pts.map((x) => x.id));
+          const r = markShilutForPoints(pts.map((x) => x.id));   // «есть шилют» не ставится: это отдельная отметка
           const multi = pts.filter((pt) => rackPortsOf(pt, state.ctx) > l.filter(([q]) => q.id === pt.id).length);
           shDone(`Поклеено: ${l.length} портов, в дох записано точек: ${pts.length - r.done.length - r.none.length}${r.done.length ? `; уже были поклеены: ${r.done.length}` : ''}${r.none.length ? `; у типа нет работы «Шилют» (только «есть шилют»): ${r.none.slice(0, 5).join(', ')}` : ''}${multi.length ? `. У ${multi.slice(0, 4).map((x) => x.label).join(', ')} несколько портов — отметилась вся точка` : ''}`);
         } }, '✅ Поклеил'),
-        h('button', { class: 'sec', disabled: none, onclick: () => { const l = shPorts(); setHave(l, false); shDone('Отметка «есть шилют» снята (поклеенный остаётся — его запись убирается в дохе)'); } }, '↩ Нет шилюта'),
+        h('button', { class: 'sec', disabled: none, onclick: () => { const l = shPorts(); setHave(l, false); shDone('Отметка «есть шилют» снята'); } }, '↩ Нет шилюта'),
         h('button', { class: 'sec', onclick: () => { shMode = null; ui.render(); } }, 'Готово')));
   };
   const cellTap = (pnl, port) => {
@@ -341,14 +341,16 @@ function rackEditor(ui, cab) {
       const mark = at ? checkMark(at.pt) : null;
       const stuck = at ? !!infoOf(at.pt)?.shilut : false; const have = at ? (at.pt.shHave || []).includes(at.i) : false;
       const picked = !!(shMode && at && shMode.key === shKey(pnl) && shMode.sel.has(`${at.pt.id}:${at.i}`));
-      return h('div', { title: at ? `${slotLabel(at.pt, at.i)} (${at.pt.typeId})${mark ? (mark.bad ? ' — проверка: не работает' : ' — проверена') : ''}${stuck ? ' — шилют поклеен' : have ? ' — шилют есть' : ''}` : 'свободно', onclick: () => cellTap(pnl, k + 1),
+      return h('div', { title: at ? `${slotLabel(at.pt, at.i)} (${at.pt.typeId})${mark ? (mark.bad ? ' — проверка: не работает' : ' — проверена') : ''}${have ? ' — шилют есть' : ''}${stuck ? ' — шилют поклеен' : ''}` : 'свободно', onclick: () => cellTap(pnl, k + 1),
         style: { position: 'relative', cursor: 'pointer', border: `1px solid ${mv ? '#e0007a' : 'var(--line)'}`, borderWidth: mv ? '2px' : '1px', borderRadius: '6px', outline: mv ? '3px solid #e0007a' : picked ? '3px solid #0a84ff' : 'none', outlineOffset: '1px', padding: '2px 4px', minHeight: '38px',
           background: col ? col.bg : at ? `hsla(${hue},70%,50%,.18)` : 'transparent', color: col ? col.fg : 'inherit', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', overflow: 'hidden' } },
         h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '3px' } },
           h('small', { class: col ? '' : 'mut', style: { fontSize: '10px', lineHeight: '12px', opacity: col ? 0.75 : 1 } }, String(k + 1)), mark?.el),
         h('span', { style: { fontSize: '12px', lineHeight: '14px', wordBreak: 'break-all', fontWeight: at ? 600 : 400 } }, at ? shortLabel(slotLabel(at.pt, at.i), cab) : ''),
-        // шилют: «Ш» в белом кружке — есть (напечатан), в синем — поклеен; синяя птичка внизу — порт выбран
-        stuck || have ? h('span', { title: stuck ? 'шилют поклеен' : 'шилют есть', style: { position: 'absolute', left: '1px', top: '1px', width: '12px', height: '12px', borderRadius: '50%', fontSize: '8px', lineHeight: '12px', fontWeight: 800, textAlign: 'center', background: stuck ? '#0a84ff' : '#fff', color: stuck ? '#fff' : '#0a84ff', boxShadow: '0 0 0 1px rgba(0,0,0,.3)' } }, 'Ш') : null,
+        // шилют (две отдельные отметки): белая «Ш» — есть (напечатан), синяя «П» — поклеен; синяя птичка внизу — порт выбран
+        have || stuck ? h('div', { style: { position: 'absolute', left: '1px', top: '1px', display: 'flex', gap: '1px' } },
+          have ? h('span', { title: 'шилют есть', style: { width: '12px', height: '12px', borderRadius: '50%', fontSize: '8px', lineHeight: '12px', fontWeight: 800, textAlign: 'center', background: '#fff', color: '#0a84ff', boxShadow: '0 0 0 1px rgba(0,0,0,.3)' } }, 'Ш') : null,
+          stuck ? h('span', { title: 'шилют поклеен', style: { width: '12px', height: '12px', borderRadius: '50%', fontSize: '8px', lineHeight: '12px', fontWeight: 800, textAlign: 'center', background: '#0a84ff', color: '#fff', boxShadow: '0 0 0 1px rgba(0,0,0,.3)' } }, 'П') : null) : null,
         picked ? h('span', { style: { position: 'absolute', right: '1px', bottom: '1px', width: '14px', height: '14px', borderRadius: '50%', fontSize: '10px', lineHeight: '14px', fontWeight: 800, textAlign: 'center', background: '#0a84ff', color: '#fff' } }, '✔') : null);
     });
     return h('div', { class: 'card', style: { margin: '8px 0' } },
@@ -428,5 +430,5 @@ function rackEditor(ui, cab) {
       h('div', { class: 'mut', style: { margin: '4px 0' } }, [...byType.entries()].map(([t, n]) => `${t}: ${n}`).join(' · ')),
       h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => placeModal(cab, ui) }, '➕ Поставить в панель…'))) : null,
     ...subs.map(subBlock),
-    h('div', { class: 'mut', style: { margin: '10px 2px', fontSize: '13px' } }, 'Нажмите на свободный порт — поставить точки с него; на занятый — переставить, убрать или открыть точку. 🔢 — упорядочить панель по номерам. 🚫 — закрыть порты крестиком (сломанные, зарезервированные). Значок у номера порта: ✔ — точка проверена, ✖ — проверка показала, что не работает. «Ш» в углу порта: белая — шилют напечатан и есть, синяя — поклеен.'));
+    h('div', { class: 'mut', style: { margin: '10px 2px', fontSize: '13px' } }, 'Нажмите на свободный порт — поставить точки с него; на занятый — переставить, убрать или открыть точку. 🔢 — упорядочить панель по номерам. 🚫 — закрыть порты крестиком (сломанные, зарезервированные). Значок у номера порта: ✔ — точка проверена, ✖ — проверка показала, что не работает. В углу порта: белая «Ш» — шилют есть (напечатан), синяя «П» — поклеен; это две отдельные отметки.'));
 }
