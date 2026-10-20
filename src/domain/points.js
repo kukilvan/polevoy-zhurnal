@@ -152,3 +152,7 @@ export function renameLabel(label, { find = '', replace = '', where = 'any', shi
   }
   return `${prefix}${s}${suffix}`;
 }
+
+// Название «занято» только внутри одного шкафа: одинаковые названия в разных шкафах допустимы,
+// а если у одной из точек шкафа нет — тоже допустимы.
+export const sameLabelClash = (a, b) => !!a && !!b && a.label === b.label && !!a.cabinet && a.cabinet === b.cabinet;

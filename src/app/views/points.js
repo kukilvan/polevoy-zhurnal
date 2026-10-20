@@ -1,7 +1,7 @@
 // Точки: форма точки, генератор пачкой, карточка точки с историей, вкладка «Точки».
 import { h, formModal, openModal, confirmDialog, toast, qtyList } from '../ui.js';
 import { state, getRepo, pointsSorted, infoOf, currentProject } from '../store.js';
-import { generateLabels, parseSuffixes, comparePoints, renameLabel, inheritedFromCables, usesConfig, missingStages, hasDeviceId, normalizeMac, findDuplicate } from '../../domain/index.js';
+import { generateLabels, parseSuffixes, comparePoints, renameLabel, sameLabelClash, inheritedFromCables, usesConfig, missingStages, hasDeviceId, normalizeMac, findDuplicate } from '../../domain/index.js';
 import { scanDevice } from '../scan.js';
 import { statusClass } from './project.js';
 import { hint } from './guide.js';
@@ -156,8 +156,8 @@ export function pointForm(point, { onDone } = {}) {
     } }] : [],
     onSubmit: (v) => {
       const label = v.label;
-      const dup = [...state.ctx.points.values()].find((p) => p.label === label && p.id !== point?.id);
-      if (dup) { toast('Точка с таким обозначением уже есть'); return false; }
+      const dup = [...state.ctx.points.values()].find((p) => p.id !== point?.id && sameLabelClash(p, { label, cabinet: v.cabinet }));
+      if (dup) { toast('Точка с таким обозначением уже есть в этом шкафу'); return false; }
       const idOn = hasIdType(v.typeId);
       const mac = idOn && v.mac ? (normalizeMac(v.mac) || v.mac) : undefined; const serial = idOn ? v.serial : undefined;
       const pts = state.ctx.points.values();
@@ -413,7 +413,7 @@ let selMode = false; const selected = new Set();
 // Групповое переименование: убрать/заменить часть названия, сдвинуть номер, добавить в начало/конец — с предпросмотром и проверкой повторов
 function renameForm(ids, done) {
   const pts = ids.map((id) => state.ctx.points.get(id)).filter(Boolean).sort(comparePoints);
-  const others = new Set([...state.ctx.points.values()].filter((p) => !ids.includes(p.id)).map((p) => p.label));
+  const others = [...state.ctx.points.values()].filter((p) => !ids.includes(p.id));
   // общее начало у всех выбранных — подсказка «убрать»
   let common = pts[0]?.label || ''; for (const p of pts) { while (common && !p.label.startsWith(common)) common = common.slice(0, -1); }
   const find = h('input', { placeholder: common ? `Что убрать, например: ${common}` : 'Что убрать или заменить' });
@@ -428,8 +428,9 @@ function renameForm(ids, done) {
   const calc = () => {
     const op = { find: find.value, replace: repl.value, where: where.value, shift: shift.value, prefix: prefix.value, suffix: suffix.value };
     plan = pts.map((p) => ({ p, to: renameLabel(p.label, op).trim() }));
-    const cnt = new Map(); plan.forEach((x) => cnt.set(x.to, (cnt.get(x.to) || 0) + 1));
-    plan.forEach((x) => { x.bad = !x.to ? 'пустое название' : others.has(x.to) ? 'уже есть в проекте' : cnt.get(x.to) > 1 ? 'повтор' : ''; });
+    // повтор — только в одном и том же шкафу (в разных шкафах и у точек без шкафа одинаковые названия можно)
+    const cnt = new Map(); plan.forEach((x) => { if (x.p.cabinet) { const k = `${x.p.cabinet}|${x.to}`; cnt.set(k, (cnt.get(k) || 0) + 1); } });
+    plan.forEach((x) => { x.bad = !x.to ? 'пустое название' : others.some((o) => sameLabelClash(o, { label: x.to, cabinet: x.p.cabinet })) ? 'уже есть в этом шкафу' : x.p.cabinet && cnt.get(`${x.p.cabinet}|${x.to}`) > 1 ? 'повтор' : ''; });
     const changed = plan.filter((x) => x.to !== x.p.label); const bad = plan.filter((x) => x.bad && x.to !== x.p.label);
     prev.replaceChildren(...plan.map((x) => h('div', { class: 'item', style: { cursor: 'default' } },
       h('div', { class: 'name' }, x.p.label, h('span', { class: 'mut' }, '  →  '), h('b', { style: { color: x.bad && x.to !== x.p.label ? '#ff453a' : x.to !== x.p.label ? '#30a14e' : '' } }, x.to || '—'),

@@ -242,10 +242,13 @@ export const dropCabOf = (project, cab) => { const sh = shilutOf(project); retur
 export const shilutCabName = (project, cabinet, sid = '') => shilutOf(project).cabNames?.[`${cabinet}|${sid || ''}`]
   || subNameOf(project, cabinet, sid) || subsOf(project?.racks?.[cabinet], cabinet).find((x) => (x.id || '') === (sid || ''))?.name || cabinet;
 const stripCab = (txt, cab) => (cab && (txt.startsWith(`${cab}-`) || txt.startsWith(`${cab}/`)) ? txt.slice(cab.length + 1) : txt);
+// Только номер из обозначения порта (после названия шкафа): последняя группа цифр, «25-26» остаётся парой:
+// B16 → 16, 1A-25 → 25, 2B/27 → 27, 05 → 05, CCTV1-TV01 → 01; цифр нет — обозначение как есть
+export const numPart = (txt, cab = '') => { const t = stripCab(String(txt), cab); const m = t.match(/\d+(?:\s*[-–/]\s*\d+)*/g); return m ? m[m.length - 1].replace(/\s+/g, '') : t; };
 const hasCab = (txt, names) => names.some((n) => n && String(txt).toLowerCase().startsWith(String(n).toLowerCase()));
 // Подпись порта в шильюте. Пока не включено «убрать название шкафа», подпись всегда начинается с названия шкафа:
 // если у обозначения точки своего шкафа нет — добавляется (название шкафа/секции или своё из настроек), есть — остаётся как записано
-// (своё название из настроек заменяет его). Шаблон даёт гибкость: {имя} — обозначение порта, {номер} — без шкафа, {шкаф}, {U}, {порт};
+// (своё название из настроек заменяет его). Шаблон даёт гибкость: {имя} — обозначение порта, {номер} — без шкафа, {№} — только цифры номера, {шкаф}, {U}, {порт};
 // если в шаблоне есть {шкаф} — расположение названия шкафа определяет шаблон, и приставка не добавляется.
 export function shilutLabel(point, i, project, ctx) {
   const e = panelOf(point)[i]; if (e?.label) return e.label;
@@ -254,10 +257,11 @@ export function shilutLabel(point, i, project, ctx) {
   const custom = String(sh.cabNames?.[`${cab}|${sid}`] || '').trim();
   const drop = dropCabOf(project, cab);
   let base = defaultPortLabels(point.label, rackPortsOf(point, ctx))[i] ?? point.label;
+  const num = numPart(base, cab);
   if (drop) base = stripCab(base, cab);
   else if (cab && custom && custom !== cab && stripCab(base, cab) !== base) base = `${custom}${base.slice(cab.length)}`;
   const tpl = String(sh.tpl?.[point.typeId] || '').trim() || '{имя}';
-  let out = tpl.replace(/\{имя\}/g, base).replace(/\{номер\}/g, stripCab(base, cab)).replace(/\{шкаф\}/g, name)
+  let out = tpl.replace(/\{имя\}/g, base).replace(/\{№\}/g, num).replace(/\{номер\}/g, stripCab(base, cab)).replace(/\{шкаф\}/g, name)
     .replace(/\{U\}/g, String(e?.u ?? '')).replace(/\{порт\}/g, String(e?.p ?? ''));
   if (!drop && cab && !tpl.includes('{шкаф}') && !hasCab(out, [cab, name, custom])) out = `${name}-${out}`;
   return out;

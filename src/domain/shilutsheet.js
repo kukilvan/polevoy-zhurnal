@@ -71,9 +71,11 @@ function planSheet(project, ctx, points, c, { colors, modelName }) {
 // ---------- лист шильюта ----------
 // Режим fill: все точки одного типа из выбранных шкафов подряд по 24 в столбце, без пропусков; 1 пустой столбец между типами.
 // Режим split: как стоит в панелях — столбец на каждую панель (и тип); подписи подряд без пропусков строк; 1 пустой столбец между типами, 2 между шкафами.
-function shilutSheet(project, ctx, points, cabs, { mode, colors, modelName }) {
+// mergeColors: типы с одним цветом идут общими столбцами (внутри цвета — по типам, потом как в панелях)
+function shilutSheet(project, ctx, points, cabs, { mode, colors, modelName, mergeColors }) {
   const sh = shilutOf(project); const defModel = modelName(sh.panelModel) || '';
   const colorHe = (typeId) => typeColorOf(project, typeId, colors);
+  const gk = (typeId) => (mergeColors && colorHe(typeId) ? `color:${colorHe(typeId).id}` : typeId);   // ключ столбца: тип или (по галке) цвет
   const cols = []; // { gap: n } или { typeId, model, cells: [24] }
   if (mode === MODES.split) {
     cabs.forEach((c, ci) => {
@@ -81,35 +83,38 @@ function shilutSheet(project, ctx, points, cabs, { mode, colors, modelName }) {
       const typeOrder = []; const byType = new Map();
       panelsInOrder(c.rack, c.sub).forEach((pn) => {
         const here = new Map();
-        for (let p = 1; p <= PANEL_PORTS; p++) { const at = placed.get(`${pn.u}|${p}`); if (at) { if (!here.has(at.pt.typeId)) here.set(at.pt.typeId, []); here.get(at.pt.typeId).push(at.label); } }
-        for (const [t, list] of here) {
+        for (let p = 1; p <= PANEL_PORTS; p++) { const at = placed.get(`${pn.u}|${p}`); if (at) { const k = gk(at.pt.typeId); if (!here.has(k)) here.set(k, { typeId: at.pt.typeId, list: [] }); here.get(k).list.push(at.label); } }
+        for (const [t, { typeId, list }] of here) {
           const cells = [...list, ...Array(PANEL_PORTS - list.length).fill('')];   // подписи всегда подряд с первой строки, закрытые порты и пустые места не учитываются
           if (!byType.has(t)) { byType.set(t, []); typeOrder.push(t); }
-          byType.get(t).push({ typeId: t, model: modelName(pn.m || sh.panelModel) || defModel, cells });
+          byType.get(t).push({ typeId, model: modelName(pn.m || sh.panelModel) || defModel, cells });
         }
       });
       if (ci > 0 && cols.length) cols.push({ gap: 1 }, { gap: 1 });
       typeOrder.forEach((t, ti) => { if (ti > 0) cols.push({ gap: 1 }); cols.push(...byType.get(t)); });
     });
   } else {
-    const typeOrder = []; const seqs = new Map();
+    const typeOrder = []; const seqs = new Map(); const rank = new Map();
     cabs.forEach((c) => {
       const placed = portsOf(project, ctx, points, c); const blocked = blockedOf(c.rack);
       panelsInOrder(c.rack, c.sub).forEach((pn) => {
         for (let p = 1; p <= PANEL_PORTS; p++) {
           if (blocked.has(`${c.sid}|${pn.u}|${p}`)) continue;
           const at = placed.get(`${pn.u}|${p}`); if (!at) continue;
-          if (!seqs.has(at.pt.typeId)) { seqs.set(at.pt.typeId, []); typeOrder.push(at.pt.typeId); }
-          seqs.get(at.pt.typeId).push({ label: at.label, model: modelName(pn.m || sh.panelModel) || defModel });
+          const k = gk(at.pt.typeId);
+          if (!seqs.has(k)) { seqs.set(k, []); typeOrder.push({ k, typeId: at.pt.typeId }); }
+          if (!rank.has(at.pt.typeId)) rank.set(at.pt.typeId, rank.size);
+          seqs.get(k).push({ label: at.label, model: modelName(pn.m || sh.panelModel) || defModel, t: at.pt.typeId });
         }
       });
     });
-    typeOrder.forEach((t, ti) => {
+    typeOrder.forEach(({ k, typeId }, ti) => {
       if (ti > 0) cols.push({ gap: 1 });
-      const seq = seqs.get(t);
+      const seq = seqs.get(k);
+      if (mergeColors) seq.sort((a, b) => rank.get(a.t) - rank.get(b.t));   // в общем цвете одинаковые типы идут рядом (порядок сохраняется)
       for (let i = 0; i < seq.length; i += PANEL_PORTS) {
         const chunk = seq.slice(i, i + PANEL_PORTS);
-        cols.push({ typeId: t, model: chunk[0].model, cells: [...chunk.map((x) => x.label), ...Array(PANEL_PORTS - chunk.length).fill('')] });
+        cols.push({ typeId, model: chunk[0].model, cells: [...chunk.map((x) => x.label), ...Array(PANEL_PORTS - chunk.length).fill('')] });
       }
     });
   }
@@ -128,7 +133,7 @@ function shilutSheet(project, ctx, points, cabs, { mode, colors, modelName }) {
 }
 
 // → { sheets, warnings }; opts: { mode, cabs: [ключи шкафов], colors: пользовательские цвета, models: [{id,name}] }
-export function buildRackSheets(project, ctx, points, { mode = MODES.fill, cabs: keys = null, colors = [], models = [] } = {}) {
+export function buildRackSheets(project, ctx, points, { mode = MODES.fill, cabs: keys = null, colors = [], models = [], mergeColors = false } = {}) {
   const all = cabinetsOf(project, points, ctx);
   const chosen = all.filter((c) => !keys || keys.includes(c.key));
   const modelName = (id) => models.find((m) => m.id === id)?.name || '';
@@ -140,7 +145,7 @@ export function buildRackSheets(project, ctx, points, { mode = MODES.fill, cabs:
     while (names.has(t.toLowerCase())) t = `${base} ${n++}`;
     names.add(t.toLowerCase()); s.title = t; sheets.push(s);
   });
-  const sl = shilutSheet(project, ctx, points, chosen.filter((c) => c.count > 0), { mode, colors, modelName });
+  const sl = shilutSheet(project, ctx, points, chosen.filter((c) => c.count > 0), { mode, colors, modelName, mergeColors });
   if (sl) { let t = sl.title; let n = 2; while (names.has(t.toLowerCase())) t = `${sl.title} ${n++}`; sl.title = t; sheets.push(sl); }
   else if (chosen.length) warnings.push('В выбранных шкафах нет расставленных точек — лист шильюта не создан');
   // предупреждения

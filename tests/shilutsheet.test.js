@@ -106,3 +106,19 @@ test('таблица для руководства: создаётся в пап
   assert.match(sv2.patch.serverError, /не видит файл/);
   assert.equal((await updateProjectRackTable(sapi, { ...p1, rackTable: { ...p1.rackTable, auto: false } }, data)).patch, null);
 });
+
+test('объединять по цвету: разные типы одного цвета — общие столбцы по 24', () => {
+  const ctx2 = { cables: new Map([['cat7', {}]]), types: new Map(['Кор', 'Интерком', 'Камера'].map((t) => [t, { cables: [{ cable: 'cat7', count: 1 }] }])), configs: new Map() };
+  const P = [];
+  for (let i = 1; i <= 3; i++) P.push(mk('Кор', `1A-K${i}`, '1A', 9, i < 3 ? i : 4));
+  P.push(mk('Интерком', '1A-I1', '1A', 8, 1), mk('Интерком', '1A-I2', '1A', 8, 2), mk('Камера', '1A-C1', '1A', 5, 1));
+  const pj = proj({ typeColors: { Кор: 'blue', Интерком: 'blue', Камера: 'green' } });
+  const cols = (r) => { const sl = r.sheets.find((s) => s.kind === 'shilut'); return sl.rows[4].slice(1).map((_, i) => sl.rows.slice(4).map((row) => row[i + 1]).filter(Boolean)).filter((c) => c.length); };
+  const off = cols(buildRackSheets(pj, ctx2, P, { ...prefs, mode: MODES.fill }));
+  assert.deepEqual(off.map((c) => c.length), [3, 2, 1]);                      // по типам: Кор, Интерком, Камера
+  const on = cols(buildRackSheets(pj, ctx2, P, { ...prefs, mode: MODES.fill, mergeColors: true }));
+  assert.deepEqual(on.map((c) => c.length), [5, 1]);                          // синие вместе (Кор, потом Интерком), камера отдельно
+  assert.deepEqual(on[0], ['1A-K1', '1A-K2', '1A-K3', '1A-I1', '1A-I2']);
+  const sp = cols(buildRackSheets(pj, ctx2, P, { ...prefs, mode: MODES.split, mergeColors: true }));
+  assert.ok(sp.some((c) => c.length === 3));                                  // в разных панелях столбцы остаются отдельными
+});

@@ -99,7 +99,7 @@ test('закрытые порты: точки сдвигаются, лишние
   assert.ok(rp3({ height: 42, panels: [{ u: 5 }], blocked: [{ u: 5, p: 1 }] }, [mk(9, [1])], ctx).some((t) => t.includes('закрыт')));
   assert.equal(unblockPort(r.rack, { u: 5, p: 2 }).blocked.length, 0);
 });
-import { shilutLabel, shilutCabName, contrastFg } from '../src/domain/rack.js';
+import { shilutLabel, shilutCabName, contrastFg, numPart } from '../src/domain/rack.js';
 test('подписи шильюта: шаблоны, убрать шкаф, ручная подпись, цвета', () => {
   const pt = { id: 'a', label: '1A-C5', typeId: 'Cam', cabinet: '1A', panel: [{ u: 38, p: 5 }] };
   const ctx = { cables: new Map([['cat7', {}]]), types: new Map([['Cam', { cables: [{ cable: 'cat7', count: 1 }] }]]), configs: new Map() };
@@ -165,4 +165,26 @@ test('подпись шильюта: название шкафа добавля�
   assert.equal(shilutLabel(mk('CCTV1-TV02', 'CCTV1', 's2'), 0, proj({}, subs), ctx), 'CCTV1-TV02');
   // ручная подпись важнее всего
   assert.equal(shilutLabel({ ...mk('TV01'), panel: [{ u: 1, p: 1, label: 'моя' }] }, 0, proj(), ctx), 'моя');
+});
+
+test('{№}: только номер из любого вида обозначения бакара', () => {
+  const ctx = { cables: new Map([['cat7', {}]]), types: new Map([['Бакар', { cables: [{ cable: 'cat7', count: 1 }] }], ['Бакар2', { cables: [{ cable: 'cat7', count: 2 }] }]]), configs: new Map() };
+  const L = (label, cab, typeId = 'Бакар') => shilutLabel({ id: label, label, typeId, cabinet: cab, panel: typeId === 'Бакар2' ? [{ u: 1, p: 1 }, { u: 1, p: 2 }] : [{ u: 1, p: 1 }] }, 0, { racks: {}, shilut: { tpl: { Бакар: 'B-{№}', Бакар2: 'B-{№}' } } }, ctx);
+  assert.equal(L('B16', 'CCTV1'), 'CCTV1-B-16');
+  assert.equal(L('1A-25', '1A'), '1A-B-25');
+  assert.equal(L('2B/27', '2B'), '2B-B-27');
+  assert.equal(L('05', 'Solar'), 'Solar-B-05');
+  assert.equal(L('1A-1A/01', '1A'), '1A-B-01');
+  assert.equal(L('1-25', '1'), '1-B-25');                  // шкаф «1» не принимается за номер
+  assert.equal(L('1A-25-26', '1A', 'Бакар2'), '1A-B-25');  // пара на 2 порта — по номеру порта
+  assert.equal(numPart('NoDigits'), 'NoDigits');
+  assert.equal(numPart('A-12-13'), '12-13');
+});
+test('одинаковые названия: занято только в том же шкафу', async () => {
+  const { sameLabelClash } = await import('../src/domain/points.js');
+  assert.equal(sameLabelClash({ label: 'A5', cabinet: '1A' }, { label: 'A5', cabinet: '1A' }), true);
+  assert.equal(sameLabelClash({ label: 'A5', cabinet: '1A' }, { label: 'A5', cabinet: '2B' }), false);
+  assert.equal(sameLabelClash({ label: 'A5', cabinet: '' }, { label: 'A5', cabinet: '1A' }), false);
+  assert.equal(sameLabelClash({ label: 'A5' }, { label: 'A5' }), false);
+  assert.equal(sameLabelClash({ label: 'A5', cabinet: '1A' }, { label: 'A6', cabinet: '1A' }), false);
 });

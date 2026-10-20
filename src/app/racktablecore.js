@@ -1,6 +1,6 @@
 // Таблица «תכנון ארונות ושילוט» (планы шкафов + шильют) для руководства: общая часть приложения и ночного сервера.
 // Лежит в папке проекта «Для руководства». Настройки хранятся в project.rackTable:
-// { mode, cabs, auto, prefs: { models, colors } (копия личных настроек автора — нужна серверу), fileId, link, by, hash, at, placedKind, sharedWith, serverAt, serverError }
+// { mode, mergeColors, cabs, auto, prefs: { models, colors } (копия личных настроек автора — нужна серверу), fileId, link, by, hash, at, placedKind, sharedWith, serverAt, serverError }
 import { buildRackSheets } from '../domain/shilutsheet.js';
 import { hashOf } from '../domain/managers.js';
 import { rebuildRackSheets } from './racksheet.js';
@@ -13,7 +13,7 @@ export const rackAuto = (project) => !!project?.rackTable?.fileId && project.rac
 // Обновляет файл таблицы шкафов. → { patch, changed, res }; patch — поля для project.rackTable
 export async function syncRackTable(api, project, ctx, { force = false, uid = '', noCreate = false, shareWith = '' } = {}) {
   const rt = project.rackTable || {}; const prefs = rt.prefs || {};
-  const res = buildRackSheets(project, ctx, [...ctx.points.values()], { mode: rt.mode || 'fill', cabs: rt.cabs?.length ? rt.cabs : null, colors: prefs.colors || [], models: prefs.models || [] });
+  const res = buildRackSheets(project, ctx, [...ctx.points.values()], { mode: rt.mode || 'fill', mergeColors: !!rt.mergeColors, cabs: rt.cabs?.length ? rt.cabs : null, colors: prefs.colors || [], models: prefs.models || [] });
   if (!res.count) throw new Error('Нет шкафов с планом: сначала постройте план в «🗄 Шкафы и шильют»');
   const patch = {};
   let file = rt.fileId ? await api.fileInfo(rt.fileId) : null;

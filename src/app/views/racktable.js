@@ -9,9 +9,9 @@ import { syncRackTable, RACK_TITLE } from '../racktablecore.js';
 const mem = () => new URLSearchParams(location.search).get('mem');
 const when = (iso) => new Date(iso).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
 const prefs = () => getRepo().prefs || {};
-const build = (p, opts) => buildRackSheets(p, state.ctx, [...state.ctx.points.values()], { mode: opts.mode, cabs: opts.cabs, colors: prefs().shilutColors || [], models: prefs().panelModels || [] });
+const build = (p, opts) => buildRackSheets(p, state.ctx, [...state.ctx.points.values()], { mode: opts.mode, mergeColors: !!opts.mergeColors, cabs: opts.cabs, colors: prefs().shilutColors || [], models: prefs().panelModels || [] });
 const defaults = (p) => { const rt = p.rackTable || {}; const all = cabinetsOf(p, [...state.ctx.points.values()], state.ctx);
-  return { auto: rt.auto ?? true, mode: rt.mode || MODES.fill, cabs: rt.cabs?.length ? rt.cabs.filter((k) => all.some((c) => c.key === k)) : all.filter((c) => c.count > 0).map((c) => c.key) }; };
+  return { auto: rt.auto ?? true, mode: rt.mode || MODES.fill, mergeColors: !!rt.mergeColors, cabs: rt.cabs?.length ? rt.cabs.filter((k) => all.some((c) => c.key === k)) : all.filter((c) => c.count > 0).map((c) => c.key) }; };
 
 // Заглушка Диска для проверки в браузере (?mem=1)
 function testApi() {
@@ -36,7 +36,7 @@ export async function generateRackTable(opts = null, retried = false) {
   try {
     const rt = p.rackTable || {};
     const o = opts || defaults(p);
-    const next = { ...rt, mode: o.mode, cabs: o.cabs, auto: o.auto ?? rt.auto ?? true, prefs: prefsCopy() };
+    const next = { ...rt, mode: o.mode, mergeColors: !!o.mergeColors, cabs: o.cabs, auto: o.auto ?? rt.auto ?? true, prefs: prefsCopy() };
     getRepo().saveProject(p.id, { rackTable: next });   // запоминаем: после входа в Google на iPhone продолжим с теми же настройками
     const proj = { ...p, rackTable: next };
     if (!build(proj, o).count) { toast('Нет шкафов с планом: сначала постройте план в «🗄 Шкафы и шильют»'); return; }
@@ -72,15 +72,17 @@ function rackTableModal(ui) {
   if (!cabs.length) { toast('Нет шкафов с планом: сначала постройте план в «🗄 Шкафы и шильют»'); return; }
   const o = defaults(p); const sel = new Set(o.cabs);
   const warn = h('div', { style: { margin: '8px 0' } });
-  const upd = () => { const r = build(p, { mode: o.mode, cabs: [...sel] }); warn.replaceChildren(...r.warnings.map((w) => h('div', { style: { fontSize: '14px', color: '#ff9f0a' } }, `⚠️ ${w}`))); go.disabled = !sel.size; };
+  const upd = () => { const r = build(p, { mode: o.mode, mergeColors: o.mergeColors, cabs: [...sel] }); warn.replaceChildren(...r.warnings.map((w) => h('div', { style: { fontSize: '14px', color: '#ff9f0a' } }, `⚠️ ${w}`))); go.disabled = !sel.size; };
   const radio = (v, title, hint) => h('label', { class: 'pickrow', style: { alignItems: 'flex-start' } },
     h('input', { type: 'radio', name: 'rt-mode', checked: o.mode === v, onchange: () => { o.mode = v; upd(); } }), h('span', {}, h('b', {}, title), h('div', { class: 'mut', style: { fontSize: '13px' } }, hint)));
-  const go = h('button', { onclick: () => { close(); generateRackTable({ mode: o.mode, cabs: [...sel], auto: o.auto }).then(() => ui.render()); } }, '📊 Создать / обновить');
+  const go = h('button', { onclick: () => { close(); generateRackTable({ mode: o.mode, mergeColors: o.mergeColors, cabs: [...sel], auto: o.auto }).then(() => ui.render()); } }, '📊 Создать / обновить');
   const close = openModal('📊 Таблица для шильюта', h('div', {},
     h('div', { class: 'mut' }, 'Лист-план строится для каждого выбранного шкафа. Лист шильюта — общий.'),
     h('div', { style: { fontWeight: 700, margin: '10px 0 2px' } }, 'Как собрать лист шильюта'),
     radio(MODES.fill, 'Заполнять по 24 одного типа', 'Точки одного типа из всех выбранных шкафов подряд, по 24 в столбце, без пустых мест; между типами — пустой столбец.'),
     radio(MODES.split, 'Как в панелях: по типам и шкафам', 'Столбец на каждую панель (смешанные типы — отдельными столбцами, каждый своего цвета). Подписи идут подряд с первой строки, без пропусков; между типами — один пустой столбец, между шкафами — два.'),
+    h('label', { class: 'pickrow', style: { alignItems: 'flex-start', marginTop: '6px' } }, h('input', { type: 'checkbox', checked: !!o.mergeColors, onchange: (e) => { o.mergeColors = e.target.checked; upd(); } }),
+      h('span', {}, h('b', {}, 'Объединять точки одного цвета'), h('div', { class: 'mut', style: { fontSize: '13px' } }, 'Разные типы, у которых в настройках шильюта выбран один цвет (например, «Кор биометрия» и «Интерком»), идут общими столбцами по 24, а не каждый тип отдельно.'))),
     h('div', { style: { fontWeight: 700, margin: '10px 0 2px' } }, 'Шкафы'),
     ...cabs.map((c) => h('label', { class: 'pickrow' }, h('input', { type: 'checkbox', checked: sel.has(c.key), onchange: (e) => { e.target.checked ? sel.add(c.key) : sel.delete(c.key); upd(); } }),
       h('span', {}, c.name, h('small', { class: 'mut' }, ` · ${c.sub.height}U · расставлено портов ${c.count}`)))),
