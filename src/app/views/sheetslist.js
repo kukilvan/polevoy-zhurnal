@@ -8,16 +8,20 @@ const mem = () => new URLSearchParams(location.search).get('mem');
 const linksOf = () => currentProject()?.sheetLinks || [];
 const saveLinks = (list) => getRepo().saveProject(currentProject().id, { sheetLinks: list });
 const urlOf = (id) => `https://docs.google.com/spreadsheets/d/${id}/edit`;
+const XLSX = 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'; const XLSM = 'application/vnd.ms-excel.sheet.macroEnabled.12';
+const isExcel = (f) => (f.mimeType && f.mimeType !== 'application/vnd.google-apps.spreadsheet') || /\.(xlsx|xlsm|xls)$/i.test(f.name || '');
 const when = (iso) => { try { return new Date(iso).toLocaleDateString('ru-RU'); } catch { return ''; } };
 
 // Все Google Таблицы пользователя (свои и открытые ему), свежие сверху
 async function listSheets() {
   if (mem()) return window.__gfileList || [{ id: 'S1', name: 'Мега Ор — кабели', modifiedTime: '2026-10-01T10:00:00Z', ownedByMe: true }, { id: 'S2', name: 'Дохот сентябрь', modifiedTime: '2026-09-30T10:00:00Z', ownedByMe: true }, { id: 'S3', name: 'Заказ шильюта', modifiedTime: '2026-08-01T10:00:00Z', ownedByMe: false }];
   const api = realApi(await getToken('sheets'));
-  const q = encodeURIComponent("mimeType='application/vnd.google-apps.spreadsheet' and trashed=false");
+  // Google Таблицы + Excel-файлы (.xlsx, .xlsm, .xls — Google открывает их в Таблицах) + ссылки-ярлыки; в том числе из общих дисков
+  const MIMES = ['application/vnd.google-apps.spreadsheet', XLSX, XLSM, 'application/vnd.ms-excel'];
+  const q = encodeURIComponent(`(${MIMES.map((m) => `mimeType='${m}'`).join(' or ')} or name contains '.xlsx' or name contains '.xlsm') and mimeType!='application/vnd.google-apps.folder' and trashed=false`);
   const out = []; let page = '';
   do {
-    const r = await api.req('GET', `https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=${encodeURIComponent('modifiedTime desc')}&pageSize=200&fields=nextPageToken,files(id,name,modifiedTime,ownedByMe)${page ? `&pageToken=${page}` : ''}`);
+    const r = await api.req('GET', `https://www.googleapis.com/drive/v3/files?q=${q}&orderBy=${encodeURIComponent('modifiedTime desc')}&pageSize=200&supportsAllDrives=true&includeItemsFromAllDrives=true&corpora=allDrives&fields=nextPageToken,files(id,name,mimeType,modifiedTime,ownedByMe)${page ? `&pageToken=${page}` : ''}`);
     out.push(...(r.files || [])); page = r.nextPageToken || '';
   } while (page && out.length < 2000);
   return out;
@@ -39,13 +43,13 @@ export async function addSheetsFlow(retried = false) {
     list.replaceChildren(...(shown.length ? shown.map((f) => {
       const added = have.has(f.id);
       const cb = h('input', { type: 'checkbox', checked: added || chosen.has(f.id), disabled: added, onchange: () => { cb.checked ? chosen.add(f.id) : chosen.delete(f.id); upd(); } });
-      return h('label', { class: 'pickrow' }, cb, h('span', {}, f.name, h('small', { class: 'mut' }, `  ${when(f.modifiedTime)}${f.ownedByMe === false ? ' · чужая' : ''}${added ? ' · уже в списке' : ''}`)));
+      return h('label', { class: 'pickrow' }, cb, h('span', {}, f.name, h('small', { class: 'mut' }, `  ${when(f.modifiedTime)}${isExcel(f) ? ' · Excel' : ''}${f.ownedByMe === false ? ' · чужая' : ''}${added ? ' · уже в списке' : ''}`)));
     }) : [h('div', { class: 'empty' }, files.length ? 'Ничего не найдено' : 'На Диске нет Google Таблиц')]));
   };
   const upd = () => { count.textContent = `Выбрано: ${chosen.size}`; go.textContent = `➕ Добавить (${chosen.size})`; go.disabled = !chosen.size; };
   go.onclick = () => { const pick = files.filter((f) => chosen.has(f.id)); close(); nameThem(pick); };
   const close = openModal('Таблицы на Диске', h('div', {},
-    h('div', { class: 'mut' }, `Найдено таблиц: ${files.length}. Отметьте нужные — на следующем шаге дадите им свои названия.`),
+    h('div', { class: 'mut' }, `Найдено таблиц: ${files.length}${files.some(isExcel) ? ` (из них Excel: ${files.filter(isExcel).length})` : ''}. Отметьте нужные — на следующем шаге дадите им свои названия.`),
     h('input', { type: 'search', placeholder: 'Поиск по названию', style: { margin: '8px 0' }, oninput: (e) => { q = e.target.value.trim().toLowerCase(); fill(); } }),
     h('div', { style: { margin: '6px 0' } }, count), list, h('div', { class: 'btns' }, go)), { sticky: true });
   fill(); upd();
