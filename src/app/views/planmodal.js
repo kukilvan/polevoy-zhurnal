@@ -77,8 +77,8 @@ export function planModal({ point = null, placeFor = null } = {}) {
   const box = h('div', {});
   let wk = null; let viewer = null; let current = null; let focusId = point?.id || null; let fType = ''; let fCab = ''; let fStage = '';
   let dimDrawing = false; let selMode = false; let rectSel = false; const sel = new Set(); let selBar = () => {};
-  let openCard = null; let doorPts = () => []; let goDoor = () => {};
-  const doorSkip = new Set(); let doorCur = null;  // мастер «🚪 Двери»: пропущенные и текущая дверь
+  let openCard = null; let doorPts = () => []; let goDoor = () => {}; let brushTap = () => {};
+  const doorSkip = new Set(); let doorCur = null; let doorMode = 'wizard'; let brushId = ''; let pipette = false;  // «Кисть»: конфигурация по нажатию; пипетка — взять с двери  // мастер «🚪 Двери»: пропущенные и текущая дверь
   let tool = placeFor ? 'place' : null; let iconType = ''; let temp = null; let toolBar = () => {};  // tool: add — «➕ Точка на плане», icon — «📌 Значки типов», place — «📍 Отметить на плане»
   let updateInfo = () => {}; const unsub = subscribe(() => { viewer?.draw(); updateInfo(); if (tool === 'doors') toolBar(); });  // статусы и номера меняются — план следом
   const close = openModal('🗺 План', box, { sticky: true, wide: true, onClose: () => { unsub(); wk?.stop(); } });
@@ -137,7 +137,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
       viewer = createViewer({ wk, pages: o.pages, height: '62vh', dim: () => (dimDrawing ? 0.35 : 1), rectMode: () => selMode && rectSel,
         onRect: (b, page) => { pts().filter((p) => stageOk(p) && (p.pos.page || 0) === page && p.pos.x >= b[0] && p.pos.x <= b[2] && p.pos.y >= b[1] && p.pos.y <= b[3]).forEach((p) => sel.add(p.id)); selBar(); viewer.draw(); },
         onTap: (x, y, page) => {
-          if (tool === 'doors') { const p = nearest(doorPts(), (q) => q.pos, x, y, page); if (p) goDoor(p); else if (nearest(sheetPts(d), (q) => q.pos, x, y, page)) toast('Это не дверь'); return; }
+          if (tool === 'doors') { const p = nearest(doorPts(), (q) => q.pos, x, y, page); if (p) (doorMode === 'brush' ? brushTap(p) : goDoor(p)); else if (nearest(sheetPts(d), (q) => q.pos, x, y, page)) toast('Это не дверь'); return; }
           if (tool) { toolTap(d, o.pages, x, y, page, nearest); return; }
           if (fType === UNL || fType === HID) { const m = nearest(marks(), (it) => it.pos, x, y, page); if (m) markCard(d, m, fType === HID); return; }
           const best = nearest(pts().filter(stageOk), (p) => p.pos, x, y, page); if (!best) return;
@@ -220,20 +220,47 @@ export function planModal({ point = null, placeFor = null } = {}) {
         doorSkip.delete(p.id); const nx = nextDoor({ ...p, configId: id }); toast(`${p.label}: ${allDoorCfgs().get(id)?.name || 'готово'}`);
         setTimeout(() => goDoor(nx), 250);
       };
+      // все конфигурации в порядке вкладки «Конфигурации дверей»: закреплённые, потом остальные (чаще используемые выше)
+      const cfgOrder = () => { const all = allDoorCfgs(); const pins = doorPins(); const used = (id) => [...state.ctx.points.values()].filter((q) => q.configId === id).length;
+        return [...pins.map((id) => all.get(id)).filter(Boolean), ...[...all.values()].filter((c) => !pins.includes(c.id)).sort((a, b) => used(b.id) - used(a.id) || a.name.localeCompare(b.name, 'ru'))]; };
+      brushTap = (p) => {
+        focusId = p.id;
+        if (pipette) { const c = doorCfgOf(p, state.ctx); if (!c) { toast(`У ${p.label} конфигурации нет`); return; } brushId = c.id; pipette = false; toast(`Кисть: ${c.name}`); toolBar(); viewer.draw(); return; }
+        if (!brushId) { toast('Сначала выберите конфигурацию кисти'); return; }
+        if (p.configId === brushId) { toast(`${p.label}: уже такая`); viewer.draw(); return; }
+        const id = ensureDoorCfg(brushId); if (!id) return;
+        getRepo().save(currentProject().id, [{ coll: 'points', id: p.id, data: { configId: id, devices: null, cables: null, cableOverride: null } }]);
+        doorSkip.delete(p.id); toast(`${p.label} ✓`);
+      };
+      const brushPanel = (head) => {
+        const list = cfgOrder(); if (!brushId || !list.some((c) => c.id === brushId)) brushId = list[0]?.id || '';
+        const pins = new Set(doorPins());
+        const selEl = h('select', { style: { flex: 1, minWidth: '200px' }, onchange: (e) => { brushId = e.target.value; pipette = false; toolBar(); } },
+          h('optgroup', { label: '📌 Закреплённые' }, ...list.filter((c) => pins.has(c.id)).map((c) => h('option', { value: c.id, selected: c.id === brushId }, c.name))),
+          h('optgroup', { label: 'Остальные' }, ...list.filter((c) => !pins.has(c.id)).map((c) => h('option', { value: c.id, selected: c.id === brushId }, c.name))));
+        return [head,
+          h('span', { style: { flexBasis: '100%', fontSize: '13px' } }, pipette ? '💧 Пипетка: нажмите дверь — её конфигурация станет кистью.' : 'Нажимайте двери — каждой сразу записывается выбранная конфигурация.'),
+          selEl,
+          h('button', { class: pipette ? '' : 'sec', onclick: () => { pipette = !pipette; toolBar(); } }, pipette ? '💧 Пипетка (вкл.)' : '💧 Пипетка')];
+      };
       const doorPanel = () => {
         const all = doorPts(); const done = all.filter(doorDone).length; const skipped = all.filter((p) => !doorDone(p) && doorSkip.has(p.id)).length;
         const head = h('div', { style: { flexBasis: '100%', fontSize: '13px' } }, h('b', {}, '🚪 Двери: '), `размечено ${done} из ${all.length}`, skipped ? ` · пропущено ${skipped}` : '',
           h('span', { class: 'mut' }, '  · зелёные — размечены, оранжевые — нет, серые — пропущены'));
+        const modes = h('div', { style: { flexBasis: '100%', display: 'flex', gap: '6px' } },
+          h('button', { class: doorMode === 'wizard' ? '' : 'sec', style: { flex: 1 }, onclick: () => { doorMode = 'wizard'; pipette = false; toolBar(); } }, '🧭 Мастер'),
+          h('button', { class: doorMode === 'brush' ? '' : 'sec', style: { flex: 1 }, onclick: () => { doorMode = 'brush'; doorCur = null; toolBar(); viewer.draw(); } }, '🖌 Кисть'),
+          h('button', { class: 'sec', onclick: () => { tool = null; doorCur = null; pipette = false; toolBar(); viewer.draw(); } }, 'Готово'));
+        if (doorMode === 'brush') return [modes, ...brushPanel(head)];
         const p = doorCur && state.ctx.points.get(doorCur);
         if (!p) {
           const left = all.filter((x) => !doorDone(x) && !doorSkip.has(x.id)).length;
-          return [head, h('span', { style: { flexBasis: '100%' } }, !all.length ? 'На этом чертеже нет дверей (точек с типом двери).' : left ? 'Нажмите на дверь, с которой начать, — дальше приложение само поведёт к ближайшим неразмеченным.' : skipped ? 'Неразмеченных больше нет, остались пропущенные.' : 'Все двери на этом чертеже размечены ✅'),
+          return [modes, head, h('span', { style: { flexBasis: '100%' } }, !all.length ? 'На этом чертеже нет дверей (точек с типом двери).' : left ? 'Нажмите на дверь, с которой начать, — дальше приложение само поведёт к ближайшим неразмеченным.' : skipped ? 'Неразмеченных больше нет, остались пропущенные.' : 'Все двери на этом чертеже размечены ✅'),
             left ? h('button', { class: 'sec', onclick: () => goDoor(nextDoor(null)) }, '▶ С любой неразмеченной') : null,
-            skipped ? h('button', { class: 'sec', onclick: () => { doorSkip.clear(); goDoor(nextDoor(null)); } }, `↩ К пропущенным (${skipped})`) : null,
-            h('button', { onclick: () => { tool = null; doorCur = null; toolBar(); viewer.draw(); } }, 'Готово')];
+            skipped ? h('button', { class: 'sec', onclick: () => { doorSkip.clear(); goDoor(nextDoor(null)); } }, `↩ К пропущенным (${skipped})`) : null];
         }
         const cur = doorCfgOf(p, state.ctx); const cfgs = allDoorCfgs();
-        return [head,
+        return [modes, head,
           h('div', { style: { flexBasis: '100%' } }, h('b', { style: { fontSize: '17px' } }, p.label), p.planName ? h('span', { class: 'mut' }, `  (${p.planName})`) : null,
             h('div', { class: 'mut', style: { fontSize: '13px' } }, cur ? `Сейчас: ${cur.name}` : 'Конфигурация не выбрана')),
           ...doorPins().map((id) => cfgs.get(id)).filter(Boolean).map((c) => h('div', { class: `wk ${cur?.id === c.id ? 'done' : 'todo'}`, style: { cursor: 'pointer', margin: 0, padding: '6px 10px' }, onclick: () => setDoor(p, c.id) }, h('b', { style: { fontSize: '14px' } }, c.name))),
