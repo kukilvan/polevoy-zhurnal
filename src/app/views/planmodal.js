@@ -18,7 +18,10 @@ import { bulkEditForm, renameForm } from './points.js';
 import { doorCfgOf, doorCfgShort, usesConfig } from '../../domain/index.js';
 import { allDoorCfgs, pinsOf as doorPins, ensureDoorCfg } from '../doorpool.js';
 import { doorPicker } from './doorcfgview.js';
+import { doorChips } from './doorchips.js';
+import { doorShortColor } from '../../domain/index.js';
 // подпись точки на плане: у двери с конфигурацией — ещё ЭМ / МХ
+const shOf = (p) => { const c = doorCfgOf(p, state.ctx); const t = c ? doorCfgShort(state.ctx, c) : ''; return t ? { text: t, color: doorShortColor(state.ctx, c) || '#111' } : null; };
 const tagOf = (p) => { const c = doorCfgOf(p, state.ctx); const sh = c ? doorCfgShort(state.ctx, c) : ''; return sh ? `${p.label} ${sh}` : p.label; };
 import { typeMatch, typeFilterOptions } from '../typegroups.js';
 
@@ -57,7 +60,14 @@ function placeTags(g, api, tags, circles, frames = []) {
     if (Math.hypot(cx - t.x, cy - t.y) > r + gap + 4) { g.strokeStyle = t.col; g.lineWidth = 1; g.beginPath(); g.moveTo(t.x, t.y); g.lineTo(cx, cy); g.stroke(); }
     g.fillStyle = 'rgba(255,255,255,.92)'; g.fillRect(best[0], best[1], w, hh);
     g.strokeStyle = t.col; g.lineWidth = 2; g.strokeRect(best[0], best[1], w, hh);
-    g.fillStyle = '#111'; lines.forEach((l, i) => g.fillText(l, best[0] + padX, best[1] + 2 + lh * i + lh / 2 + 1));
+    g.fillStyle = '#111'; lines.forEach((l, i) => {
+      const yy = best[1] + 2 + lh * i + lh / 2 + 1;
+      if (t.sh && lines.length === 1 && l.endsWith(` ${t.sh.text}`)) {  // ЭМ / МХ — цветом
+        const main = l.slice(0, -t.sh.text.length); g.fillText(main, best[0] + padX, yy);
+        g.fillStyle = t.sh.color; g.fillText(t.sh.text, best[0] + padX + g.measureText(main).width, yy); g.fillStyle = '#111'; return;
+      }
+      g.fillText(l, best[0] + padX, yy);
+    });
   }
   g.textBaseline = 'alphabetic';
 }
@@ -165,13 +175,13 @@ export function planModal({ point = null, placeFor = null } = {}) {
               const k = posKey(p.pos); const same = byKey.get(k);  // несколько точек на одной отметке — одна подпись
               if (same) { same.labels.push(tagOf(p)); continue; }
               const [x, y] = api.toScr(p.pos.x, p.pos.y); const r = Math.max(5, (Math.max(p.pos.w || 8, p.pos.h || 8) / 2 + 1.5) * api.view.s); circles.push([x, y, r]);
-              const t = { p, col, x, y, r, labels: [tagOf(p)] }; byKey.set(k, t); if (on && big) tags.push(t);
+              const t = { p, col, x, y, r, labels: [tagOf(p)], sh: shOf(p) }; byKey.set(k, t); if (on && big) tags.push(t);
             } else {
               // надпись на чертеже: своя подпись не нужна, если точка одна и называется так же; иначе (несколько точек, другое название) — подпись
               const k = posKey(p.pos); const same = byKey.get(k);
               if (same) { same.labels.push(tagOf(p)); same.need = true; continue; }
               const [x, y] = api.toScr(p.pos.x, p.pos.y); const hw = (p.pos.w / 2 + 2) * api.view.s; const hh2 = (p.pos.h / 2 + 2) * api.view.s; frames.push([x - hw, y - hh2, x + hw, y + hh2]);
-              const t = { p, col, x, y, r: Math.max(hw, hh2), labels: [tagOf(p)], textPos: true, need: !!(p.pos.text && p.pos.text !== p.label) }; byKey.set(k, t); if (on && big) tags.push(t);
+              const t = { p, col, x, y, r: Math.max(hw, hh2), labels: [tagOf(p)], sh: shOf(p), textPos: true, need: !!(p.pos.text && p.pos.text !== p.label) }; byKey.set(k, t); if (on && big) tags.push(t);
             }
           }
           placeTags(g, api, tags.filter((t) => !t.textPos || t.need), circles, frames);
@@ -241,6 +251,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
         return [head,
           h('span', { style: { flexBasis: '100%', fontSize: '13px' } }, pipette ? '💧 Пипетка: нажмите дверь — её конфигурация станет кистью.' : 'Нажимайте двери — каждой сразу записывается выбранная конфигурация.'),
           selEl,
+          brushId && allDoorCfgs().get(brushId) ? h('div', { style: { flexBasis: '100%' } }, doorChips(allDoorCfgs().get(brushId), { big: true })) : null,
           h('button', { class: pipette ? '' : 'sec', onclick: () => { pipette = !pipette; toolBar(); } }, pipette ? '💧 Пипетка (вкл.)' : '💧 Пипетка')];
       };
       const doorPanel = () => {
@@ -262,8 +273,8 @@ export function planModal({ point = null, placeFor = null } = {}) {
         const cur = doorCfgOf(p, state.ctx); const cfgs = allDoorCfgs();
         return [modes, head,
           h('div', { style: { flexBasis: '100%' } }, h('b', { style: { fontSize: '17px' } }, p.label), p.planName ? h('span', { class: 'mut' }, `  (${p.planName})`) : null,
-            h('div', { class: 'mut', style: { fontSize: '13px' } }, cur ? `Сейчас: ${cur.name}` : 'Конфигурация не выбрана')),
-          ...doorPins().map((id) => cfgs.get(id)).filter(Boolean).map((c) => h('div', { class: `wk ${cur?.id === c.id ? 'done' : 'todo'}`, style: { cursor: 'pointer', margin: 0, padding: '6px 10px' }, onclick: () => setDoor(p, c.id) }, h('b', { style: { fontSize: '14px' } }, c.name))),
+            h('div', { class: 'mut', style: { fontSize: '13px', marginTop: '2px' } }, cur ? h('span', {}, 'Сейчас: ', doorChips(cur)) : 'Конфигурация не выбрана')),
+          ...doorPins().map((id) => cfgs.get(id)).filter(Boolean).map((c) => h('div', { class: `wk ${cur?.id === c.id ? 'done' : 'cfg'}`, style: { cursor: 'pointer', margin: 0, padding: '6px 10px' }, onclick: () => setDoor(p, c.id) }, doorChips(c, { big: true }))),
           h('button', { class: 'sec', onclick: () => doorPicker({ current: cur?.id || null, title: `🚪 ${p.label}`, onPick: (id) => setDoor(p, id) }) }, '🧩 Другая / собрать…'),
           h('button', { class: 'sec', onclick: () => { doorSkip.add(p.id); goDoor(nextDoor(p)); } }, '⏭ Пропустить'),
           cur ? h('button', { class: 'sec', onclick: () => goDoor(nextDoor(p)) }, '▶ Следующая') : null,

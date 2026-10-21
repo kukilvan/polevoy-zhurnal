@@ -1,5 +1,5 @@
 // Вкладка «Настройки»: все справочники (выпадающие списки), привязка установки и служебные действия проекта в одном месте.
-import { POOL_KINDS, DOOR_PARTS, doorPartOf, DOOR_PART_NAMES } from '../../domain/index.js';
+import { POOL_KINDS, DOOR_PARTS, doorPartOf, DOOR_PART_NAMES, doorColorOf } from '../../domain/index.js';
 import { poolButton } from './poolview.js';
 import { allGroups } from '../typegroups.js';
 import { h, formModal, confirmDialog, toast, qtyList, openModal } from '../ui.js';
@@ -14,6 +14,7 @@ import { exportExcel } from '../excel.js';
 import { pointsFromFile } from './pointsfile.js';
 import { catalogModal } from './catalogview.js';
 import { doorConfigsView } from './doorcfgview.js';
+import { colorField } from './doorchips.js';
 
 export const WORK_TYPES = ['Протяжка', 'Перетяжка', 'Перенос', 'Хивут', 'Установка', 'Проверка', 'Шилют', 'Доп. работа', 'Время'];
 const STAGES = ['Протяжка', 'Хивут', 'Установка', 'Проверка', 'Шилют'];
@@ -162,10 +163,12 @@ export const REFS = {
       custom('workIds', 'Работы устройства', taskWorks(), { hint: 'Обычно установка авизара; можно и другие (кивун, доп. работа). Серые галочки — работы его кабелей (уже есть, второй раз не нужны).', empty: 'Нет работ', locked: (v) => inheritedFromCables(ctx(), v.cables), ...creator('catalog', '🆕 Новая работа') }),
       { key: 'doorPart', label: 'Часть двери', type: 'select', emptyLabel: 'Авто (по названию)', options: [...DOOR_PARTS.map((p) => ({ value: p.key, label: p.name })), { value: 'none', label: 'Не для двери' }],
         hint: 'В какой части окна «Конфигурация двери» показывать устройство. Авто: ЭМ и мануль — запирание, коре — считыватель, лахцаны — кнопки, магнит — датчики, интерком и цофар — дополнительно.' },
+      { ...colorField('color', 'Цвет в названии двери', { hint: 'Каким цветом это устройство в названиях конфигураций. По умолчанию — цвет части двери: ЭМ красный, МХ синий, считыватели фиолетовые, кнопки оранжевые, датчики бирюзовые, дополнительное розовое.',
+        fallback: (v) => doorColorOf({ name: v.name, doorPart: v.doorPart }) }), visible: (v) => v.doorPart !== 'none' && !!doorPartOf({ name: v.name, doorPart: v.doorPart }) },
       { key: 'short', label: 'Коротко (в названии двери)', placeholder: 'например: ЭМ, коре, цофар', hint: 'Пусто — как обычно: ЭМ, МХ, коре, птиха, нипуц, магнит…' },
     ],
     defaults: {},
-    prepare: (v) => ({ name: v.name, nameHe: v.nameHe, cables: v.cables || [], workIds: v.workIds || [], doorPart: v.doorPart || null, short: String(v.short || '').trim() || null }),
+    prepare: (v) => ({ name: v.name, nameHe: v.nameHe, cables: v.cables || [], workIds: v.workIds || [], doorPart: v.doorPart || null, short: String(v.short || '').trim() || null, color: v.color || null }),
     usage: (x) => [...ctx().types.values()].filter((t) => (t.devices || []).some((d) => d.deviceId === x.id)).length
       + [...ctx().points.values()].filter((p) => (p.devices || []).some((d) => d.deviceId === x.id)).length,
   },

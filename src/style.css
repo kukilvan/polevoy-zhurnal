@@ -173,3 +173,5 @@ html, body { overflow-x: hidden; }
 .wk.todo.chk { border-color: var(--chk-b); background: var(--chk-bg); }
 .wk.done { border-color: var(--ok); background: rgba(34,197,94,.14); }
 .wk.bad { border-color: var(--err); background: rgba(239,68,68,.14); }
+.wk.cfg { border-color: var(--line); background: var(--alt, rgba(128,128,128,.08)); }
+.wk.cfg.pinned { border-color: var(--ok); }

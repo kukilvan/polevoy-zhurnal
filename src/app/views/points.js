@@ -13,6 +13,7 @@ import { pointsFromFile } from './pointsfile.js';
 import { drawingsHub, unsortedModal } from './tohnitview.js';
 import { cablesField, cablesPicker } from './cablespick.js';
 import { doorField } from './doorcfgview.js';
+import { doorChips, doorShortChip } from './doorchips.js';
 import { ensureDoorCfg, pinsOf as doorPins, allDoorCfgs } from '../doorpool.js';
 import { drawingFor, drawingsOf } from '../drawings.js';
 import { typeMatch, typeFilterOptions, typeFilterValid } from '../typegroups.js';
@@ -302,7 +303,7 @@ export function pointCard(startPoint, { fromPlan = false } = {}) {
     const hasLen = p.length !== undefined && p.length !== null && p.length !== '';
     const facts = [
       ['Шкаф / этаж', [p.cabinet && `шкаф ${p.cabinet}`, p.floor && `этаж ${p.floor}`].filter(Boolean).join(', ')],
-      ['Тип', p.typeId], ['Конфигурация', doorCfgOf(p, ctx)?.name || (usesConfig(ctx.types.get(p.typeId)) ? cfg?.name : '')], ['Состав', compText(p)], ['Имя в плане', p.planName], ['Кабели', `${info.cableList?.length ? cablesText(info.cableList) : info.cable || ''}${Array.isArray(p.cableOverride) ? ' (свои у точки)' : ''}`],
+      ['Тип', p.typeId], ['Конфигурация', (doorCfgOf(p, ctx) && doorChips(doorCfgOf(p, ctx))) || (usesConfig(ctx.types.get(p.typeId)) ? cfg?.name : '')], ['Состав', compText(p)], ['Имя в плане', p.planName], ['Кабели', `${info.cableList?.length ? cablesText(info.cableList) : info.cable || ''}${Array.isArray(p.cableOverride) ? ' (свои у точки)' : ''}`],
       ['Длина', hasLen ? `${p.length} м на 1 кабель${info.metrage ? ` (всего ${Math.round(info.metrage * 100) / 100} м)` : ''}` : ''],
       ['Порт в свитче', p.port], ['Порт в панели', panelText(p, proj)], ['Серийный номер', p.serial], ['MAC', p.mac], ['Причина задержки', p.delayReasonId], ['Примечание', p.note],
     ].filter(([, v]) => v);
@@ -312,7 +313,7 @@ export function pointCard(startPoint, { fromPlan = false } = {}) {
     body.replaceChildren(
       h('div', { style: { margin: '2px 0 10px' } }, h('span', { class: statusClass(info.status) }, info.status)),
       h('div', { style: { display: 'grid', gridTemplateColumns: 'auto 1fr', gap: '4px 12px', fontSize: '14px' } },
-        facts.flatMap(([k, v]) => [h('span', { class: 'mut' }, k), h('span', { style: { fontWeight: 600 } }, String(v))])),
+        facts.flatMap(([k, v]) => [h('span', { class: 'mut' }, k), h('span', { style: { fontWeight: 600 } }, v instanceof Node ? v : String(v))])),
       h('div', { class: 'btns' },
         h('button', { onclick: () => { close(); setTimeout(() => addWorkForPoint(p.id), 60); } }, '➕ Добавить работу на эту точку')),
       h('div', { class: 'btns' },
@@ -558,7 +559,7 @@ export function meterView(ui) {
         if (selected.has(p.id)) selected.delete(p.id); else selected.add(p.id);
         cb.checked = selected.has(p.id); updateBar();
       } }, cb,
-        h('div', { class: 'name' }, p.label, doorShort(p) ? h('span', { class: 'pill', style: { marginLeft: '6px', fontSize: '12px' } }, doorShort(p)) : null, p.planName ? h('div', { class: 'sub' }, p.planName) : null),
+        h('div', { class: 'name' }, p.label, doorCfgOf(p, state.ctx) ? doorShortChip(doorCfgOf(p, state.ctx)) : null, p.planName ? h('div', { class: 'sub' }, p.planName) : null),
         h('div', { class: 'len' }, p.length !== undefined && p.length !== null && p.length !== '' ? `${p.length} м` : '—'),
         h('span', { class: statusClass(info.status) }, info.status)));
     });

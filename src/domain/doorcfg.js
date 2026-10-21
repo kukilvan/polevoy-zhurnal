@@ -169,3 +169,23 @@ export function doorLibraryOps(ctx) {
   });
   return ops;
 }
+
+// ---- читаемость названий: цвет по части двери (или свой цвет устройства), плашки ----
+export const DOOR_ROLE_COLORS = { em: '#e5484d', mh: '#2f7cf6' };
+export const DOOR_PART_COLORS = { lock: '#e5484d', reader: '#9b5cf6', button: '#f08c00', sensor: '#0fa5a0', extra: '#e0479e' };
+export const doorColorOf = (dev) => (dev?.color || DOOR_ROLE_COLORS[doorRole(dev)] || DOOR_PART_COLORS[doorPartOf(dev)] || '#8e8e93');
+/** Части названия для отрисовки плашками: { items: [{ text, count, color, lock }], cables: [{ cable, count }] } */
+export function doorTokens(ctx, cfg) {
+  if (!isDoorCfg(cfg)) return { items: [], cables: [] };
+  const items = sortDevices(ctx, cfg.devices).map(({ deviceId, count }) => {
+    const dev = ctx.devices.get(deviceId) || { id: deviceId };
+    return { text: doorShortOf(dev), count, color: doorColorOf(dev), lock: doorPartOf(dev) === 'lock' || ['em', 'mh'].includes(doorRole(dev)) };
+  });
+  return { items, cables: sortCables(cfg.cables) };
+}
+/** Цвет короткого обозначения (ЭМ/МХ) двери */
+export function doorShortColor(ctx, cfg) {
+  if (!isDoorCfg(cfg)) return '';
+  const lock = cfg.devices.map((x) => ctx.devices.get(x.deviceId)).find((d) => doorPartOf(d) === 'lock' || ['em', 'mh'].includes(doorRole(d)));
+  return lock ? doorColorOf(lock) : '';
+}

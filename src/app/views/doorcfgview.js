@@ -4,6 +4,8 @@ import { state, subscribe, getRepo, currentProject } from '../store.js';
 import { DOOR_PARTS, doorDevices, applyDoorRules, autoDoorCables, makeDoorCfg, isDoorCfg, doorLibraryOps } from '../../domain/index.js';
 import { allDoorCfgs, pinsOf, useDoorCfg, setPins, pin, unpin, canDeleteFromPool, deleteFromPool, usageOf, onDoorPool } from '../doorpool.js';
 import { itemForm } from './settings.js';
+import { doorChips } from './doorchips.js';
+import { doorColorOf } from '../../domain/index.js';
 
 const MAX_CABLES = 8;
 const counter = (val, max, onSet) => {
@@ -39,8 +41,8 @@ export function doorPicker({ current = null, title = '🚪 Конфигурац�
     const noDev = !Object.values(parts).some((l) => l.length); const lib = doorLibraryOps(ctx);
     body.replaceChildren(...[
       pins.length ? h('div', {}, h('div', { class: 'group', style: { padding: '0 0 4px' } }, '📌 Закреплённые'),
-        ...pins.map((c) => h('div', { class: `wk ${c.id === current ? 'done' : 'todo'}`, style: { cursor: 'pointer' }, onclick: () => choose(c) },
-          h('b', {}, c.name), c.id === current ? h('span', { class: 'wk-st' }, 'сейчас') : null))) : null,
+        ...pins.map((c) => h('div', { class: `wk ${c.id === current ? 'done' : 'cfg'}`, style: { cursor: 'pointer' }, onclick: () => choose(c) },
+          doorChips(c), c.id === current ? h('span', { class: 'wk-st' }, 'сейчас') : null))) : null,
       h('div', { class: 'group', style: { padding: '12px 0 4px' } }, '🧩 Собрать'),
       noDev ? h('div', { class: 'mut' }, 'В проекте нет устройств двери. Добавьте их в «Настройки → Устройства» (поле «Часть двери») или возьмите стандартные:') : null,
       lib.length ? h('div', { class: 'btns' }, h('button', { type: 'button', class: 'sec', onclick: () => { getRepo().save(currentProject().id, lib); toast(`Добавлено устройств: ${lib.filter((o) => o.coll === 'devices').length}`); setTimeout(draw, 400); } },
@@ -48,18 +50,18 @@ export function doorPicker({ current = null, title = '🚪 Конфигурац�
       ...DOOR_PARTS.filter((p) => parts[p.key].length).map((p) => h('div', { style: { margin: '6px 0' } },
         h('div', { class: 'mut', style: { fontSize: '13px', fontWeight: 700 } }, `${p.name}${p.hint ? ` · ${p.hint}` : ''}`),
         ...parts[p.key].map((d) => h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', padding: '3px 0' } },
-          h('span', { style: { fontWeight: sel.get(d.id) ? 700 : 400 } }, d.name),
+          h('span', { style: { fontWeight: sel.get(d.id) ? 700 : 400, borderLeft: `4px solid ${doorColorOf(d)}`, paddingLeft: '8px' } }, d.name),
           counter(sel.get(d.id) || 0, p.max, (n) => { sel = applyDoorRules(ctx, sel, d.id, n); recalc(); draw(); }))))),
       h('div', { class: 'mut', style: { fontSize: '13px', fontWeight: 700, marginTop: '10px' } }, `Кабели двери${autoCab ? ' · подставлены по составу' : ' · свои'}`),
       ...kinds.map((k) => h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0' } }, h('span', {}, k),
         counter(cables.get(k) || 0, MAX_CABLES, (n) => { autoCab = false; if (n > 0) cables.set(k, n); else cables.delete(k); draw(); }))),
       !autoCab ? h('div', { class: 'btns' }, h('button', { type: 'button', class: 'sec', onclick: () => { autoCab = true; recalc(); draw(); } }, '↺ Кабели по составу')) : null,
-      h('div', { class: 'card', style: { marginTop: '10px' } }, h('div', { class: 'mut', style: { fontSize: '13px' } }, known ? 'Такая уже есть' : 'Новая — попадёт в общий пул'), h('b', {}, cfg.name)),
+      h('div', { class: 'card', style: { marginTop: '10px' } }, h('div', { class: 'mut', style: { fontSize: '13px' } }, known ? 'Такая уже есть' : 'Новая — попадёт в общий пул'), doorChips(cfg, { big: true })),
       h('div', { class: 'btns' }, h('button', { disabled: !sel.size, onclick: () => choose(cfg) }, '✅ Выбрать эту')),
       h('div', { class: 'group', style: { padding: '12px 0 4px' } }, `Общий пул (${other.length})`),
       h('input', { type: 'search', placeholder: 'Поиск: ЭМ, биометри, цофар…', value: q, oninput: (e) => { q = e.target.value.trim().toLowerCase(); const pos = e.target.selectionStart; draw(); const i = body.querySelector('input[type=search]'); i.focus(); i.setSelectionRange(pos, pos); } }),
-      ...other.slice(0, 60).map((c) => h('div', { class: 'wk todo', style: { cursor: 'pointer', marginTop: '4px' }, onclick: () => choose(c) },
-        h('b', {}, c.name), usageOf(c.id) ? h('span', { class: 'wk-st' }, `дверей в проекте: ${usageOf(c.id)}`) : null))].filter(Boolean));
+      ...other.slice(0, 60).map((c) => h('div', { class: 'wk cfg', style: { cursor: 'pointer', marginTop: '4px' }, onclick: () => choose(c) },
+        doorChips(c), usageOf(c.id) ? h('span', { class: 'wk-st' }, `дверей в проекте: ${usageOf(c.id)}`) : null))].filter(Boolean));
   }
   draw();
   close = openModal(title, body, { sticky: true });
@@ -71,10 +73,10 @@ export function doorField(key, label, { bulk = false, visible, hint } = {}) {
     key, label, type: 'custom', visible, hint,
     build: (api) => {
       let val = api.value || '';
-      const name = h('b', {}); const el = h('div', {});
+      const name = h('div', {}); const el = h('div', {});
       const paint = () => {
         const c = val && val !== '__clear' ? (allDoorCfgs().get(val) || state.ctx.configs.get(val)) : null;
-        name.textContent = val === '__clear' ? '✖ Убрать конфигурацию' : c ? c.name : bulk ? 'Не менять' : '— не выбрана —';
+        name.replaceChildren(c ? doorChips(c, { big: true }) : h('b', {}, val === '__clear' ? '✖ Убрать конфигурацию' : bulk ? 'Не менять' : '— не выбрана —'));
         el.replaceChildren(name, h('div', { class: 'btns', style: { marginTop: '4px' } },
           h('button', { type: 'button', class: 'sec', onclick: () => doorPicker({ current: val, onPick: (id) => { val = id; paint(); api.changed(); } }) }, '🚪 Выбрать…'),
           bulk && val ? h('button', { type: 'button', class: 'sec', onclick: () => { val = ''; paint(); api.changed(); } }, 'Не менять') : null,
@@ -101,15 +103,15 @@ export function doorConfigsView() {
       h('div', { class: 'mut', style: { marginBottom: '10px' } }, 'Тип точки — «Дверь», разновидность — конфигурация: состав (запирание, считыватель, кнопки, датчики, дополнительно) и кабели двери. Название собирается само. Закреплённые идут первыми в списках выбора, в этом порядке; закрепление — для этого проекта. Новые конфигурации сами попадают в общий пул.'),
       h('div', { class: 'btns', style: { marginTop: 0 } }, h('button', { onclick: () => doorPicker({ title: '🧩 Новая конфигурация', onPick: (id) => { pin(id); toast('Закреплена в проекте'); } }) }, '➕ Собрать новую')),
       h('div', { class: 'group', style: { padding: '12px 0 4px' } }, `📌 Закреплённые в проекте (${list.length})`),
-      list.length ? h('div', {}, ...list.map((c, i) => h('div', { class: 'wk done' },
-        h('div', {}, h('b', {}, c.name), sub(c) ? h('div', { class: 'wk-sub' }, sub(c)) : null),
+      list.length ? h('div', {}, ...list.map((c, i) => h('div', { class: 'wk cfg pinned' },
+        h('div', {}, doorChips(c), sub(c) ? h('div', { class: 'wk-sub' }, sub(c)) : null),
         h('span', { style: { display: 'flex', gap: '4px' } },
           h('button', { class: 'sec', style: { padding: '2px 10px' }, disabled: i === 0, onclick: () => move(i, -1) }, '↑'),
           h('button', { class: 'sec', style: { padding: '2px 10px' }, disabled: i === list.length - 1, onclick: () => move(i, 1) }, '↓'),
           h('button', { class: 'sec', style: { padding: '2px 10px' }, title: 'Открепить', onclick: () => unpin(c.id) }, '✖'))))) : h('div', { class: 'empty' }, 'Ничего не закреплено'),
       h('div', { class: 'group', style: { padding: '12px 0 4px' } }, `Общий пул (${rest.length})`),
-      rest.length ? h('div', {}, ...rest.map((c) => h('div', { class: 'wk todo' },
-        h('div', {}, h('b', {}, c.name), sub(c) ? h('div', { class: 'wk-sub' }, sub(c)) : null),
+      rest.length ? h('div', {}, ...rest.map((c) => h('div', { class: 'wk cfg' },
+        h('div', {}, doorChips(c), sub(c) ? h('div', { class: 'wk-sub' }, sub(c)) : null),
         h('span', { style: { display: 'flex', gap: '4px' } },
           h('button', { class: 'sec', style: { padding: '2px 10px' }, title: 'Закрепить', onclick: () => pin(c) }, '📌'),
           canDeleteFromPool() ? h('button', { class: 'sec', style: { padding: '2px 10px' }, title: 'Удалить из общего пула', onclick: async () => {

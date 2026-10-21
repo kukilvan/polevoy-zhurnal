@@ -54,3 +54,14 @@ test('двери: точка с конфигурацией — состав и �
   assert.equal(info.tasks.filter((t) => t.stage === 'Протяжка').reduce((n, t) => n + t.qty, 0), 2);
   assert.ok(info.tasks.some((t) => t.workId === 'CHK_DOOR'));
 });
+
+test('двери: плашки названия и цвета', async () => {
+  const { doorTokens, doorShortColor } = await import('../src/domain/index.js');
+  const ctx = make({ devices: [...DEVICES.map((d) => (d.id === 'DV_BIO' ? { ...d, color: '#123456' } : d)), tsofar] });
+  const cfg = makeDoorCfg(ctx, [{ deviceId: 'DV_MANUL', count: 1 }, { deviceId: 'DV_BIO', count: 2 }, { deviceId: 'DV_TS', count: 1 }], [{ cable: '6005', count: 4 }]);
+  const t = doorTokens(ctx, cfg);
+  assert.deepEqual(t.items.map((x) => [x.text, x.count, x.lock]), [['МХ', 1, true], ['коре биометри', 2, false], ['цофар', 1, false]]);
+  assert.equal(t.items[1].color, '#123456');
+  assert.equal(t.items[0].color, '#2f7cf6');
+  assert.equal(doorShortColor(ctx, cfg), '#2f7cf6');
+});
