@@ -15,7 +15,9 @@ import { exportNumberedPdf, publishNumbered } from './plannumbers.js';
 import { linkPoints } from './planlink.js';
 import { choosePoint } from './pointchooser.js';
 import { bulkEditForm, renameForm } from './points.js';
-import { doorCfgOf, doorCfgShort } from '../../domain/index.js';
+import { doorCfgOf, doorCfgShort, usesConfig } from '../../domain/index.js';
+import { allDoorCfgs, pinsOf as doorPins, ensureDoorCfg } from '../doorpool.js';
+import { doorPicker } from './doorcfgview.js';
 // подпись точки на плане: у двери с конфигурацией — ещё ЭМ / МХ
 const tagOf = (p) => { const c = doorCfgOf(p, state.ctx); const sh = c ? doorCfgShort(state.ctx, c) : ''; return sh ? `${p.label} ${sh}` : p.label; };
 import { typeMatch, typeFilterOptions } from '../typegroups.js';
@@ -75,9 +77,10 @@ export function planModal({ point = null, placeFor = null } = {}) {
   const box = h('div', {});
   let wk = null; let viewer = null; let current = null; let focusId = point?.id || null; let fType = ''; let fCab = ''; let fStage = '';
   let dimDrawing = false; let selMode = false; let rectSel = false; const sel = new Set(); let selBar = () => {};
-  let openCard = null;
+  let openCard = null; let doorPts = () => []; let goDoor = () => {};
+  const doorSkip = new Set(); let doorCur = null;  // мастер «🚪 Двери»: пропущенные и текущая дверь
   let tool = placeFor ? 'place' : null; let iconType = ''; let temp = null; let toolBar = () => {};  // tool: add — «➕ Точка на плане», icon — «📌 Значки типов», place — «📍 Отметить на плане»
-  let updateInfo = () => {}; const unsub = subscribe(() => { viewer?.draw(); updateInfo(); });  // статусы и номера меняются — план следом
+  let updateInfo = () => {}; const unsub = subscribe(() => { viewer?.draw(); updateInfo(); if (tool === 'doors') toolBar(); });  // статусы и номера меняются — план следом
   const close = openModal('🗺 План', box, { sticky: true, wide: true, onClose: () => { unsub(); wk?.stop(); } });
   const sheetPts = (d) => [...state.ctx.points.values()].filter((p) => p.pos && drawingFor(p)?.id === d.id);
 
@@ -112,7 +115,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
   }
 
   async function show(d) {
-    current = d; wk?.stop(); wk = makeWorker(); sel.clear(); selMode = false; temp = null;
+    current = d; wk?.stop(); wk = makeWorker(); sel.clear(); selMode = false; temp = null; doorCur = null;
     const status = h('div', { class: 'mut', style: { margin: '6px 0' } }, 'Открываю чертёж…');
     const holder = h('div', {}); body.replaceChildren(status, holder);
     try {
@@ -134,6 +137,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
       viewer = createViewer({ wk, pages: o.pages, height: '62vh', dim: () => (dimDrawing ? 0.35 : 1), rectMode: () => selMode && rectSel,
         onRect: (b, page) => { pts().filter((p) => stageOk(p) && (p.pos.page || 0) === page && p.pos.x >= b[0] && p.pos.x <= b[2] && p.pos.y >= b[1] && p.pos.y <= b[3]).forEach((p) => sel.add(p.id)); selBar(); viewer.draw(); },
         onTap: (x, y, page) => {
+          if (tool === 'doors') { const p = nearest(doorPts(), (q) => q.pos, x, y, page); if (p) goDoor(p); else if (nearest(sheetPts(d), (q) => q.pos, x, y, page)) toast('Это не дверь'); return; }
           if (tool) { toolTap(d, o.pages, x, y, page, nearest); return; }
           if (fType === UNL || fType === HID) { const m = nearest(marks(), (it) => it.pos, x, y, page); if (m) markCard(d, m, fType === HID); return; }
           const best = nearest(pts().filter(stageOk), (p) => p.pos, x, y, page); if (!best) return;
@@ -173,6 +177,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
           placeTags(g, api, tags.filter((t) => !t.textPos || t.need), circles, frames);
           const f = focusId && state.ctx.points.get(focusId);
           if (f?.pos && (f.pos.page || 0) === api.page && drawingFor(f)?.id === d.id) { outline(g, api, f.pos, '#e0007a', { width: 3, pad: 1.5 + 4 / api.view.s }); }
+          if (tool === 'doors') for (const p of doorPts()) { if ((p.pos.page || 0) !== api.page || p.id === doorCur) continue; outline(g, api, p.pos, doorCfgOf(p, state.ctx) ? '#34c759' : doorSkip.has(p.id) ? '#8e8e93' : '#ff9500', { width: 3, pad: 1.5 + 3 / api.view.s }); }
           if (temp && (temp.page || 0) === api.page) { g.setLineDash([5, 3]); outline(g, api, temp, '#e0007a', { width: 2.5, pad: 2 + 3 / api.view.s, fill: 'rgba(224,0,122,.12)' }); g.setLineDash([]); }
         } });
       const types = [...new Set(sheetPts(d).map((p) => p.typeId))].sort((a, b) => a.localeCompare(b, 'ru'));
@@ -197,11 +202,54 @@ export function planModal({ point = null, placeFor = null } = {}) {
       const addBtn = h('button', { class: 'sec', onclick: () => { tool = tool === 'add' ? null : 'add'; if (tool) { selMode = false; sel.clear(); selBar(); } temp = null; toolBar(); viewer.draw(); } });
       const iconBtn = h('button', { class: 'sec', onclick: () => { tool = tool === 'icon' ? null : 'icon'; if (tool) { selMode = false; sel.clear(); selBar(); } temp = null; toolBar(); viewer.draw(); } });
       const tbar = h('div', { class: 'card', style: { display: 'none', margin: '6px 0', padding: '8px', gap: '8px', flexWrap: 'wrap', alignItems: 'center' } });
+      const doorBar = h('div', { class: 'card', style: { display: 'none', margin: '6px 0', padding: '8px', gap: '6px', flexWrap: 'wrap', alignItems: 'center' } });  // под планом: дверь видна выше
+      // ---- мастер «🚪 Двери»: нажать дверь → выбрать конфигурацию → следующая ближайшая неразмеченная ----
+      const isDoor = (p) => usesConfig(state.ctx.types.get(p.typeId));
+      doorPts = () => sheetPts(d).filter(isDoor);
+      const doorDone = (p) => !!doorCfgOf(p, state.ctx);
+      const doorBtn = h('button', { class: 'sec', onclick: () => { tool = tool === 'doors' ? null : 'doors'; doorCur = null; if (tool) { selMode = false; sel.clear(); selBar(); } temp = null; toolBar(); viewer.draw(); if (tool) setTimeout(() => viewer.el.scrollIntoView({ behavior: 'smooth', block: 'start' }), 50); } });
+      const nextDoor = (from) => {
+        const left = doorPts().filter((p) => p.id !== from?.id && !doorDone(p) && !doorSkip.has(p.id)); if (!left.length) return null;
+        const pg = from?.pos?.page || 0; const dist = (p) => ((p.pos.page || 0) === pg ? 0 : 1e9) + (from ? Math.hypot(p.pos.x - from.pos.x, p.pos.y - from.pos.y) : 0);
+        return left.sort((a, b) => dist(a) - dist(b))[0];
+      };
+      goDoor = (p) => { doorCur = p?.id || null; focusId = doorCur; toolBar(); if (p) viewer.focus(p.pos.x, p.pos.y, p.pos.page || 0, Math.max(viewer.view.s, 1.2)); else viewer.draw(); };
+      const setDoor = (p, cfgId) => {
+        const id = ensureDoorCfg(cfgId); if (!id) return;
+        getRepo().save(currentProject().id, [{ coll: 'points', id: p.id, data: { configId: id, devices: null, cables: null, cableOverride: null } }]);
+        doorSkip.delete(p.id); const nx = nextDoor({ ...p, configId: id }); toast(`${p.label}: ${allDoorCfgs().get(id)?.name || 'готово'}`);
+        setTimeout(() => goDoor(nx), 250);
+      };
+      const doorPanel = () => {
+        const all = doorPts(); const done = all.filter(doorDone).length; const skipped = all.filter((p) => !doorDone(p) && doorSkip.has(p.id)).length;
+        const head = h('div', { style: { flexBasis: '100%', fontSize: '13px' } }, h('b', {}, '🚪 Двери: '), `размечено ${done} из ${all.length}`, skipped ? ` · пропущено ${skipped}` : '',
+          h('span', { class: 'mut' }, '  · зелёные — размечены, оранжевые — нет, серые — пропущены'));
+        const p = doorCur && state.ctx.points.get(doorCur);
+        if (!p) {
+          const left = all.filter((x) => !doorDone(x) && !doorSkip.has(x.id)).length;
+          return [head, h('span', { style: { flexBasis: '100%' } }, !all.length ? 'На этом чертеже нет дверей (точек с типом двери).' : left ? 'Нажмите на дверь, с которой начать, — дальше приложение само поведёт к ближайшим неразмеченным.' : skipped ? 'Неразмеченных больше нет, остались пропущенные.' : 'Все двери на этом чертеже размечены ✅'),
+            left ? h('button', { class: 'sec', onclick: () => goDoor(nextDoor(null)) }, '▶ С любой неразмеченной') : null,
+            skipped ? h('button', { class: 'sec', onclick: () => { doorSkip.clear(); goDoor(nextDoor(null)); } }, `↩ К пропущенным (${skipped})`) : null,
+            h('button', { onclick: () => { tool = null; doorCur = null; toolBar(); viewer.draw(); } }, 'Готово')];
+        }
+        const cur = doorCfgOf(p, state.ctx); const cfgs = allDoorCfgs();
+        return [head,
+          h('div', { style: { flexBasis: '100%' } }, h('b', { style: { fontSize: '17px' } }, p.label), p.planName ? h('span', { class: 'mut' }, `  (${p.planName})`) : null,
+            h('div', { class: 'mut', style: { fontSize: '13px' } }, cur ? `Сейчас: ${cur.name}` : 'Конфигурация не выбрана')),
+          ...doorPins().map((id) => cfgs.get(id)).filter(Boolean).map((c) => h('div', { class: `wk ${cur?.id === c.id ? 'done' : 'todo'}`, style: { cursor: 'pointer', margin: 0, padding: '6px 10px' }, onclick: () => setDoor(p, c.id) }, h('b', { style: { fontSize: '14px' } }, c.name))),
+          h('button', { class: 'sec', onclick: () => doorPicker({ current: cur?.id || null, title: `🚪 ${p.label}`, onPick: (id) => setDoor(p, id) }) }, '🧩 Другая / собрать…'),
+          h('button', { class: 'sec', onclick: () => { doorSkip.add(p.id); goDoor(nextDoor(p)); } }, '⏭ Пропустить'),
+          cur ? h('button', { class: 'sec', onclick: () => goDoor(nextDoor(p)) }, '▶ Следующая') : null,
+          h('button', { class: 'sec', onclick: () => goDoor(null) }, '✖ Стоп')];
+      };
       toolBar = () => {
         addBtn.textContent = tool === 'add' ? '✔ Точка на плане: нажмите место' : '➕ Точка на плане'; addBtn.className = tool === 'add' ? '' : 'sec';
         iconBtn.textContent = tool === 'icon' ? '✔ Значки типов' : '📌 Значки типов'; iconBtn.className = tool === 'icon' ? '' : 'sec';
-        tbar.style.display = tool ? 'flex' : 'none';
+        doorBtn.textContent = tool === 'doors' ? '✔ Двери' : '🚪 Двери'; doorBtn.className = tool === 'doors' ? '' : 'sec';
+        tbar.style.display = tool && tool !== 'doors' ? 'flex' : 'none';
+        doorBar.style.display = tool === 'doors' ? 'flex' : 'none'; if (tool === 'doors') doorBar.replaceChildren(...doorPanel().filter(Boolean)); else doorBar.replaceChildren();
         if (tool === 'add') tbar.replaceChildren(h('span', {}, 'Нажмите на значок, надпись или свободное место — приложение прицепится к ближайшему значку/надписи. Потом: оставить отметку, привязать к точке или создать новую.'));
+        else if (tool === 'doors') tbar.replaceChildren();
         else if (tool === 'place') tbar.replaceChildren(h('span', {}, h('b', {}, `📍 Где точка «${placeFor?.label}»? `), drawingsOf().length > 1 ? 'Выберите чертёж сверху, если не этот, и ' : '', 'нажмите на её значок или надпись.'),
           h('button', { class: 'sec', onclick: () => { tool = null; placeFor = null; temp = null; toolBar(); viewer.draw(); } }, 'Отмена'));
         else if (tool === 'icon') {
@@ -236,7 +284,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
       updateInfo();
       holder.replaceChildren(
         h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '0 0 6px' } }, search, typeSel, cabSel, stageSel),
-        h('div', { class: 'btns', style: { marginTop: 0 } }, ...viewer.zoomBtns(), selBtn, addBtn, iconBtn, dimBtn, layersBtn), bar, tbar, viewer.el,
+        h('div', { class: 'btns', style: { marginTop: 0 } }, ...viewer.zoomBtns(), selBtn, doorBtn, addBtn, iconBtn, dimBtn, layersBtn), bar, tbar, viewer.el, doorBar,
         h('div', { style: { display: 'flex', gap: '12px', flexWrap: 'wrap', margin: '6px 2px', fontSize: '13px' } }, ...STATUS_COLORS.map(([c, t]) => h('span', {}, h('span', { style: { color: c } }, '■ '), t))),
         h('div', { class: 'btns' },
           h('button', { class: 'sec', onclick: () => linkPoints(d, buf, { onDone: () => draw(d.id) }).catch((e) => toast(e.message)) }, '🔗 Связать точки'),
