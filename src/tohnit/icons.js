@@ -62,7 +62,11 @@ export function chainOrder(items, start = null) {
 }
 
 /** Обозначения: буквы + номер с ведущими нулями (W01, W02…) */
-export const numberLabels = (prefix, n, { from = 1, digits = 2 } = {}) => Array.from({ length: n }, (_, i) => `${prefix}${String(from + i).padStart(digits, '0')}`);
+// step — сколько кабелей (портов) у каждой точки: при step > 1 название — диапазон «A01-02», «A03-04»…
+export const numberLabels = (prefix, n, { from = 1, digits = 2, step = 1 } = {}) => Array.from({ length: n }, (_, i) => {
+  const a = from + i * step; const pad = (v) => String(v).padStart(digits, '0');
+  return step > 1 ? `${prefix}${pad(a)}-${pad(a + step - 1)}` : `${prefix}${pad(a)}`;
+});
 
 /**
  * Нумерация по областям: значки, стоящие кучно, — одна область (связаны, если ближе 3 «обычных» расстояний между соседями).

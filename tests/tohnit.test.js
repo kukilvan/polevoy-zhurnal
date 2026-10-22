@@ -112,6 +112,8 @@ test('тохнит: значки без номеров — такие же по 
   const o = chainOrder(r.items);
   assert.deepEqual(o.map((i) => [i.x, i.y]), [[3, 4], [13, 54], [103, 4]]);
   assert.deepEqual(numberLabels('W', 3), ['W01', 'W02', 'W03']);
+  assert.deepEqual(numberLabels('A', 3, { step: 2 }), ['A01-02', 'A03-04', 'A05-06']);
+  assert.deepEqual(numberLabels('A', 2, { from: 5, digits: 2, step: 3 }), ['A05-07', 'A08-10']);
 });
 
 test('тохнит: PDF с номерами — пометки у точек и страница-легенда', async () => {

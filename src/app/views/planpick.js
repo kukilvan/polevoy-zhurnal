@@ -11,7 +11,7 @@ export const ICON_NOTE = 'значок без номера на чертеже �
 
 // буквы и номер из обозначений группы: A01…A71 → { prefix: 'A', from: 1, digits: 2 }
 function guessNumbering(labels) {
-  const ms = labels.map((l) => String(l).match(/^(.*?)(\d+)$/)).filter(Boolean);
+  const ms = labels.map((l) => String(l).match(/^(.*?)(\d+)(?:-\d+)?$/)).filter(Boolean);
   if (!ms.length) return { prefix: '', from: 1, digits: 2 };
   const prefix = ms[0][1]; const nums = ms.filter((m) => m[1] === prefix).map((m) => +m[2]);
   return { prefix, from: nums.length ? Math.min(...nums) : 1, digits: ms[0][2].length };
@@ -57,7 +57,7 @@ export function iconsPicker({ wk, pages, floor = '', sheet = '', groups = [], on
 
   // параметры вида значка
   let typeId = '';
-  const cab = cablesFor(() => {});
+  const cab = cablesFor(() => drawAll());
   const tp = typePicker({ onChange: (v) => { typeId = v; cab.set(v); } });
   const setType = (t) => { const sel = tp.querySelector('select'); if (![...sel.options].some((o) => o.value === t)) sel.append(h('option', { value: t }, t)); sel.value = t; typeId = t; cab.set(t); };
   const prefIn = h('input', { type: 'text', placeholder: 'например W, C, 1D', style: { width: '110px' }, autocapitalize: 'characters', oninput: () => drawAll() });
@@ -77,7 +77,9 @@ export function iconsPicker({ wk, pages, floor = '', sheet = '', groups = [], on
   const finish = h('button', { onclick: () => { if (found) { toast('Сначала «Добавить» или «Отмена» для текущего вида значков'); return; } finished = true; onDone?.(done); close(); } });
 
   const ordered = () => { if (!found) return []; const its = found.items.filter((_, i) => !off.has(i)); return regionOrder(its, start && its.includes(start) ? start : null); };
-  const labelsNow = () => { const o = ordered(); return numberLabels(prefIn.value.trim(), o.length, { from: Math.max(0, parseInt(fromIn.value, 10) || 1), digits: Math.min(6, Math.max(0, parseInt(digIn.value, 10) || 0)) }); };
+  // сколько кабелей у каждой точки (свои или по типу): 2 кабеля → номера идут парами «A01-02», «A03-04»
+  const perPoint = () => { try { return Math.max(1, (cab.p.get() || []).reduce((n, c) => n + (Number(c.count) || 0), 0)); } catch { return 1; } };
+  const labelsNow = () => { const o = ordered(); return numberLabels(prefIn.value.trim(), o.length, { from: Math.max(0, parseInt(fromIn.value, 10) || 1), digits: Math.min(6, Math.max(0, parseInt(digIn.value, 10) || 0)), step: perPoint() }); };
 
   function refresh() {
     const n = found ? found.items.length - off.size : 0;
