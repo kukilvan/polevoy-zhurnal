@@ -136,21 +136,41 @@ export function combineLabels(labels) {
 
 // Групповое переименование: заменить/убрать текст (в начале, в конце или везде), сдвинуть номер, добавить в начало/конец.
 // Номер — последнее число; пара «17-18» сдвигается целиком. Ведущие нули сохраняются.
-export function renameLabel(label, { find = '', replace = '', where = 'any', shift = 0, prefix = '', suffix = '' } = {}) {
+function replaced(label, { find = '', replace = '', where = 'any' } = {}) {
   let s = String(label);
   if (find) {
     if (where === 'start') { if (s.startsWith(find)) s = replace + s.slice(find.length); }
     else if (where === 'end') { if (s.endsWith(find)) s = s.slice(0, s.length - find.length) + replace; }
     else s = s.split(find).join(replace);
   }
-  const n = Math.trunc(Number(shift) || 0);
-  if (n) {
-    const pad = (v, w) => (v < 0 ? String(v) : String(v).padStart(w, '0'));
-    const pair = s.match(/^(.*?)(\d+)([-_/])(\d+)(\D*)$/);
-    if (pair && +pair[4] === +pair[2] + 1) s = `${pair[1]}${pad(+pair[2] + n, pair[2].length)}${pair[3]}${pad(+pair[4] + n, pair[4].length)}${pair[5]}`;
-    else { const m = s.match(/^(.*?)(\d+)(\D*)$/); if (m) s = `${m[1]}${pad(+m[2] + n, m[2].length)}${m[3]}`; }
+  return s;
+}
+// Сдвиг номера: пара «17-18» двигается целиком; возвращает { text, nums } — новая строка и новые значения номера(ов)
+function shifted(s, n) {
+  const pad = (v, w) => (v < 0 ? String(v) : String(v).padStart(w, '0'));
+  const pair = s.match(/^(.*?)(\d+)([-_/])(\d+)(\D*)$/);
+  if (pair && +pair[4] === +pair[2] + 1) {
+    const a = +pair[2] + n; const b = +pair[4] + n;
+    return { text: `${pair[1]}${pad(a, pair[2].length)}${pair[3]}${pad(b, pair[4].length)}${pair[5]}`, nums: [a, b] };
   }
+  const m = s.match(/^(.*?)(\d+)(\D*)$/);
+  if (m) { const a = +m[2] + n; return { text: `${m[1]}${pad(a, m[2].length)}${m[3]}`, nums: [a] }; }
+  return { text: s, nums: [] };
+}
+// Групповое переименование: заменить/убрать текст (в начале, в конце или везде), сдвинуть номер, добавить в начало/конец.
+// Номер — последнее число; пара «17-18» сдвигается целиком. Ведущие нули сохраняются.
+export function renameLabel(label, op = {}) {
+  const { shift = 0, prefix = '', suffix = '' } = op;
+  let s = replaced(label, op);
+  const n = Math.trunc(Number(shift) || 0);
+  if (n) s = shifted(s, n).text;
   return `${prefix}${s}${suffix}`;
+}
+// Проблема сдвига: 'negative' — номер стал бы отрицательным (нельзя), 'zero' — станет нулём (предупредить), '' — всё в порядке
+export function renameIssue(label, op = {}) {
+  const n = Math.trunc(Number(op.shift) || 0); if (!n) return '';
+  const { nums } = shifted(replaced(label, op), n);
+  return nums.some((v) => v < 0) ? 'negative' : nums.some((v) => v === 0) ? 'zero' : '';
 }
 
 // Название «занято» только внутри одного шкафа: одинаковые названия в разных шкафах допустимы, а если шкаф есть только у одной

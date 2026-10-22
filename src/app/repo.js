@@ -36,6 +36,8 @@ const track = (promise, n) => {
   return promise;
 };
 
+let snapFn = null;
+export const setSnapProvider = (f) => { snapFn = f; };
 const clean = (obj) => JSON.parse(JSON.stringify(obj, (k, v) => (v === undefined ? null : v)));
 const strip = (obj) => { const c = clean(obj); delete c._pending; return c; };
 
@@ -302,6 +304,8 @@ export function createRepo(backend, user) {
       // названия точек и шкафов — латиницей, откуда бы они ни пришли (набор руками, файл, тохнит, импорт): С108 кириллицей → C108
       let cabs = null;
       ops = ops.map((op) => {
+        // запись дохa: запоминаем текст строки на момент сохранения — потом видно, изменились ли данные (длина, число кабелей, точки…)
+        if (op.coll === 'entries' && op.data && snapFn && op.action !== 'rollback' && !op.data.deleted) { try { return { ...op, data: { ...op.data, snap: snapFn(op.id, op.data) } }; } catch { return op; } }
         if (op.coll !== 'points' || !op.data) return op;
         const d = { ...op.data };
         if (typeof d.label === 'string') d.label = fixLatin(d.label);

@@ -16,7 +16,7 @@ export function missingStages(point, ctx) {
     if (st['Протяжка'].done && !info.pulled) o.push('Дотянуть');
     if (st['Хивут'].total && !info.hived) o.push('Хивут');
     if (st['Установка'].total && info.install !== 'Установлено') o.push('Установка');
-    if (st['Проверка'].total && !info.checked) o.push('Проверка');
+    if (st['Проверка'].total && (!info.checked || info.checkResult === 'Не работает')) o.push('Проверка');  // неисправная — проверить заново
     return o;
   }
   const out = [];
@@ -24,7 +24,7 @@ export function missingStages(point, ctx) {
   if (has('Протяжка') && !info.pulled && info.pullDone) out.push('Дотянуть');
   if (has('Хивут') && !info.hived) out.push('Хивут');
   if (has('Установка') && installBinding(type).mode !== 'none' && info.install !== 'Установлено') out.push('Установка');
-  if (has('Проверка') && !info.checked) out.push('Проверка');
+  if (has('Проверка') && (!info.checked || info.checkResult === 'Не работает')) out.push('Проверка');  // неисправная — проверить заново
   return out;
 }
 

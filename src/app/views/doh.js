@@ -393,6 +393,10 @@ function batchForm(day) {
   });
 }
 
+// Данные записи изменились с момента сохранения (длина точки, число кабелей, удалённая точка…) — дох показывает уже другие цифры
+const RED = '#ff453a';
+const changedSince = (e, ctx) => !!e.snap && e.snap !== entryLine(e, ctx, 'ru');
+
 // ---------- экран дня ----------
 function dayScreen(day, ui) {
   const ctx = state.ctx; const entries = dayEntries(day, ctx);
@@ -406,9 +410,13 @@ function dayScreen(day, ui) {
       h('button', { class: 'sec', onclick: () => dayForm(day, ui) }, '✏️ День')),
     h('div', { class: 'card' },
       h('div', { style: { fontSize: '18px', fontWeight: 700 } }, dateText(day.date)),
+      entries.some((e) => changedSince(e, ctx)) ? h('div', { style: { color: RED, fontWeight: 600, margin: '6px 0' } }, '⚠ В этом дохе изменились данные с момента записи (красные строки). Если дох уже отправлен — он отличается от того, что видно сейчас.',
+        h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => { getRepo().save(currentProject().id, entries.filter((e) => changedSince(e, ctx)).map((e) => ({ coll: 'entries', id: e.id, data: {} }))); toast('Принято: пометки сняты'); } }, '✔ Принять новые данные'))) : null,
       entries.length ? h('div', { style: { marginTop: '8px' } }, entries.map((e) =>
         h('div', { class: 'item', onclick: () => entryForm(day, e) },
-          h('div', { class: 'name' }, entryLine(e, ctx, 'ru') || '—', e.updatedByName ? h('div', { class: 'sub' }, e.updatedByName) : null))))
+          h('div', { class: 'name' }, entryLine(e, ctx, 'ru') || '—',
+            changedSince(e, ctx) ? h('div', { class: 'sub', style: { color: RED, fontWeight: 600 } }, `⚠ данные изменились после записи (было: ${e.snap.replace(/\n/g, ' / ')})`) : null,
+            e.updatedByName ? h('div', { class: 'sub' }, e.updatedByName) : null))))
         : hint(ui, 'Записей пока нет. «Добавить работу» — одна работа (можно сразу на много точек). «Несколько работ» — выбрать точки один раз и отметить сразу несколько работ.', 'doh', '📖 Что такое дох и как его заполнять'),
       h('div', { class: 'btns' },
         h('button', { onclick: () => entryForm(day, null) }, '➕ Добавить работу'),
@@ -433,6 +441,7 @@ export function dohView(ui) {
     days.length ? h('div', { class: 'card', style: { padding: 0, marginTop: '10px' } }, days.map((d) => {
       const n = dayEntries(d, ctx).length;
       return h('div', { class: 'item', onclick: () => { openDayId = d.id; ui.render(); } },
-        h('div', { class: 'name' }, dateText(d.date), h('div', { class: 'sub' }, `${n ? `записей: ${n}` : 'пока без записей'}${d.createdByName ? ` · ${d.createdByName}` : ''}`)));
+        h('div', { class: 'name' }, dateText(d.date), dayEntries(d, ctx).some((e) => changedSince(e, ctx)) ? h('span', { style: { color: RED, fontWeight: 700 } }, '  ⚠ данные изменились') : null,
+          h('div', { class: 'sub' }, `${n ? `записей: ${n}` : 'пока без записей'}${d.createdByName ? ` · ${d.createdByName}` : ''}`)));
     })) : hint(ui, 'Дней пока нет. Нажмите «Сегодня» и внесите сделанные работы: из них соберётся дох — отчёт за день.', 'doh', '📖 Что такое дох и как его заполнять'));
 }

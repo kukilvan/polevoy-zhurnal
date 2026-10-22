@@ -56,3 +56,22 @@ test('инструкции: тип файла, видимость, группы 
   assert.deepEqual(groupManuals(visibleManuals(l, 'me@x.com')).map((g) => g.section), ['Замки и двери', 'Хивут', 'Моё']);
   assert.deepEqual(groupManuals(visibleManuals(l, 'me@x.com'), 'хив').map((g) => g.items[0].id), [1]);
 });
+
+import { generateLabels, generatedTotal, parseSuffixes, renameLabel, renameIssue, buildContext, missingStages, CATALOG, POINT_TYPES, CABLES, CONFIGS, UNITS, CULPRITS, DELAY_REASONS } from '../src/domain/index.js';
+test('пачка: пара сама берёт шаг 2, повторы суффиксов убираются, обрезка считается', () => {
+  assert.deepEqual(generateLabels({ prefix: 'A-', from: 1, to: 6, step: 1, digits: 2, pair: true }), ['A-01-02', 'A-03-04', 'A-05-06']);
+  assert.deepEqual(generateLabels({ prefix: 'A-', from: 1, to: 2, suffixes: parseSuffixes('A, b, A') }), ['A-1A', 'A-1b', 'A-2A', 'A-2b']);
+  assert.equal(generatedTotal({ from: 1, to: 5000 }), 5000);
+  assert.equal(generateLabels({ from: 1, to: 5000 }).length, 2000);
+});
+test('переименование: отрицательный номер запрещён, нулевой — предупреждение', () => {
+  assert.equal(renameIssue('AP-5', { shift: -9 }), 'negative'); assert.equal(renameIssue('AP-09', { shift: -9 }), 'zero');
+  assert.equal(renameIssue('AP-5', { shift: -2 }), ''); assert.equal(renameIssue('A-17-18', { shift: -17 }), 'zero'); assert.equal(renameIssue('A-17-18', { shift: -18 }), 'negative');
+  assert.equal(renameLabel('AP-09', { shift: 2, prefix: 'X' }), 'XAP-11');
+});
+test('что осталось: неисправная точка требует повторной проверки', () => {
+  const pt = { id: 'c1', projectId: 'P1', label: 'C1', cabinet: '1A', typeId: 'Камера' };
+  const mk = (result) => buildContext({ projects: [{ id: 'P1' }], points: [pt], days: [{ id: 'D1', projectId: 'P1', date: '2026-10-05' }], entries: [{ id: 'e1', dayId: 'D1', workType: 'Проверка', workId: 'CHK_FLUKE', pointIds: ['c1'], result }],
+    journal: [{ id: 'j', entryId: 'e1', pointId: 'c1' }], cabinetSettings: [], catalog: CATALOG, types: POINT_TYPES, cables: CABLES, configs: CONFIGS, units: UNITS, culprits: CULPRITS, delayReasons: DELAY_REASONS });
+  assert.ok(missingStages(pt, mk('Не работает')).includes('Проверка')); assert.ok(!missingStages(pt, mk('Работает')).includes('Проверка'));
+});

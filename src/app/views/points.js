@@ -1,7 +1,7 @@
 // Точки: форма точки, генератор пачкой, карточка точки с историей, вкладка «Точки».
 import { h, formModal, openModal, confirmDialog, toast, qtyList, attachShortcuts } from '../ui.js';
 import { state, getRepo, pointsSorted, infoOf, currentProject } from '../store.js';
-import { generateLabels, parseSuffixes, comparePoints, renameLabel, sameLabelClash, labelKey, inheritedFromCables, usesConfig, missingStages, hasDeviceId, normalizeMac, findDuplicate } from '../../domain/index.js';
+import { generateLabels, generatedTotal, MAX_GENERATED, parseSuffixes, comparePoints, renameLabel, renameIssue, sameLabelClash, labelKey, inheritedFromCables, usesConfig, missingStages, hasDeviceId, normalizeMac, findDuplicate } from '../../domain/index.js';
 import { scanDevice } from '../scan.js';
 import { statusClass } from './project.js';
 import { hint } from './guide.js';
@@ -215,7 +215,11 @@ export function generatorForm() {
   const labelsOf = (v) => generateLabels({ prefix: v.prefix ?? '', from: v.from, to: v.to, step: v.step ?? 1, digits: v.digits ?? 0, suffixes: parseSuffixes(v.suffixes), pair: !!v.pair });
   formModal({
     title: 'Добавить точки пачкой', fields, values: { step: 1, digits: 0, typeId: typeOptions()[0]?.value, configId: doorPins()[0] }, submitLabel: 'Создать',
-    preview: (v) => { const l = labelsOf(v); return l.length ? `Пример: ${l.slice(0, 4).join(', ')}${l.length > 4 ? ' …' : ''}\nВсего: ${l.length}` : 'Укажите «от» и «до»'; },
+    preview: (v) => {
+      const l = labelsOf(v); if (!l.length) return 'Укажите «от» и «до»';
+      const total = generatedTotal({ from: v.from, to: v.to, step: v.step ?? 1, suffixes: parseSuffixes(v.suffixes), pair: !!v.pair });
+      return `Пример: ${l.slice(0, 4).join(', ')}${l.length > 4 ? ' …' : ''}\nВсего: ${l.length}${v.pair && !(v.step >= 2) ? '\nДля пары шаг — 2 (01-02, 03-04…), чтобы номера не повторялись' : ''}${total > MAX_GENERATED ? `\n⚠ За один раз создаётся не больше ${MAX_GENERATED} — остальные (${total - MAX_GENERATED}) не создадутся` : ''}`;
+    },
     onSubmit: async (v) => {
       const labels = labelsOf(v);
       if (!labels.length) { toast('Нечего создавать: проверьте «от», «до» и шаг'); return false; }
@@ -434,21 +438,23 @@ export function renameForm(ids, done) {
   let plan = [];
   const calc = () => {
     const op = { find: find.value, replace: repl.value, where: where.value, shift: shift.value, prefix: prefix.value, suffix: suffix.value };
-    plan = pts.map((p) => ({ p, to: renameLabel(p.label, op).trim() }));
+    plan = pts.map((p) => ({ p, to: renameLabel(p.label, op).trim(), issue: renameIssue(p.label, op) }));
     // повтор — только в одном и том же шкафу (в разных шкафах и у точек без шкафа одинаковые названия можно)
     const cnt = new Map(); plan.forEach((x) => { const k = labelKey(x.to, x.p.cabinet); cnt.set(k, (cnt.get(k) || 0) + 1); });
-    plan.forEach((x) => { x.bad = !x.to ? 'пустое название' : others.some((o) => sameLabelClash(o, { label: x.to, cabinet: x.p.cabinet })) ? (x.p.cabinet ? 'уже есть в этом шкафу' : 'уже есть среди точек без шкафа') : cnt.get(labelKey(x.to, x.p.cabinet)) > 1 ? 'повтор' : ''; });
+    plan.forEach((x) => { x.bad = !x.to ? 'пустое название' : x.issue === 'negative' ? 'номер стал бы отрицательным' : others.some((o) => sameLabelClash(o, { label: x.to, cabinet: x.p.cabinet })) ? (x.p.cabinet ? 'уже есть в этом шкафу' : 'уже есть среди точек без шкафа') : cnt.get(labelKey(x.to, x.p.cabinet)) > 1 ? 'повтор' : ''; });
     const changed = plan.filter((x) => x.to !== x.p.label); const bad = plan.filter((x) => x.bad && x.to !== x.p.label);
     prev.replaceChildren(...plan.map((x) => h('div', { class: 'item', style: { cursor: 'default' } },
       h('div', { class: 'name' }, x.p.label, h('span', { class: 'mut' }, '  →  '), h('b', { style: { color: x.bad && x.to !== x.p.label ? '#ff453a' : x.to !== x.p.label ? '#30a14e' : '' } }, x.to || '—'),
         x.bad && x.to !== x.p.label ? h('div', { class: 'sub', style: { color: '#ff453a' } }, x.bad) : null))));
-    info.textContent = `Изменится: ${changed.length} из ${plan.length}${bad.length ? ` · ошибок: ${bad.length} — исправьте, иначе сохранить нельзя` : ''}`;
+    const zeros = changed.filter((x) => x.issue === 'zero' && !x.bad);
+    info.textContent = `Изменится: ${changed.length} из ${plan.length}${zeros.length ? ` · ⚠ номер 0 у ${zeros.length}` : ''}${bad.length ? ` · ошибок: ${bad.length} — исправьте, иначе сохранить нельзя` : ''}`;
     go.disabled = !changed.length || !!bad.length; go.textContent = `🏷 Переименовать (${changed.length})`;
   };
   [find, where, repl, shift, prefix, suffix].forEach((el) => el.addEventListener('input', calc));
   go.onclick = async () => {
     const changed = plan.filter((x) => x.to !== x.p.label);
-    if (!(await confirmDialog(`Переименовать точек: ${changed.length}? История работ у точек останется.`, { yes: 'Переименовать' }))) return;
+    const zeros = changed.filter((x) => x.issue === 'zero');
+    if (!(await confirmDialog(`Переименовать точек: ${changed.length}? История работ у точек останется.${zeros.length ? `\n\n⚠ У ${zeros.length} точек номер станет 0 (${zeros.slice(0, 3).map((x) => x.to).join(', ')}${zeros.length > 3 ? '…' : ''}).` : ''}`, { yes: 'Переименовать' }))) return;
     getRepo().save(currentProject().id, changed.map((x) => ({ coll: 'points', id: x.p.id, data: { label: x.to, ...(keep.checked && !x.p.planName && x.p.pos ? { planName: x.p.label } : {}) } })));
     toast(`Переименовано: ${changed.length}`); c(); done?.();
   };
@@ -484,12 +490,29 @@ export function bulkEditForm(ids, done) {
       { key: 'clearPort', label: 'Стереть порт в свитче', type: 'checkbox', visible: (v) => v.portFrom === undefined },
       { key: 'noteAdd', label: 'Добавить к примечанию', type: 'textarea', hint: 'Допишется к примечанию каждой точки (старое не стирается)' },
     ],
-    onSubmit: (v) => {
+    onSubmit: async (v) => {
       if (!v.cabinet && !v.floor && !v.typeId && !v.setCables && v.length === undefined && !v.clearLength && !v.delayReasonId && !v.noteAdd && !v.configId && v.portFrom === undefined && !v.clearPort) { toast('Ничего не выбрано для изменения'); return false; }
       if (v.cabinet) {   // в шкафу не должно появиться двух точек с одним обозначением
         const sel = ids.map((id) => state.ctx.points.get(id)).filter(Boolean); const seenL = new Set();
         const bad = sel.find((pt) => { if (seenL.has(pt.label)) return true; seenL.add(pt.label); return [...state.ctx.points.values()].some((x) => !ids.includes(x.id) && sameLabelClash(x, { label: pt.label, cabinet: v.cabinet })); });
         if (bad) { toast(`«${bad.label}» уже есть в шкафу ${v.cabinet} — перенести нельзя`); return false; }
+      }
+      let clearPanel = new Set();
+      if (v.cabinet) {   // порты панели переезжают вместе с точкой: если в новом шкафу они заняты или закрыты крестиком — предупредить
+        const sel = ids.map((id) => state.ctx.points.get(id)).filter((pt) => pt && panelOf(pt).length && (pt.cabinet || '') !== v.cabinet);
+        if (sel.length) {
+          const busy = panelOccupancy([...state.ctx.points.values()].filter((x) => !ids.includes(x.id) && (x.cabinet || '') === v.cabinet));
+          const closed = blockedOf(currentProject().racks?.[v.cabinet]); const taken = new Set();
+          const bad = sel.filter((pt) => {
+            const hit = panelOf(pt).some((x) => busy.has(`${v.cabinet}|${slotKey(x)}`) || closed.has(slotKey(x)) || taken.has(slotKey(x)));
+            panelOf(pt).forEach((x) => taken.add(slotKey(x))); return hit;
+          });
+          if (bad.length) {
+            const ok = await confirmDialog(`В шкафу ${v.cabinet} порты панели уже заняты или закрыты у ${bad.length} точек (${bad.slice(0, 3).map((x) => x.label).join(', ')}${bad.length > 3 ? '…' : ''}). Перенести их без портов панели (порты придётся назначить заново)?`, { yes: 'Перенести без портов' });
+            if (!ok) return false;
+            clearPanel = new Set(bad.map((x) => x.id));
+          }
+        }
       }
       const portOf = new Map();
       if (v.portFrom !== undefined) {
@@ -501,6 +524,7 @@ export function bulkEditForm(ids, done) {
       const ops = ids.map((id) => {
         const data = {};
         if (v.cabinet) data.cabinet = v.cabinet;
+        if (clearPanel.has(id)) data.panel = [];
         if (v.floor) data.floor = v.floor;
         if (v.typeId) { data.typeId = v.typeId; data.devices = null; data.cables = null; data.cableOverride = null; if (!isDoorType(v.typeId)) data.configId = undefined; }
         const pt = state.ctx.points.get(id);
