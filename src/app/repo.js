@@ -229,7 +229,9 @@ export function createFirestoreBackend(db, uid) {
         const batch = writeBatch(db);
         writes.slice(i, i + CHUNK).forEach((w) => {
           const ref = w.coll === 'projects' ? doc(db, 'projects', w.id) : doc(db, 'projects', pid, w.coll, docKey(w.id));
-          batch.set(ref, { ...w.data, updatedAtServer: serverTimestamp() }, { merge: true });
+          const data = { ...w.data, updatedAtServer: serverTimestamp() };
+          // replace: словари в записи заменяются целиком (иначе merge оставляет удалённые ключи)
+          batch.set(ref, data, w.replace ? { mergeFields: Object.keys(data) } : { merge: true });
         });
         chunks.push(batch);
       }
@@ -259,7 +261,7 @@ export function createFirestoreBackend(db, uid) {
       return onSnapshot(doc(db, 'users', uid, 'prefs', 'main'), (snap) => cb(snap.data() || {}),
         (e) => error('Чтение настроек пользователя', `${e.code || ''} ${e.message || e}`));
     },
-    saveUserPrefs(_uid, patch) { return setDoc(doc(db, 'users', uid, 'prefs', 'main'), patch, { merge: true }); },
+    saveUserPrefs(_uid, patch, replace = false) { return setDoc(doc(db, 'users', uid, 'prefs', 'main'), patch, replace ? { mergeFields: Object.keys(patch) } : { merge: true }); },
   };
 }
 
@@ -286,7 +288,7 @@ export function createRepo(backend, user) {
     backend, user, by,
     listenProjects: (cb) => backend.listenProjects(user.uid, cb),
     listenUserPrefs: (cb) => backend.listenUserPrefs(user.uid, (p) => { api.prefs = p || {}; cb(api.prefs); }),
-    saveUserPrefs: (patch) => backend.saveUserPrefs(user.uid, patch),
+    saveUserPrefs: (patch, replace = false) => backend.saveUserPrefs(user.uid, patch, replace),
     prefs: {},
     listenColl(pid, name, cb) {
       return backend.listenColl(pid, name, (docs) => {
@@ -339,10 +341,11 @@ export function createRepo(backend, user) {
         ?.catch?.((e) => error('Создание проекта отклонено', `${e.code || ''} ${e.message || e}`));
       return pid;
     },
-    saveProject(pid, patch) {
+    // replace: true — словари в patch заменяются целиком (чтобы можно было убрать ключ)
+    saveProject(pid, patch, { replace = false } = {}) {
       const now = Date.now();
       const data = clean({ ...patch, id: pid, updatedBy: by.uid, updatedByName: by.name, updatedAt: now });
-      track(backend.commit(pid, [{ coll: 'projects', id: pid, data }]), 1)?.catch?.((e) => error('Запись проекта отклонена', `${e.code || ''} ${e.message || e}`));
+      track(backend.commit(pid, [{ coll: 'projects', id: pid, data, replace }]), 1)?.catch?.((e) => error('Запись проекта отклонена', `${e.code || ''} ${e.message || e}`));
     },
     // История изменений и откат. Откат сам записывается в историю, поэтому его тоже можно отменить.
     loadHistory: (pid, since, max = 2000) => backend.loadHistory(pid, since, max),

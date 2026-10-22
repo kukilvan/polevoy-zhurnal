@@ -2,7 +2,7 @@
 import { h, openModal, toast, confirmDialog } from '../ui.js';
 import { state, subscribe, getRepo, currentProject } from '../store.js';
 import { DOOR_PARTS, doorDevices, applyDoorRules, autoDoorCables, makeDoorCfg, isDoorCfg, doorLibraryOps } from '../../domain/index.js';
-import { allDoorCfgs, pinsOf, useDoorCfg, setPins, pin, unpin, canDeleteFromPool, deleteFromPool, usageOf, onDoorPool } from '../doorpool.js';
+import { allDoorCfgs, pinsOf, useDoorCfg, setPins, pin, unpin, deleteDoorCfg, usageOf, onDoorPool } from '../doorpool.js';
 import { itemForm } from './settings.js';
 import { doorChips } from './doorchips.js';
 import { doorColorOf } from '../../domain/index.js';
@@ -109,7 +109,7 @@ export function doorField(key, label, { bulk = false, visible, hint } = {}) {
     build: (api) => {
       let val = api.value || '';
       const name = h('div', {}); const el = h('div', {});
-      const paint = () => {
+  const paint = () => {
         const c = val && val !== '__clear' ? (allDoorCfgs().get(val) || state.ctx.configs.get(val)) : null;
         name.replaceChildren(c ? doorChips(c, { big: true }) : h('b', {}, val === '__clear' ? '✖ Убрать конфигурацию' : bulk ? 'Не менять' : '— не выбрана —'));
         el.replaceChildren(name, h('div', { class: 'btns', style: { marginTop: '4px' } },
@@ -127,6 +127,11 @@ export function doorField(key, label, { bulk = false, visible, hint } = {}) {
 /** Вкладка «Конфигурации дверей»: закреплённые (порядок, открепить), собрать новую, общий пул, старые (только работы) */
 export function doorConfigsView() {
   const box = h('div', {});
+  const delBtn = (c) => !c.standard ? h('button', { class: 'sec', style: { padding: '2px 10px' }, title: 'Удалить конфигурацию', onclick: async () => {
+            if (usageOf(c.id)) { toast(`Нельзя: она стоит на дверях проекта (${usageOf(c.id)}). Сначала смените им конфигурацию.`); return; }
+            if (!(await confirmDialog(`Удалить конфигурацию «${c.name}»? Она пропадёт из проекта и (у администратора) из общего пула.`, { yes: 'Удалить', danger: true }))) return;
+            const r = deleteDoorCfg(c.id); toast(r.ok ? (r.stays ? 'Убрана из проекта. Из общего пула удаляет только администратор' : 'Удалена') : `Нельзя: ${r.reason}`);
+          } }, '🗑') : null;
   const paint = () => {
     if (!state.ctx) return;
     const all = allDoorCfgs(); const pins = pinsOf(); const list = pins.map((id) => all.get(id)).filter(Boolean);
@@ -143,16 +148,13 @@ export function doorConfigsView() {
         h('span', { style: { display: 'flex', gap: '4px' } },
           h('button', { class: 'sec', style: { padding: '2px 10px' }, disabled: i === 0, onclick: () => move(i, -1) }, '↑'),
           h('button', { class: 'sec', style: { padding: '2px 10px' }, disabled: i === list.length - 1, onclick: () => move(i, 1) }, '↓'),
-          h('button', { class: 'sec', style: { padding: '2px 10px' }, title: 'Открепить', onclick: () => unpin(c.id) }, '✖'))))) : h('div', { class: 'empty' }, 'Ничего не закреплено'),
+          h('button', { class: 'sec', style: { padding: '2px 10px' }, title: 'Открепить', onclick: () => unpin(c.id) }, '✖'), delBtn(c))))) : h('div', { class: 'empty' }, 'Ничего не закреплено'),
       h('div', { class: 'group', style: { padding: '12px 0 4px' } }, `Общий пул (${rest.length})`),
       rest.length ? h('div', {}, ...rest.map((c) => h('div', { class: 'wk cfg' },
         h('div', {}, doorChips(c), sub(c) ? h('div', { class: 'wk-sub' }, sub(c)) : null),
         h('span', { style: { display: 'flex', gap: '4px' } },
           h('button', { class: 'sec', style: { padding: '2px 10px' }, title: 'Закрепить', onclick: () => pin(c) }, '📌'),
-          canDeleteFromPool() ? h('button', { class: 'sec', style: { padding: '2px 10px' }, title: 'Удалить из общего пула', onclick: async () => {
-            if (!(await confirmDialog(`Удалить из общего пула «${c.name}»?${usageOf(c.id) ? ` Двери этого проекта (${usageOf(c.id)}) продолжат работать — копия есть в проекте.` : ''}`, { yes: 'Удалить', danger: true }))) return;
-            deleteFromPool(c.id); toast('Удалено из пула');
-          } }, '🗑') : null)))) : h('div', { class: 'empty' }, 'Пусто'),
+          delBtn(c))))) : h('div', { class: 'empty' }, 'Пусто'),
       legacy.length ? h('div', {}, h('div', { class: 'group', style: { padding: '12px 0 4px' } }, `Старые конфигурации — только работы (${legacy.length})`),
         h('div', { class: 'card', style: { padding: 0 } }, ...legacy.map((c) => h('div', { class: 'item', onclick: () => itemForm('configs', c) },
           h('div', { class: 'name' }, c.name, h('div', { class: 'sub' }, (c.components || []).map((id) => state.ctx.catalog.get(id)?.name || id).join(' + '))))))) : null].filter(Boolean));

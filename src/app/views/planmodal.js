@@ -297,7 +297,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
             h('div', { style: { flex: 1, minWidth: '200px' } }, tp),
             ...Object.entries(icons).map(([t, ic]) => h('span', { style: { display: 'inline-flex', alignItems: 'center', gap: '4px', border: '1px solid #ddd', borderRadius: '6px', padding: '2px 6px' } },
               h('img', { src: ic.png, style: { height: '22px', background: '#fff' } }), t,
-              h('button', { class: 'sec', style: { padding: '0 6px' }, title: 'Убрать значок', onclick: async () => { if (!(await confirmDialog(`Убрать значок типа «${t}»?`, { yes: 'Убрать' }))) return; const p = currentProject(); const n = { ...(p.typeIcons || {}) }; delete n[t]; getRepo().saveProject(p.id, { typeIcons: n }); setTimeout(() => { toolBar(); viewer.draw(); }, 300); } }, '✕'))));
+              h('button', { class: 'sec', style: { padding: '0 6px' }, title: 'Убрать значок', onclick: async () => { if (!(await confirmDialog(`Убрать значок типа «${t}»?`, { yes: 'Убрать' }))) return; const p = currentProject(); const n = { ...(p.typeIcons || {}) }; delete n[t]; getRepo().saveProject(p.id, { typeIcons: n }, { replace: true }); setTimeout(() => { toolBar(); viewer.draw(); }, 300); } }, '✕'))));
         } else tbar.replaceChildren();
       };
       selBar = () => {

@@ -50,5 +50,19 @@ export function pin(cfg) { const id = typeof cfg === 'string' ? cfg : useDoorCfg
 export const unpin = (id) => setPins(pinsOf().filter((x) => x !== id));
 export const canDeleteFromPool = () => isPoolAdmin();
 export function deleteFromPool(id) { if (isPoolAdmin()) getRepo().savePool([{ coll: 'doorcfg', id, remove: true }]); }
+/** Удаление конфигурации: открепить, убрать копию из проекта (если нет дверей с ней) и — администратору — из общего пула.
+ *  Возвращает { ok, reason, pool } */
+export function deleteDoorCfg(id) {
+  const c = allDoorCfgs().get(id);
+  if (!c) return { ok: false, reason: 'нет такой' };
+  if (c.standard) return { ok: false, reason: 'стандартную удалить нельзя — её можно только открепить' };
+  const n = usageOf(id); if (n) return { ok: false, reason: `она стоит на дверях проекта (${n}) — сначала смените им конфигурацию` };
+  const p = currentProject(); const repo = getRepo();
+  if (pinsOf().includes(id)) unpin(id);
+  if (state.ctx.configs.has(id)) repo.remove(p.id, 'configs', id);
+  const admin = canDeleteFromPool();
+  if (admin && doorPool.has(id)) deleteFromPool(id);
+  return { ok: true, pool: admin, stays: !admin && doorPool.has(id) };
+}
 /** Сколько точек проекта с этой конфигурацией */
 export const usageOf = (id) => [...state.ctx.points.values()].filter((p) => p.configId === id).length;

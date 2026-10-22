@@ -256,7 +256,7 @@ function allWords() {
 function wordForm(w) {
   const extra = [];
   if (w?.kind === 'edited') extra.push({ label: 'Вернуть как было', onClick: async () => {
-    const e = { ...(prefs().dictEdits || {}) }; delete e[w.key]; saveP({ dictEdits: e }); toast('Возвращено'); return true; } });
+    const e = { ...(prefs().dictEdits || {}) }; delete e[w.key]; getRepo().saveUserPrefs({ dictEdits: e }, true); toast('Возвращено'); return true; } });
   if (w) extra.push({ label: 'Удалить слово', kind: 'danger', onClick: async () => {
     if (!(await confirmDialog(`Удалить слово «${w.a}» из словарика?`, { yes: 'Удалить', danger: true }))) return false;
     if (w.kind === 'mine') saveP({ dictWords: myWords().filter((x) => x.id !== w.key) });
