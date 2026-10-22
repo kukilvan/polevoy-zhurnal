@@ -17,6 +17,7 @@ import { doorChips, doorShortChip } from './doorchips.js';
 import { ensureDoorCfg, pinsOf as doorPins, allDoorCfgs } from '../doorpool.js';
 import { drawingFor, drawingsOf } from '../drawings.js';
 import { typeMatch, typeFilterOptions, typeFilterValid } from '../typegroups.js';
+import { cfgMatch, cfgFilterOptions, cfgFilterValid } from '../cfgfilter.js';
 import { planModal } from './planmodal.js';
 import { choosePoint } from './pointchooser.js';
 import { panelText, panelOf, parsePanelPorts, panelOccupancy, rackPortsOf, matchesPanelQuery, fmtPanelPort, slotKey, subsOf, subNameOf, blockedOf } from '../../domain/rack.js';
@@ -362,7 +363,7 @@ function leftTasksOf(point) {
 }
 function remainingModal() {
   const ctx = state.ctx;
-  let fWork = ''; let fCab = ''; let fType = ''; let fPull = ''; const chosen = new Set();
+  let fWork = ''; let fCab = ''; let fType = ''; let fPull = ''; let fCfg = ''; const chosen = new Set();
   const all = pointsSorted().map((point) => ({ point, left: leftTasksOf(point), info: infoOf(point) })).filter((r) => r.left.length);
   const body = h('div', {});
   let close = () => {};
@@ -372,12 +373,13 @@ function remainingModal() {
   const workOpts = [...counts.values()].sort((a, b) => order(a.key) - order(b.key) || a.label.localeCompare(b.label, 'ru'));
   const cabs = [...new Set(all.map((r) => r.point.cabinet || ''))].sort((a, b) => a.localeCompare(b, 'ru', { numeric: true }));
   const shown = () => all.filter((r) => (!fWork || r.left.some((t) => t.key === fWork)) && (!fCab || (fCab === '__none' ? !r.point.cabinet : r.point.cabinet === fCab))
-    && typeMatch(fType, r.point.typeId) && (!fPull || (fPull === 'yes' ? r.info.pulled : !r.info.pulled)));
+    && typeMatch(fType, r.point.typeId) && cfgMatch(fCfg, r.point) && (!fPull || (fPull === 'yes' ? r.info.pulled : !r.info.pulled)));
   const sel = (first, opts, cur, set) => h('select', { onchange: (e) => { set(e.target.value); fill(); } }, h('option', { value: '' }, first), ...opts.map(([v, t]) => h('option', { value: v, selected: v === cur }, t)));
   const filters = h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', marginBottom: '6px' } },
     sel('Все работы', workOpts.map((w) => [w.key, `${w.label} (${w.n})`]), fWork, (v) => { fWork = v; }),
     cabs.length > 1 ? sel('Все шкафы', cabs.map((c) => (c ? [c, `Шкаф ${c}`] : ['__none', 'Без шкафа'])), fCab, (v) => { fCab = v; }) : null,
     sel('Все типы', typeFilterOptions(all.map((r) => r.point.typeId)), fType, (v) => { fType = v; }),
+    cfgFilterOptions(all.map((r) => r.point)).length ? sel('Все конфигурации', cfgFilterOptions(all.map((r) => r.point)), fCfg, (v) => { fCfg = v; }) : null,
     sel('Протяжка: все', [['yes', 'Только протянутые'], ['no', 'Ещё не протянутые']], fPull, (v) => { fPull = v; }));
   const bar = h('div', { class: 'btns', style: { marginTop: '6px' } });
   const listBox = h('div', {});
@@ -514,7 +516,7 @@ export function bulkEditForm(ids, done) {
   });
 }
 
-let searchText = ''; let fCab = ''; let fType = ''; let fPlan = '';
+let searchText = ''; let fCab = ''; let fType = ''; let fPlan = ''; let fCfg = '';
 const planOk = (p) => !fPlan || (fPlan === 'off' ? !drawingFor(p) : !!drawingFor(p));  // «Нет на плане» / «На плане»
 export function meterView(ui) {
   const list = h('div', { class: 'card', style: { padding: 0 } });
@@ -522,7 +524,7 @@ export function meterView(ui) {
   const withLen = total.filter((p) => p.length !== undefined && p.length !== null && p.length !== '').length;
   const bar = h('div', { class: 'card selbar', style: { position: 'sticky', top: '53px', zIndex: 6, margin: '8px 0 0' } });
   const shown = () => pointsSorted().filter((p) => { const q = searchText.trim().toLowerCase();
-    return (!q || `${p.label} ${p.planName ?? ''} ${panelText(p)}`.toLowerCase().includes(q) || matchesPanelQuery(p, q)) && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && typeMatch(fType, p.typeId) && planOk(p); });
+    return (!q || `${p.label} ${p.planName ?? ''} ${panelText(p)}`.toLowerCase().includes(q) || matchesPanelQuery(p, q)) && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && typeMatch(fType, p.typeId) && cfgMatch(fCfg, p) && planOk(p); });
   function updateBar() {
     for (const id of [...selected]) if (!state.ctx.points.has(id)) selected.delete(id);
     bar.style.display = selMode ? '' : 'none';
@@ -545,7 +547,7 @@ export function meterView(ui) {
     updateBar();
     const q = searchText.trim().toLowerCase();
     const pts = pointsSorted().filter((p) => (!q || `${p.label} ${p.planName ?? ''} ${panelText(p)}`.toLowerCase().includes(q) || matchesPanelQuery(p, q))
-      && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && typeMatch(fType, p.typeId) && planOk(p));
+      && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && typeMatch(fType, p.typeId) && cfgMatch(fCfg, p) && planOk(p));
     list.replaceChildren();
     if (!pts.length) { list.append(total.length ? h('div', { class: 'empty' }, 'Ничего не найдено') : hint(ui, 'Точек пока нет. Добавьте их пачкой («Точки пачкой») или по одной. Нажмите точку: откроется её карточка с историей работ, там же кнопка «📏 Длина».', 'meter', '📖 Как вносить метраж')); return; }
     let lastKey = null;
@@ -569,11 +571,13 @@ export function meterView(ui) {
   const types = [...new Set(total.map((p) => p.typeId))].sort((a, b) => String(a).localeCompare(String(b), 'ru'));
   if (!cabs.includes(fCab) && fCab !== '__none') fCab = '';
   if (!typeFilterValid(fType, types)) fType = '';
+  if (!cfgFilterValid(fCfg, total)) fCfg = '';
   const sel = (all, opts, cur, set) => h('select', { onchange: (e) => { set(e.target.value); fill(); } },
     h('option', { value: '' }, all), ...opts.map(([v, t]) => h('option', { value: v, selected: v === cur }, t)));
   const filters = h('div', { style: { display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' } },
     sel('Все шкафы', cabs.map((c) => (c ? [c, `Шкаф ${c}`] : ['__none', 'Без шкафа'])), fCab, (v) => { fCab = v; }),
     sel('Все типы', typeFilterOptions(types), fType, (v) => { fType = v; }),
+    cfgFilterOptions(total).length ? sel('Все конфигурации', cfgFilterOptions(total), fCfg, (v) => { fCfg = v; }) : null,
     sel('План: все', [['off', '📍 Нет на плане'], ['on', '🗺 На плане']], fPlan, (v) => { fPlan = v; }));
   fill();
   return h('div', {},

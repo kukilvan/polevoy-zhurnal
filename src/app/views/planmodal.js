@@ -16,6 +16,7 @@ import { linkPoints } from './planlink.js';
 import { choosePoint } from './pointchooser.js';
 import { bulkEditForm, renameForm } from './points.js';
 import { doorCfgOf, doorCfgShort, usesConfig } from '../../domain/index.js';
+import { cfgMatch, cfgFilterOptions, cfgFilterValid } from '../cfgfilter.js';
 import { allDoorCfgs, pinsOf as doorPins, ensureDoorCfg } from '../doorpool.js';
 import { doorPicker } from './doorcfgview.js';
 import { doorChips } from './doorchips.js';
@@ -85,7 +86,7 @@ const toDataUrl = (bytes) => { let s = ''; const u = new Uint8Array(bytes); for 
 
 export function planModal({ point = null, placeFor = null } = {}) {
   const box = h('div', {});
-  let wk = null; let viewer = null; let current = null; let focusId = point?.id || null; let fType = ''; let fCab = ''; let fStage = '';
+  let wk = null; let viewer = null; let current = null; let focusId = point?.id || null; let fType = ''; let fCab = ''; let fStage = ''; let fCfg = '';
   let dimDrawing = false; let selMode = false; let rectSel = false; const sel = new Set(); let selBar = () => {};
   let openCard = null; let doorPts = () => []; let goDoor = () => {}; let brushTap = () => {};
   const doorSkip = new Set(); let doorCur = null; let doorMode = 'wizard'; let brushId = ''; let pipette = false;  // «Кисть»: конфигурация по нажатию; пипетка — взять с двери  // мастер «🚪 Двери»: пропущенные и текущая дверь
@@ -137,7 +138,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
       const unl = () => (cur().unlinked || []); const hid = () => (cur().hidden || []);
       const stageOk = (p) => { if (!fStage) return true; if (fStage === 'Длина') return p.length === undefined || p.length === null || p.length === ''; const info = infoOf(p);
         if (fStage === 'Протяжка') return !info.pulled && !info.pullDone; return missingStages(p, state.ctx).includes(fStage); };
-      const pts = () => (fType === UNL || fType === HID ? [] : sheetPts(d).filter((p) => typeMatch(fType, p.typeId) && (!fCab || (p.cabinet || '') === fCab)));
+      const pts = () => (fType === UNL || fType === HID ? [] : sheetPts(d).filter((p) => typeMatch(fType, p.typeId) && cfgMatch(fCfg, p) && (!fCab || (p.cabinet || '') === fCab)));
       const marks = () => (fType === UNL ? unl() : fType === HID ? hid() : []);
       // попадание: внутри рамки/круга с запасом 10 px; из нескольких — ближайший край
       const hitDist = (pos, x, y) => { const s = viewer.view.s; const pad = 2 + 10 / s;
@@ -206,6 +207,8 @@ export function planModal({ point = null, placeFor = null } = {}) {
       const typeSel = h('select', { onchange: (e) => { fType = e.target.value; sel.clear(); selBar(); viewer.draw(); } }, h('option', { value: '' }, 'Все типы'), ...typeFilterOptions(types).map(([v, t]) => h('option', { value: v, selected: v === fType }, t)),
         h('option', { value: UNL, selected: fType === UNL }, `❔ Не размеченые (${unl().length})`), h('option', { value: HID, selected: fType === HID }, `🙈 Скрытые (${hid().length})`));
       const cabSel = cabs.length ? h('select', { onchange: (e) => { fCab = e.target.value; viewer.draw(); } }, h('option', { value: '' }, 'Все шкафы'), ...cabs.map((c) => h('option', { value: c, selected: c === fCab }, `Шкаф ${c}`))) : null;
+      const cfgOpts = cfgFilterOptions(sheetPts(d));
+      const cfgSel = cfgOpts.length ? h('select', { onchange: (e) => { fCfg = e.target.value; sel.clear(); selBar(); viewer.draw(); } }, h('option', { value: '' }, 'Все конфигурации'), ...cfgOpts.map(([v, t]) => h('option', { value: v, selected: v === fCfg }, t))) : null;
       const stageSel = h('select', { onchange: (e) => { fStage = e.target.value; viewer.draw(); } }, h('option', { value: '' }, 'Все этапы'),
         ...STAGE_FILTERS.map(([v, t]) => h('option', { value: v, selected: v === fStage }, t)));
       const selBtn = h('button', { class: 'sec', onclick: () => { selMode = !selMode; rectSel = false; if (!selMode) sel.clear(); if (selMode) tool = null; toolBar(); selBar(); viewer.draw(); } });
@@ -321,7 +324,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
       };
       updateInfo();
       holder.replaceChildren(
-        h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '0 0 6px' } }, search, typeSel, cabSel, stageSel),
+        h('div', { style: { display: 'flex', gap: '8px', flexWrap: 'wrap', margin: '0 0 6px' } }, search, typeSel, cfgSel, cabSel, stageSel),
         h('div', { class: 'btns', style: { marginTop: 0 } }, ...viewer.zoomBtns(), selBtn, doorBtn, addBtn, iconBtn, dimBtn, layersBtn), bar, tbar, viewer.el, doorBar,
         h('div', { style: { display: 'flex', gap: '12px', flexWrap: 'wrap', margin: '6px 2px', fontSize: '13px' } }, ...STATUS_COLORS.map(([c, t]) => h('span', {}, h('span', { style: { color: c } }, '■ '), t))),
         h('div', { class: 'btns' },
