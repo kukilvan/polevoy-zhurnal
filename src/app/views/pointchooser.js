@@ -1,7 +1,7 @@
 // Выбор точки проекта: поиск, тип, шкаф, «только без места на чертеже»; по выбору — onPick(point, { rename })
 import { h, openModal } from '../ui.js';
 import { state } from '../store.js';
-import { comparePoints } from '../../domain/index.js';
+import { comparePoints, latinKey } from '../../domain/index.js';
 import { drawingFor } from '../drawings.js';
 
 import { typeMatch, typeFilterOptions } from '../typegroups.js';
@@ -21,7 +21,7 @@ export function choosePoint({ title, typeId = '', exclude = null, renameLabel = 
   const listEl = h('div', { class: 'card', style: { padding: 0, maxHeight: '45vh', overflow: 'auto' } });
   const fill = () => {
     const s = q.value.trim().toLowerCase();
-    const rows = all.filter((p) => (!s || `${p.label} ${p.planName || ''}`.toLowerCase().includes(s)) && typeMatch(tSel.value, p.typeId) && (!cSel.value || (p.cabinet || '') === cSel.value) && (!noPos.checked || !drawingFor(p)))
+    const rows = all.filter((p) => (!s || latinKey(`${p.label} ${p.planName || ''}`).includes(latinKey(s))) && typeMatch(tSel.value, p.typeId) && (!cSel.value || (p.cabinet || '') === cSel.value) && (!noPos.checked || !drawingFor(p)))
       .sort(comparePoints).slice(0, 200);
     listEl.replaceChildren(...(rows.length ? rows.map((p) => { const cb = multi?.checked ? h('input', { type: 'checkbox', checked: picked.has(p.id), style: { width: '22px', height: '22px', flex: 'none' } }) : null; return h('div', { class: 'item', onclick: async () => {
       if (cb) { if (picked.has(p.id)) picked.delete(p.id); else picked.set(p.id, p); cb.checked = picked.has(p.id); updGo(); return; }

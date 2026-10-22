@@ -1,5 +1,6 @@
 // Вкладка «Дохот»: дни работ, записи дня, текст доха RU/HE, копирование и ссылка на команду «Doh».
 import { typeMatch, typeFilterOptions } from '../typegroups.js';
+import { latinKey } from '../../domain/index.js';
 import { cfgMatch, cfgFilterOptions, cfgFilterValid } from '../cfgfilter.js';
 import { h, formModal, openModal, confirmDialog, toast } from '../ui.js';
 import { hint } from './guide.js';
@@ -90,7 +91,7 @@ export function pointsPicker({ typesOf, fits, onPick }) {
     const count = h('b', {});
     const fill = () => {
       list.replaceChildren(); let last = null;
-      const shown = pts.filter((pt) => (!q || `${pt.label} ${pt.planName ?? ''}`.toLowerCase().includes(q))
+      const shown = pts.filter((pt) => (!q || latinKey(`${pt.label} ${pt.planName ?? ''}`).includes(latinKey(q)))
         && (!fCab || (fCab === '__none' ? !pt.cabinet : pt.cabinet === fCab)) && typeMatch(fType, pt.typeId) && cfgMatch(fCfg, pt));
       if (!shown.length) list.append(h('div', { class: 'empty' }, pts.length ? 'Ничего не найдено' : 'Подходящих точек нет'));
       shown.forEach((pt) => {

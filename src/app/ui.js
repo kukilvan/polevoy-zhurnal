@@ -1,4 +1,23 @@
 // Мелкие помощники интерфейса: создание элементов, всплывающие формы, подтверждение, уведомления.
+import { expandShortcut } from '../domain/latin.js';
+// быстрый ввод латиницей (T9): «тв » → «TV ». Список берётся у приложения (setShortcutsProvider)
+let shortcuts = () => [];
+export const setShortcutsProvider = (fn) => { shortcuts = fn; };
+const SEP = /[^A-Za-z\u0400-\u04FF]/;
+export function attachShortcuts(inp) {
+  let skip = false; let conv = null;   // стёр результат вручную — следующий раз это слово не заменяется
+  inp.addEventListener('input', (e) => {
+    const t = e.inputType || '';
+    if (t.startsWith('delete')) { const c = inp.selectionStart; if (conv && c >= conv.from && c <= conv.to + 1) skip = true; return; }
+    if (!t.startsWith('insert')) return;
+    const c = inp.selectionStart; if (c < 1 || !SEP.test(inp.value[c - 1])) return;
+    const r = expandShortcut(inp.value, c, shortcuts());
+    if (skip) { skip = false; return; }
+    if (!r) return;
+    inp.value = r.text; inp.setSelectionRange(r.caret, r.caret); conv = { from: r.from, to: r.to };
+  });
+  return inp;
+}
 export function h(tag, props = {}, ...kids) {
   const el = document.createElement(tag);
   for (const [k, v] of Object.entries(props || {})) {
@@ -103,7 +122,7 @@ export function formModal({ title, fields, values = {}, submitLabel = 'Сохр�
     } else if (f.type === 'textarea') input = h('textarea', { rows: 3, value: val ?? '', placeholder: f.placeholder });
     else if (f.type === 'checkbox') input = h('input', { type: 'checkbox', checked: !!val });
     else if (f.type === 'date') input = h('input', { type: 'date', value: val ?? '' });
-    else input = h('input', { type: 'text', inputMode: f.type === 'number' ? 'decimal' : undefined, value: val ?? '', placeholder: f.placeholder, autocomplete: 'off', autocapitalize: 'off' });
+    else { input = h('input', { type: 'text', inputMode: f.type === 'number' ? 'decimal' : undefined, value: val ?? '', placeholder: f.placeholder, autocomplete: 'off', autocapitalize: 'off' }); if (f.latin) attachShortcuts(input); }
     input.addEventListener('input', refresh); input.addEventListener('change', refresh);
     inputs[f.key] = input;
     rows[f.key] = f.type === 'custom' ? h('div', { class: 'field' }, h('span', {}, f.label, f.required ? ' *' : ''), input, f.hint && h('small', {}, f.hint))

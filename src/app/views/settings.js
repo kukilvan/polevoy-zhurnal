@@ -375,6 +375,8 @@ export function settingsView(ui) {
       row('💾', 'Резервная копия на Диск', p.backupAt ? `Последняя: ${new Date(p.backupAt).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}` : null, backupNow),
       row('📁', 'Разложить файлы на Диске по папкам', 'Полевой журнал → папка проекта → Чертежи, Резервные копии; таблицы — в папке проекта', organizeDrive),
       row('📊', 'Выгрузить всё в Excel', 'Файл .xlsx: точки, журнал, дни, справочники', exportExcel),
+      row('⌨', 'Быстрый ввод латиницей', 'Слова вроде «тв», «кам» сами становятся TV, CAM при вводе названий', () => import('./latinfix.js').then((m) => m.shortcutsModal())),
+      row('🔤', 'Раскладка в названиях точек', 'Найти и исправить кириллицу вместо латиницы (С108 → C108)', () => import('./latinfix.js').then((m) => m.fixLayoutModal())),
       row('📥', 'Точки из файла', 'Добавить точки из JSON (после разбора тохнита), без замены', pointsFromFile),
       row('📥', 'Импорт данных (замена всего проекта)', null, () => ui.open('import')),
       row('🕘', 'История и откат', null, () => ui.open('history')),

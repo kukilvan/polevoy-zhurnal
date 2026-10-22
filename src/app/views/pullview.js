@@ -10,6 +10,7 @@ import { createViewer } from './planview.js';
 import { makeWorker } from './tohnitview.js';
 import { outline, placeTags, tagOf, shOf, isText } from './planmodal.js';
 import { addWorkForPoints } from './doh.js';
+import { latinKey } from '../../domain/index.js';
 import { typeMatch, typeFilterOptions } from '../typegroups.js';
 import { cfgMatch, cfgFilterOptions } from '../cfgfilter.js';
 
@@ -49,7 +50,7 @@ export function openPulls() {
   function paint() {
     const ctx = state.ctx; if (!ctx) return;
     const rows = allPulls().map((p) => {
-      const hits = q ? (p.pointIds || []).map((id) => ctx.points.get(id)).filter((x) => x && `${x.label} ${x.planName || ''}`.toLowerCase().includes(q)) : [];
+      const hits = q ? (p.pointIds || []).map((id) => ctx.points.get(id)).filter((x) => x && latinKey(`${x.label} ${x.planName || ''}`).includes(latinKey(q))) : [];
       return { p, hits };
     }).filter((r) => !q || r.hits.length);
     list.replaceChildren(...(rows.length ? rows.map(({ p, hits }) => {
@@ -170,7 +171,7 @@ export async function openPull(id) {
     const cfgOpts = cfgFilterOptions(pts);
     const search = h('input', { type: 'search', placeholder: 'Найти точку и добавить', style: { flex: 1, minWidth: '140px' }, onchange: (e) => {
       const q = e.target.value.trim().toLowerCase(); if (!q) return;
-      const p = pts.find((x) => x.label.toLowerCase() === q) || pts.find((x) => x.label.toLowerCase().includes(q));
+      const p = pts.find((x) => latinKey(x.label) === latinKey(q)) || pts.find((x) => latinKey(x.label).includes(latinKey(q)));
       if (!p) { toast('Такой точки на этом чертеже нет'); return; }
       toggle([p], true); focusId = p.id; e.target.value = ''; toast(`${p.label} добавлена${pulledBefore(p) ? ' (уже протянута)' : ''}`); screen(); viewer.focus(p.pos.x, p.pos.y, p.pos.page || 0);
     } });

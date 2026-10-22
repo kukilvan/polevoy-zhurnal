@@ -1,5 +1,5 @@
 // Точки: форма точки, генератор пачкой, карточка точки с историей, вкладка «Точки».
-import { h, formModal, openModal, confirmDialog, toast, qtyList } from '../ui.js';
+import { h, formModal, openModal, confirmDialog, toast, qtyList, attachShortcuts } from '../ui.js';
 import { state, getRepo, pointsSorted, infoOf, currentProject } from '../store.js';
 import { generateLabels, parseSuffixes, comparePoints, renameLabel, sameLabelClash, labelKey, inheritedFromCables, usesConfig, missingStages, hasDeviceId, normalizeMac, findDuplicate } from '../../domain/index.js';
 import { scanDevice } from '../scan.js';
@@ -17,6 +17,7 @@ import { doorChips, doorShortChip } from './doorchips.js';
 import { ensureDoorCfg, pinsOf as doorPins, allDoorCfgs } from '../doorpool.js';
 import { drawingFor, drawingsOf } from '../drawings.js';
 import { typeMatch, typeFilterOptions, typeFilterValid } from '../typegroups.js';
+import { latinKey } from '../../domain/index.js';
 import { cfgMatch, cfgFilterOptions, cfgFilterValid } from '../cfgfilter.js';
 import { planModal } from './planmodal.js';
 import { choosePoint } from './pointchooser.js';
@@ -131,7 +132,7 @@ function pickOrNewField(key, label, { empty = '—', hint = '' } = {}) {
     if (cur && !vals.includes(cur)) vals.push(cur);
     const NEW = '__new';
     const sel = h('select', { style: { flex: 1, minWidth: 0 } }, h('option', { value: '' }, empty), ...vals.map((v) => h('option', { value: v }, v)), h('option', { value: NEW }, '✏️ Новый…'));
-    const inp = h('input', { type: 'text', placeholder: `Новый: ${label.toLowerCase()}`, autocapitalize: 'characters', style: { flex: 1, minWidth: 0, display: 'none' }, oninput: () => changed() });
+    const inp = h('input', { type: 'text', placeholder: `Новый: ${label.toLowerCase()}`, autocapitalize: 'characters', style: { flex: 1, minWidth: 0, display: 'none' }, oninput: () => changed() }); if (key === 'cabinet') attachShortcuts(inp);
     sel.value = cur; sel.onchange = () => { inp.style.display = sel.value === NEW ? '' : 'none'; if (sel.value === NEW) inp.focus(); changed(); };
     return { el: h('div', { style: { display: 'flex', gap: '8px' } }, sel, inp), get: () => { const v = sel.value === NEW ? inp.value.trim() : sel.value; return v === '' ? undefined : v; } };
   } };
@@ -140,8 +141,8 @@ function pickOrNewField(key, label, { empty = '—', hint = '' } = {}) {
 export function pointForm(point, { onDone } = {}) {
   const repo = getRepo(); const pid = currentProject().id;
   const fields = [
-    { key: 'label', label: 'Обозначение', required: true, hint: 'Например: 1A-01-02' },
-    { key: 'planName', label: 'Имя в плане заказчика (по тохниту)' },
+    { key: 'label', label: 'Обозначение', required: true, latin: true, hint: 'Например: 1A-01-02' },
+    { key: 'planName', label: 'Имя в плане заказчика (по тохниту)', latin: true },
     pickOrNewField('cabinet', 'Шкаф', { empty: point ? '— без шкафа —' : '— выберите шкаф —', hint: point ? '' : 'Новую точку нужно привязать к шкафу' }), pickOrNewField('floor', 'Этаж', { empty: '— без этажа —' }),
     { key: 'typeId', label: 'Тип', type: 'select', required: true, options: typeOptions(), emptyLabel: 'Выберите тип' },
     doorField('configId', 'Конфигурация двери', { visible: (v) => isDoorType(v.typeId), hint: 'Состав двери и её кабели. Закреплённые — в «Настройки → Конфигурации дверей».' }),
@@ -199,7 +200,7 @@ export function pointForm(point, { onDone } = {}) {
 export function generatorForm() {
   const repo = getRepo(); const pid = currentProject().id;
   const fields = [
-    { key: 'prefix', label: 'Префикс', hint: 'Например: 1A-' },
+    { key: 'prefix', label: 'Префикс', latin: true, hint: 'Например: 1A-' },
     { key: 'from', label: 'От', type: 'number', required: true }, { key: 'to', label: 'До', type: 'number', required: true },
     { key: 'step', label: 'Шаг', type: 'number' },
     { key: 'digits', label: 'Цифр в номере (ведущие нули, 0 = без)', type: 'number' },
@@ -424,9 +425,9 @@ export function renameForm(ids, done) {
   let common = pts[0]?.label || ''; for (const p of pts) { while (common && !p.label.startsWith(common)) common = common.slice(0, -1); }
   const find = h('input', { placeholder: common ? `Что убрать, например: ${common}` : 'Что убрать или заменить' });
   const where = h('select', {}, h('option', { value: 'start' }, 'в начале'), h('option', { value: 'any' }, 'везде'), h('option', { value: 'end' }, 'в конце'));
-  const repl = h('input', { placeholder: 'На что заменить (пусто — убрать)' });
+  const repl = attachShortcuts(h('input', { placeholder: 'На что заменить (пусто — убрать)' }));
   const shift = h('input', { type: 'number', placeholder: '0', style: { width: '90px' } });
-  const prefix = h('input', { placeholder: 'Добавить в начало' }); const suffix = h('input', { placeholder: 'Добавить в конец' });
+  const prefix = attachShortcuts(h('input', { placeholder: 'Добавить в начало' })); const suffix = attachShortcuts(h('input', { placeholder: 'Добавить в конец' }));
   const keep = h('input', { type: 'checkbox', checked: true });
   const prev = h('div', { class: 'card', style: { padding: 0, maxHeight: '40vh', overflow: 'auto' } }); const info = h('div', { style: { margin: '6px 0', fontWeight: 600 } });
   const go = h('button', {});
@@ -523,8 +524,8 @@ export function meterView(ui) {
   const total = pointsSorted();
   const withLen = total.filter((p) => p.length !== undefined && p.length !== null && p.length !== '').length;
   const bar = h('div', { class: 'card selbar', style: { position: 'sticky', top: '53px', zIndex: 6, margin: '8px 0 0' } });
-  const shown = () => pointsSorted().filter((p) => { const q = searchText.trim().toLowerCase();
-    return (!q || `${p.label} ${p.planName ?? ''} ${panelText(p)}`.toLowerCase().includes(q) || matchesPanelQuery(p, q)) && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && typeMatch(fType, p.typeId) && cfgMatch(fCfg, p) && planOk(p); });
+  const shown = () => pointsSorted().filter((p) => { const q = searchText.trim().toLowerCase(); const qk = latinKey(q);
+    return (!q || latinKey(`${p.label} ${p.planName ?? ''} ${panelText(p)}`).includes(qk) || matchesPanelQuery(p, q)) && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && typeMatch(fType, p.typeId) && cfgMatch(fCfg, p) && planOk(p); });
   function updateBar() {
     for (const id of [...selected]) if (!state.ctx.points.has(id)) selected.delete(id);
     bar.style.display = selMode ? '' : 'none';
@@ -545,8 +546,8 @@ export function meterView(ui) {
   }
   function fill() {
     updateBar();
-    const q = searchText.trim().toLowerCase();
-    const pts = pointsSorted().filter((p) => (!q || `${p.label} ${p.planName ?? ''} ${panelText(p)}`.toLowerCase().includes(q) || matchesPanelQuery(p, q))
+    const q = searchText.trim().toLowerCase(); const qk = latinKey(q);
+    const pts = pointsSorted().filter((p) => (!q || latinKey(`${p.label} ${p.planName ?? ''} ${panelText(p)}`).includes(qk) || matchesPanelQuery(p, q))
       && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && typeMatch(fType, p.typeId) && cfgMatch(fCfg, p) && planOk(p));
     list.replaceChildren();
     if (!pts.length) { list.append(total.length ? h('div', { class: 'empty' }, 'Ничего не найдено') : hint(ui, 'Точек пока нет. Добавьте их пачкой («Точки пачкой») или по одной. Нажмите точку: откроется её карточка с историей работ, там же кнопка «📏 Длина».', 'meter', '📖 Как вносить метраж')); return; }

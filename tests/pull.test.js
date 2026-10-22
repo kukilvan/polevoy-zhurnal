@@ -19,3 +19,16 @@ test('протяжка: ближайшая точка', () => {
   assert.equal(nearestPoint(from, [a, b, c]).id, 'b');
   assert.equal(nearestPoint(null, [a]).id, 'a'); assert.equal(nearestPoint(from, []), null);
 });
+
+import { fixLatin, latinKey, fixCabinet, expandShortcut, DEFAULT_SHORTCUTS } from '../src/domain/latin.js';
+test('латиница: двойники', () => {
+  assert.equal(fixLatin('С108'), 'C108'); assert.equal(fixLatin('ТВ-12'), 'TB-12'); assert.equal(fixLatin('Щит 1'), 'Щит 1');
+  assert.equal(fixLatin('GA1/07'), 'GA1/07'); assert.equal(fixLatin('сас1'), 'cac1');
+  assert.equal(latinKey('С108'), latinKey('c108')); assert.ok(latinKey('Нс-4').includes(latinKey('hc')));
+  assert.equal(fixCabinet('С1', new Set(['C1'])), 'C1'); assert.equal(fixCabinet('Х', new Set()), 'X');
+});
+test('латиница: быстрый ввод', () => {
+  const t = (s) => { const r = expandShortcut(s, s.length, DEFAULT_SHORTCUTS); return r && r.text; };
+  assert.equal(t('тв '), 'TV '); assert.equal(t('кам1'), 'CAM1'); assert.equal(t('A-ап-'), 'A-AP-'); assert.equal(t('г '), 'G ');
+  assert.equal(t('тв'), null); assert.equal(t('тва '), null); assert.equal(t('X тв '), 'X TV ');
+});

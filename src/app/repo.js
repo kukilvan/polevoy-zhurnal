@@ -8,7 +8,7 @@ import {
 import { info, error } from '../log.js';
 import { DELTA_MARGIN, decideMode, maxMillis } from '../domain/sync.js';
 import {
-  CATALOG, POINT_TYPES, CABLES, CONFIGS, UNITS, CULPRITS, DELAY_REASONS, DEVICES, composedTypes,
+  CATALOG, POINT_TYPES, CABLES, CONFIGS, UNITS, CULPRITS, DELAY_REASONS, DEVICES, composedTypes, fixLatin, fixCabinet,
 } from '../domain/index.js';
 
 // Подколлекции проекта, которые приложение читает целиком (журнал изменений читается отдельно)
@@ -299,6 +299,19 @@ export function createRepo(backend, user) {
     // Одна или несколько записей за раз (ops: [{coll, id?, data, action?}]); возвращает id созданных/изменённых
     save(pid, ops) {
       const writes = []; const ids = [];
+      // названия точек и шкафов — латиницей, откуда бы они ни пришли (набор руками, файл, тохнит, импорт): С108 кириллицей → C108
+      let cabs = null;
+      ops = ops.map((op) => {
+        if (op.coll !== 'points' || !op.data) return op;
+        const d = { ...op.data };
+        if (typeof d.label === 'string') d.label = fixLatin(d.label);
+        if (typeof d.planName === 'string') d.planName = fixLatin(d.planName);
+        if (typeof d.cabinet === 'string' && d.cabinet) {
+          if (!cabs) { cabs = new Set(); for (const [k, v] of cache) if (k.startsWith(`${pid}/points/`) && v?.cabinet && !v.deleted) cabs.add(v.cabinet); }
+          d.cabinet = fixCabinet(d.cabinet, cabs); cabs.add(d.cabinet);
+        }
+        return { ...op, data: d };
+      });
       ops.forEach((op) => {
         const id = op.id || newId();
         const existing = cache.get(keyOf(pid, op.coll, id));
