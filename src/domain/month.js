@@ -70,12 +70,18 @@ export function workdaysReport(days, projects, ym) {
 export function downtimeByCulprit(ctx, ym) {
   const groups = new Map();
   monthDays(ctx, ym).forEach((d) => dayEntries(d, ctx).forEach((e) => {
-    if (blank(e.culprit) || e.workType === 'Текст') return;
-    const mins = blank(e.minutes) ? 0 : Number(e.minutes);
-    const g = groups.get(e.culprit) || { culprit: e.culprit, he: ctx.culprits.get(e.culprit)?.he ?? '', minutes: 0, count: 0, items: [] };
-    g.minutes += mins; g.count += 1;
-    g.items.push({ date: d.date, work: ctx.catalog.get(e.workId)?.name ?? e.workType, minutes: mins, note: e.note ?? '' });
-    groups.set(e.culprit, g);
+    if (e.workType === 'Текст') return;
+    const add = (culprit, mins, note) => {
+      const g = groups.get(culprit) || { culprit, he: ctx.culprits.get(culprit)?.he ?? '', minutes: 0, count: 0, items: [] };
+      g.minutes += mins; g.count += 1;
+      g.items.push({ date: d.date, work: ctx.catalog.get(e.workId)?.name ?? e.workType, minutes: mins, note });
+      groups.set(culprit, g);
+    };
+    // прежние записи: виновник и время у самой работы
+    if (!blank(e.culprit)) add(e.culprit, blank(e.minutes) ? 0 : Number(e.minutes), e.note ?? '');
+    // задержка к работе: свой виновник, причина, комментарий и время
+    const dm = blank(e.delayMinutes) ? 0 : Number(e.delayMinutes);
+    if (!blank(e.delayCulprit) || dm) add(blank(e.delayCulprit) ? 'Без виновника' : e.delayCulprit, dm, [e.delayReason, e.delayNote].filter((x) => !blank(x)).join(', '));
   }));
   const list = [...groups.values()].map((g) => ({ ...g, hours: round2(g.minutes / 60) })).sort((a, b) => b.minutes - a.minutes || b.count - a.count);
   return { list, totalMinutes: list.reduce((n, g) => n + g.minutes, 0) };

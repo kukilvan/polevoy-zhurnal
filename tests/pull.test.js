@@ -32,3 +32,17 @@ test('латиница: быстрый ввод', () => {
   assert.equal(t('тв '), 'TV '); assert.equal(t('кам1'), 'CAM1'); assert.equal(t('A-ап-'), 'A-AP-'); assert.equal(t('г '), 'G ');
   assert.equal(t('тв'), null); assert.equal(t('тва '), null); assert.equal(t('X тв '), 'X TV ');
 });
+
+import { entryLine, delayLine, downtimeByCulprit } from '../src/domain/index.js';
+test('задержка в дохе', () => {
+  const ctx = { catalog: new Map([['W', { id: 'W', name: 'Хивут', nameHe: 'חיווט', unit: 'шт' }]]), units: new Map(), cables: new Map(), points: new Map(),
+    culprits: new Map([['Электрики', { id: 'Электрики', he: 'חשמלאים' }]]), delayReasons: new Map([['Нет доступа', { id: 'Нет доступа', he: 'אין גישה' }]]) };
+  const e = { workType: 'Хивут', workId: 'W', quantity: 5, delayReason: 'Нет доступа', delayCulprit: 'Электрики', delayNote: 'ждали ключ', delayMinutes: 40 };
+  assert.equal(delayLine(e, ctx), 'Задержка: Нет доступа, Электрики, ждали ключ — 40 мин');
+  assert.equal(delayLine(e, ctx, 'he'), 'עיכוב: אין גישה, חשמלאים, ждали ключ — 40 דקות');
+  assert.equal(delayLine({ workType: 'Хивут', delayMinutes: 15 }, ctx), 'Задержка: 15 мин');
+  assert.equal(delayLine({ workType: 'Хивут' }, ctx), ''); assert.equal(delayLine({ workType: 'Текст', delayMinutes: 5 }, ctx), '');
+  assert.ok(entryLine(e, ctx).split('\n')[1].startsWith('Задержка:'));
+  const pull = { workType: 'Протяжка', cableId: 'cat7', quantity: 2, minutes: 40, culprit: 'Электрики' };
+  assert.ok(entryLine(pull, ctx).includes('(Электрики)'));
+});

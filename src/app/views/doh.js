@@ -174,6 +174,7 @@ function entryForm(day, entry, preset) {
       const id = newId();
       ops.push({ coll: 'entries', id, data: { dayId: day.id, workType: v.workType, workId: v.workId, pointIds: ids, cableId, deviceIds: v.deviceIds || null,
         minutes: i ? undefined : v.minutes, culprit: i ? undefined : v.culprit, note: i ? undefined : v.note,
+        delayReason: i ? undefined : v.delayReason, delayCulprit: i ? undefined : v.delayCulprit, delayNote: i ? undefined : v.delayNote, delayMinutes: i ? undefined : v.delayMinutes,
         result: v.workType === 'Проверка' ? (v.result || 'Работает') : undefined } });
       return [id, ids];
     });
@@ -199,9 +200,17 @@ function entryForm(day, entry, preset) {
         options: [...ctx.cables.values()].map((c) => ({ value: c.id, label: c.id })) },
       { key: 'pullCount', label: 'Сколько кабелей / точек', type: 'number', visible: (v) => v.workType === 'Протяжка' && !effPts(v).length },
       { key: 'meters', label: 'Метры', type: 'number', visible: (v) => v.workType === 'Протяжка' && !effPts(v).length && ctx.cables.get(v.cableId)?.accounting === 'Метры' },
-      { key: 'minutes', label: 'Время, мин', type: 'number', visible: (v) => !isText(v) && !!v.workType },
-      { key: 'culprit', label: 'Виновник (если простой/задержка)', type: 'select', visible: (v) => !isText(v) && !!v.workType,
+      // время работы — только у работ в минутах (ожидание, поиск неисправности…); у остальных считается по количеству
+      { key: 'minutes', label: 'Время, мин', type: 'number', visible: (v) => !isText(v) && !!v.workType && (isTime(v) || !blank(entry?.minutes)) },
+      { key: 'culprit', label: 'Виновник (прежняя запись)', type: 'select', visible: () => !blank(entry?.culprit),
         options: [...ctx.culprits.values()].map((c) => ({ value: c.id, label: c.id })) },
+      // задержка к этой работе: в дохе — строкой сразу под работой; вся необязательная
+      { key: 'delayReason', label: '⏱ Задержка: причина', type: 'select', emptyLabel: '—', visible: (v) => !isText(v) && !!v.workType,
+        options: [...ctx.delayReasons.values()].map((r) => ({ value: r.id, label: r.id })) },
+      { key: 'delayCulprit', label: '⏱ Задержка: виновник', type: 'select', emptyLabel: '—', visible: (v) => !isText(v) && !!v.workType,
+        options: [...ctx.culprits.values()].map((c) => ({ value: c.id, label: c.id })) },
+      { key: 'delayNote', label: '⏱ Задержка: комментарий', type: 'text', visible: (v) => !isText(v) && !!v.workType },
+      { key: 'delayMinutes', label: '⏱ Задержка: время, мин', type: 'number', visible: (v) => !isText(v) && !!v.workType },
       { key: 'result', label: 'Результат проверки', type: 'select', visible: (v) => v.workType === 'Проверка',
         options: [{ value: 'Работает', label: 'Работает' }, { value: 'Не работает', label: 'Не работает' }] },
       { key: 'note', label: 'Приписка', type: 'textarea', hint: 'Для «своей строки» — весь текст строки доха.', visible: (v) => !!v.workType },
@@ -210,6 +219,7 @@ function entryForm(day, entry, preset) {
       workType: entry?.workType ?? preset?.workType, workId: entry?.workId ?? preset?.workId, pointIds: entry?.pointIds ?? preset?.pointIds,
       quantity: entry?.quantity, cableId: entry?.cableId ?? preset?.cableId, pullCount: entry?.workType === 'Протяжка' ? entry?.quantity : undefined,
       meters: entry?.meters, minutes: entry?.minutes, culprit: entry?.culprit,
+      delayReason: entry?.delayReason, delayCulprit: entry?.delayCulprit, delayNote: entry?.delayNote, delayMinutes: entry?.delayMinutes,
       result: entry?.result ?? 'Работает', note: entry?.note,
     },
     onSubmit: (v) => {
@@ -246,6 +256,7 @@ function entryForm(day, entry, preset) {
         cableId: v.workType === 'Протяжка' ? (v.cableId || undefined) : undefined,
         deviceIds: isText(v) ? undefined : (v.deviceIds || null),
         minutes: isText(v) ? undefined : v.minutes, culprit: isText(v) ? undefined : v.culprit,
+        delayReason: isText(v) ? undefined : v.delayReason, delayCulprit: isText(v) ? undefined : v.delayCulprit, delayNote: isText(v) ? undefined : v.delayNote, delayMinutes: isText(v) ? undefined : v.delayMinutes,
         result: v.workType === 'Проверка' ? (v.result || 'Работает') : undefined, note: v.note,
       };
       const ops = [{ coll: 'entries', id, data }];

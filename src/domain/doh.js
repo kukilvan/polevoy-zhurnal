@@ -47,7 +47,27 @@ const tail = (entry, ctx, he) => ({
     ? ` (${he ? (ctx.culprits.get(entry.culprit)?.he ?? entry.culprit) : entry.culprit})` : '',
 });
 
+// Задержка к работе: «Задержка: нет доступа, Электрики, ждали ключ — 40 мин» (иврит: «עיכוב: …»). Пусто, если ничего не указано.
+export function delayLine(entry, ctx, lang = 'ru') {
+  if (!entry || entry.workType === 'Текст') return '';
+  const he = lang === 'he';
+  const reason = blank(entry.delayReason) ? '' : (he ? (ctx.delayReasons.get(entry.delayReason)?.he || entry.delayReason) : entry.delayReason);
+  const culprit = blank(entry.delayCulprit) ? '' : (he ? (ctx.culprits.get(entry.delayCulprit)?.he || entry.delayCulprit) : entry.delayCulprit);
+  const note = blank(entry.delayNote) ? '' : String(entry.delayNote);
+  const mins = blank(entry.delayMinutes) ? '' : (he ? `${entry.delayMinutes} דקות` : `${entry.delayMinutes} мин`);
+  const parts = [reason, culprit, note].filter(Boolean);
+  if (!parts.length && !mins) return '';
+  const head = he ? 'עיכוב' : 'Задержка';
+  return `${head}: ${parts.join(', ')}${parts.length && mins ? ' — ' : ''}${mins}`;
+}
+
+/** Строка работы и сразу под ней — задержка (если есть) */
 export function entryLine(entry, ctx, lang = 'ru') {
+  const main = workLine(entry, ctx, lang); const d = delayLine(entry, ctx, lang);
+  return d ? `${main}${main ? '\n' : ''}${d}` : main;
+}
+
+function workLine(entry, ctx, lang = 'ru') {
   const he = lang === 'he';
   const work = ctx.catalog.get(entry.workId);
   const name = he ? work?.nameHe : work?.name;
@@ -66,9 +86,9 @@ export function entryLine(entry, ctx, lang = 'ru') {
     const { count, meters } = pullFigures(entry, ctx);
     const meterMode = cable?.accounting === 'Метры';
     if (he) {
-      return `השחלת ${cable?.nameHe ?? entry.cableId ?? ''}: ${count}${meterMode ? ` כבלים, ${meters} מטר` : ' נקודות'}${t.minutes}${t.note}`;
+      return `השחלת ${cable?.nameHe ?? entry.cableId ?? ''}: ${count}${meterMode ? ` כבלים, ${meters} מטר` : ' נקודות'}${t.minutes}${t.culprit}${t.note}`;
     }
-    return `Протяжка ${entry.cableId ?? ''}: ${count}${meterMode ? ` каб., ${meters} м` : ' точек'}${t.minutes}${t.note}`;
+    return `Протяжка ${entry.cableId ?? ''}: ${count}${meterMode ? ` каб., ${meters} м` : ' точек'}${t.minutes}${t.culprit}${t.note}`;
   }
   const bad = entry.result === 'Не работает' ? (he ? ' (לא תקין)' : ' (не работает)') : '';
   return `${name} ${itogShtuk(entry, ctx)} ${he ? (unit?.he ?? work?.unit) : work?.unit}${bad}${t.minutes}${t.culprit}${t.note}`;

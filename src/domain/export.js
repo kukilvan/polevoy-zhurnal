@@ -40,14 +40,15 @@ export function exportSheets(project, ctx, { nameOf = (u) => s(u) } = {}) {
       const pts = (e.pointIds || []).map((id) => ctx.points.get(id)?.label).filter(Boolean);
       const f = e.workType === 'Протяжка' ? pullFigures(e, ctx) : null;
       er.push([d.date, s(d.object), s(d.helper), s(e.workType), s(w?.name), pts.join(', '), pts.length || (blank(e.quantity) ? '' : Number(e.quantity)),
-        f ? f.meters : s(e.meters), blank(e.minutes) ? '' : Number(e.minutes), e.workType === 'Текст' ? '' : itogShtuk(e, ctx), s(e.culprit), s(e.result), s(e.note), s(d.comment)]);
+        f ? f.meters : s(e.meters), blank(e.minutes) ? '' : Number(e.minutes), e.workType === 'Текст' ? '' : itogShtuk(e, ctx), s(e.culprit), s(e.result), s(e.note), s(d.comment),
+        s(e.delayReason), s(e.delayCulprit), s(e.delayNote), blank(e.delayMinutes) ? '' : Number(e.delayMinutes)]);
     });
-    if (!ents.length) er.push([d.date, s(d.object), s(d.helper), '', '', '', '', '', '', '', '', '', '', s(d.comment)]);
+    if (!ents.length) er.push([d.date, s(d.object), s(d.helper), '', '', '', '', '', '', '', '', '', '', s(d.comment), '', '', '', '']);
   });
   sheets.push({
     name: 'Дни и работы',
-    rows: [['Дата', 'Объект', 'Помощник', 'Тип работы', 'Работа', 'Точки', 'Количество', 'Метры', 'Минуты', 'Итог, шт', 'Виновник', 'Результат', 'Приписка', 'Комментарий дня'], ...er],
-    widths: [12, 18, 12, 12, 26, 30, 11, 9, 9, 9, 16, 12, 30, 24],
+    rows: [['Дата', 'Объект', 'Помощник', 'Тип работы', 'Работа', 'Точки', 'Количество', 'Метры', 'Минуты', 'Итог, шт', 'Виновник', 'Результат', 'Приписка', 'Комментарий дня', 'Задержка: причина', 'Задержка: виновник', 'Задержка: комментарий', 'Задержка, мин'], ...er],
+    widths: [12, 18, 12, 12, 26, 30, 11, 9, 9, 9, 16, 12, 30, 24, 18, 16, 24, 10],
   });
 
   // 4. Справочники
