@@ -346,7 +346,7 @@ export function settingsView(ui) {
   const ref = (k) => row('📋', REFS[k].title, `${REFS[k].items().length} пунктов`, () => { state.settingsRef = k; ui.open('ref'); });
   return h('div', {},
     h('div', { class: 'card', style: { padding: 0 } },
-      row('📖', 'Как пользоваться', 'Шаги работы, что такое дох, словарик', () => ui.open('guide')),
+      row('📖', 'Как пользоваться', 'Шаги работы, что такое дох, инструкции, словарик', () => ui.open('guide')),
       row('🔄', 'Обновить приложение', `Версия (сборка): ${typeof __BUILD__ !== 'undefined' ? __BUILD__ : 'dev'} UTC. Нажмите, если новые функции не появились`, async () => {
         toast('Обновляю…');
         try { const regs = await navigator.serviceWorker?.getRegistrations?.() || []; await Promise.all(regs.map((r) => r.update().catch(() => {}))); await Promise.all(regs.map((r) => r.unregister())); } catch { /* ok */ }

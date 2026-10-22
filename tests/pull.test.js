@@ -46,3 +46,13 @@ test('задержка в дохе', () => {
   const pull = { workType: 'Протяжка', cableId: 'cat7', quantity: 2, minutes: 40, culprit: 'Электрики' };
   assert.ok(entryLine(pull, ctx).includes('(Электрики)'));
 });
+
+import { manualKind, visibleManuals, groupManuals } from '../src/domain/manuals.js';
+test('инструкции: тип файла, видимость, группы и поиск', () => {
+  assert.equal(manualKind({ mime: 'image/jpeg' }), 'image'); assert.equal(manualKind({ fileName: 'a.PDF' }), 'pdf'); assert.equal(manualKind({ fileName: 'a.xlsx' }), 'other');
+  const l = [{ id: 1, title: 'Б', section: 'Хивут', fileId: 'f' }, { id: 2, title: 'А', section: 'Замки и двери', fileId: 'f' }, { id: 3, title: 'В', section: 'Моё', addedBy: 'Me@x.com' }, { id: 4, title: 'Г', fileId: 'f', deleted: true }];
+  assert.deepEqual(visibleManuals(l, 'other@x.com').map((m) => m.id), [1, 2]);
+  assert.deepEqual(visibleManuals(l, 'me@x.com').map((m) => m.id), [1, 2, 3]);
+  assert.deepEqual(groupManuals(visibleManuals(l, 'me@x.com')).map((g) => g.section), ['Замки и двери', 'Хивут', 'Моё']);
+  assert.deepEqual(groupManuals(visibleManuals(l, 'me@x.com'), 'хив').map((g) => g.items[0].id), [1]);
+});

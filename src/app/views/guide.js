@@ -4,6 +4,7 @@ import { getRepo } from '../store.js';
 import { newId } from '../repo.js';
 import { state, currentProject } from '../store.js';
 import { memberName } from './members.js';
+import { manualsCard } from './manualsview.js';
 
 // Строка, начинающаяся с «• », — пункт списка; «# » — подзаголовок; остальное — абзац.
 const SECTIONS = [
@@ -308,6 +309,7 @@ export function guideView(ui) {
   const wrap = h('div', {},
     h('div', { class: 'mut', style: { margin: '0 2px 10px' } }, 'Коротко о том, как работать в приложении. Нажмите «Подробнее», чтобы увидеть детали.'),
     ...SECTIONS.map((s) => sectionCard(s, ui)),
+    manualsCard(),
     dictCard());
   if (focusId) {
     const id = focusId; focusId = null;

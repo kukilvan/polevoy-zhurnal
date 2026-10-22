@@ -35,6 +35,7 @@ async function drive(method, url, { body, headers = {}, raw = false } = {}, retr
 const D = 'https://www.googleapis.com/drive/v3/files';
 // Загрузка большого файла по частям не нужна: возобновляемая загрузка одним куском (до сотен МБ)
 const dreq = (method, url, body) => drive(method, url, body ? { body: JSON.stringify(body), headers: { 'Content-Type': 'application/json' } } : {});
+export { drive as driveCall, dreq };
 const qEsc = (s) => String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 async function uploadPdf(name, buf, p = currentProject()) {
   const parent = await projectFolder(dreq, p, 'drawings');

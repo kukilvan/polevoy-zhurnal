@@ -10,6 +10,8 @@ service cloud.firestore {
     match /pool_devices/{id} { allow read: if signedIn(); allow write: if poolAdmin(); }
     match /pool_cables/{id} { allow read: if signedIn(); allow write: if poolAdmin(); }
     match /pool_catalog/{id} { allow read: if signedIn(); allow write: if poolAdmin(); }
+    // Инструкции (схемы, фото, PDF): запись о файле — общая, читают и добавляют все; сам файл лежит на Диске автора
+    match /pool_manuals/{id} { allow read, write: if signedIn(); }
     // Конфигурации дверей: новую разновидность записывает любой участник, удаляет (помечает deleted) только администратор пула
     match /pool_doorcfg/{id} {
       allow read: if signedIn();

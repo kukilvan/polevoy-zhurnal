@@ -4,7 +4,7 @@
 const D = 'https://www.googleapis.com/drive/v3/files';
 const FOLDER = 'application/vnd.google-apps.folder';
 export const ROOT_NAME = 'Полевой журнал';
-export const KIND_NAMES = { drawings: 'Чертежи', backups: 'Резервные копии', numbered: 'Чертежи с номерами', managers: 'Для руководства', racks: 'Шкафы' };
+export const KIND_NAMES = { drawings: 'Чертежи', backups: 'Резервные копии', numbered: 'Чертежи с номерами', managers: 'Для руководства', racks: 'Шкафы', manuals: 'Инструкции' };
 const safe = (s) => String(s || 'Проект').replace(/[\\/:*?"<>|]/g, '_').trim() || 'Проект';
 const esc = (s) => String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
 
@@ -41,4 +41,17 @@ export async function filesIn(req, folderName, nameStart) {
   const folder = (await req('GET', `${D}?q=${encodeURIComponent(fq)}&fields=files(id)`)).files?.[0]; if (!folder) return [];
   const q = `'${folder.id}' in parents and trashed=false and name contains '${esc(nameStart)}'`;
   return (await req('GET', `${D}?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=1000`)).files || [];
+}
+
+// Общая папка инструкций «Полевой журнал → Инструкции» (не привязана к проекту)
+let manualsP = null;
+export function manualsFolder(req) {
+  if (!manualsP) {
+    manualsP = (async () => {
+      const root = await ensureFolder(req, { name: ROOT_NAME, props: { pzRoot: '1' } });
+      return ensureFolder(req, { name: KIND_NAMES.manuals, props: { pzKind: 'manuals' }, parent: root });
+    })();
+    manualsP.catch(() => { manualsP = null; });
+  }
+  return manualsP;
 }
