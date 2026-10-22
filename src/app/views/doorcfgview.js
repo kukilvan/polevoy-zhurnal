@@ -21,7 +21,7 @@ const pinned = () => { const all = allDoorCfgs(); return pinsOf().map((id) => al
  */
 export function doorPicker({ current = null, title = '🚪 Конфигурация двери', onPick } = {}) {
   let ctx = state.ctx; let all = allDoorCfgs();
-  const start = (current && all.get(current)) || pinned()[0] || null;
+  const start = (current && all.get(current)) || null;
   let sel = new Map((start?.devices || []).map((d) => [d.deviceId, d.count]));
   let cables = new Map((start?.cables || []).map((c) => [c.cable, c.count]));
   let autoCab = !start || JSON.stringify(autoDoorCables(ctx, start.devices)) === JSON.stringify(start.cables);
@@ -31,9 +31,50 @@ export function doorPicker({ current = null, title = '🚪 Конфигурац�
   const devList = () => [...sel].map(([deviceId, count]) => ({ deviceId, count }));
   const cur = () => makeDoorCfg(ctx, devList(), [...cables].map(([cable, count]) => ({ cable, count })));
   const recalc = () => { if (autoCab) cables = new Map(autoDoorCables(ctx, devList()).map((c) => [c.cable, c.count])); };
+  let stp = current ? 99 : 0;   // номер шага; 99 — всё пройдено (готово к выбору)
+  let activeEl = null;
+  const stepsOf = (parts) => [...DOOR_PARTS.filter((p) => parts[p.key].length).map((p) => ({ key: p.key, part: p, title: p.key === 'lock' ? 'Запирание' : p.name })), { key: 'cables', title: 'Кабели' }];
+  const onlyPart = (parts, key) => devList().filter((d) => parts[key].some((x) => x.id === d.deviceId));
+  function stepBlock(st, i, parts, cfg, known, kinds) {
+    const last = i === steps.length - 1; const goto = (n) => { stp = n; draw(); };
+    const cur = Math.min(stp, steps.length);
+    const mini = st.key === 'cables' ? { devices: [], cables: [...cables].map(([cable, count]) => ({ cable, count })) } : { devices: onlyPart(parts, st.key), cables: [] };
+    const hasAny = st.key === 'cables' ? mini.cables.length : mini.devices.length;
+    const head = (text) => h('div', { class: 'mut', style: { fontSize: '13px', fontWeight: 700 } }, text);
+    if (i < cur) {   // пройденный шаг — выбранное, нажатие меняет выбор
+      return h('div', { class: 'wk cfg', style: { cursor: 'pointer', margin: '4px 0' }, onclick: () => goto(i) },
+        h('span', { class: 'mut', style: { fontSize: '12px', minWidth: '84px' } }, st.title), hasAny ? doorChips(mini) : h('span', { class: 'mut' }, '— нет'), h('span', { class: 'wk-st' }, '✎'));
+    }
+    if (i > cur) return null;
+    // активный шаг
+    const doneBtn = (text) => h('button', { type: 'button', style: { width: '100%' }, onclick: () => goto(i + 1) }, text);
+    if (st.key === 'cables') {
+      const box = h('div', { style: { margin: '8px 0' } }, head(`Кабели двери${autoCab ? ' · подставлены по составу' : ' · свои'}`),
+        ...kinds.map((k) => h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0' } }, h('span', {}, k),
+          counter(cables.get(k) || 0, MAX_CABLES, (n) => { autoCab = false; if (n > 0) cables.set(k, n); else cables.delete(k); draw(); }))),
+        !autoCab ? h('div', { class: 'btns' }, h('button', { type: 'button', class: 'sec', onclick: () => { autoCab = true; recalc(); draw(); } }, '↺ Кабели по составу')) : null,
+        h('div', { class: 'btns' }, doneBtn('Готово')));
+      activeEl = box; return box;
+    }
+    const p = st.part;
+    const tap = (d) => {
+      const n = sel.get(d.id) || 0;
+      if (p.key === 'lock' && !n) { sel = applyDoorRules(ctx, sel, d.id, 1); recalc(); stp = i + 1; draw(); return; }   // запирание — выбрал и дальше
+      const next = n >= p.max ? 0 : n + 1;
+      sel = applyDoorRules(ctx, sel, d.id, next); recalc(); draw();
+    };
+    const items = parts[p.key];
+    const box = h('div', { style: { margin: '8px 0' } }, head(`${p.name}${p.hint ? ` · ${p.hint}` : ''}`),
+      h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '8px', margin: '6px 0' } },
+        ...items.map((d) => { const n = sel.get(d.id) || 0; const c = doorColorOf(d);
+          return h('button', { type: 'button', class: n ? '' : 'sec', style: { flex: '1 1 40%', borderLeft: `6px solid ${c}`, ...(n ? { background: c, color: '#fff', borderColor: c } : {}) }, onclick: () => tap(d) }, n ? `${d.name} ×${n}` : d.name); })),
+      h('div', { class: 'btns' }, doneBtn(hasAny ? 'Готово' : 'Пропустить')));
+    activeEl = box; return box;
+  }
+  let steps = [];
   function draw() {
     ctx = state.ctx; all = allDoorCfgs();
-    const parts = doorDevices(ctx); const cfg = cur(); const known = all.get(cfg.id);
+    const parts = doorDevices(ctx); const cfg = cur(); const known = all.get(cfg.id); steps = stepsOf(parts); activeEl = null;
     const pins = pinned();
     const kinds = [...new Set(['6005', 'cat7', ...[...ctx.cables.keys()].sort(), ...cables.keys()])].filter((k) => ctx.cables.has(k) || cables.has(k));
     const other = [...all.values()].filter((c) => !pinsOf().includes(c.id) && (!q || c.name.toLowerCase().includes(q)))
@@ -45,23 +86,17 @@ export function doorPicker({ current = null, title = '🚪 Конфигурац�
           doorChips(c), c.id === current ? h('span', { class: 'wk-st' }, 'сейчас') : null))) : null,
       h('div', { class: 'group', style: { padding: '12px 0 4px' } }, '🧩 Собрать'),
       noDev ? h('div', { class: 'mut' }, 'В проекте нет устройств двери. Добавьте их в «Настройки → Устройства» (поле «Часть двери») или возьмите стандартные:') : null,
-      lib.length ? h('div', { class: 'btns' }, h('button', { type: 'button', class: 'sec', onclick: () => { getRepo().save(currentProject().id, lib); toast(`Добавлено устройств: ${lib.filter((o) => o.coll === 'devices').length}`); setTimeout(draw, 400); } },
+      lib.length ? h('div', { class: 'btns' }, h('button', { type: 'button', class: 'sec', onclick: () => { getRepo().save(currentProject().id, lib); toast(`Добавлено устройств: ${lib.filter((o) => o.coll === 'devices').map((o) => o.data.name).length}`); setTimeout(draw, 400); } },
         `📚 Стандартные устройства двери (${lib.filter((o) => o.coll === 'devices').map((o) => o.data.name).join(', ')})`)) : null,
-      ...DOOR_PARTS.filter((p) => parts[p.key].length).map((p) => h('div', { style: { margin: '6px 0' } },
-        h('div', { class: 'mut', style: { fontSize: '13px', fontWeight: 700 } }, `${p.name}${p.hint ? ` · ${p.hint}` : ''}`),
-        ...parts[p.key].map((d) => h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: '8px', padding: '3px 0' } },
-          h('span', { style: { fontWeight: sel.get(d.id) ? 700 : 400, borderLeft: `4px solid ${doorColorOf(d)}`, paddingLeft: '8px' } }, d.name),
-          counter(sel.get(d.id) || 0, p.max, (n) => { sel = applyDoorRules(ctx, sel, d.id, n); recalc(); draw(); }))))),
-      h('div', { class: 'mut', style: { fontSize: '13px', fontWeight: 700, marginTop: '10px' } }, `Кабели двери${autoCab ? ' · подставлены по составу' : ' · свои'}`),
-      ...kinds.map((k) => h('div', { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '3px 0' } }, h('span', {}, k),
-        counter(cables.get(k) || 0, MAX_CABLES, (n) => { autoCab = false; if (n > 0) cables.set(k, n); else cables.delete(k); draw(); }))),
-      !autoCab ? h('div', { class: 'btns' }, h('button', { type: 'button', class: 'sec', onclick: () => { autoCab = true; recalc(); draw(); } }, '↺ Кабели по составу')) : null,
-      h('div', { class: 'card', style: { marginTop: '10px' } }, h('div', { class: 'mut', style: { fontSize: '13px' } }, known ? 'Такая уже есть' : 'Новая — попадёт в общий пул'), doorChips(cfg, { big: true })),
-      h('div', { class: 'btns' }, h('button', { disabled: !sel.size, onclick: () => choose(cfg) }, '✅ Выбрать эту')),
+      ...steps.map((st, i) => stepBlock(st, i, parts, cfg, known, kinds)),
+      stp >= steps.length ? h('div', {}, h('div', { class: 'card', style: { marginTop: '10px' } }, h('div', { class: 'mut', style: { fontSize: '13px' } }, known ? 'Такая уже есть' : 'Новая — попадёт в общий пул'), doorChips(cfg, { big: true })),
+        h('div', { class: 'btns' }, h('button', { disabled: !sel.size, onclick: () => choose(cfg) }, '✅ Выбрать эту'),
+          h('button', { type: 'button', class: 'sec', onclick: () => { sel = new Map(); cables = new Map(); autoCab = true; stp = 0; draw(); } }, '↺ Заново'))) : null,
       h('div', { class: 'group', style: { padding: '12px 0 4px' } }, `Общий пул (${other.length})`),
       h('input', { type: 'search', placeholder: 'Поиск: ЭМ, биометри, цофар…', value: q, oninput: (e) => { q = e.target.value.trim().toLowerCase(); const pos = e.target.selectionStart; draw(); const i = body.querySelector('input[type=search]'); i.focus(); i.setSelectionRange(pos, pos); } }),
       ...other.slice(0, 60).map((c) => h('div', { class: 'wk cfg', style: { cursor: 'pointer', marginTop: '4px' }, onclick: () => choose(c) },
         doorChips(c), usageOf(c.id) ? h('span', { class: 'wk-st' }, `дверей в проекте: ${usageOf(c.id)}`) : null))].filter(Boolean));
+    if (stp > 0) setTimeout(() => { try { (activeEl || body.querySelector('.card'))?.scrollIntoView({ block: 'center', behavior: 'smooth' }); } catch { /* ok */ } }, 30);
   }
   draw();
   close = openModal(title, body, { sticky: true });
