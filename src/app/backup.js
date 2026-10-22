@@ -1,7 +1,7 @@
 // Резервная копия проекта в Google Диск: один JSON-файл на проект и день (формат совместим с «Импортом данных»).
 export const BACKUP_FOLDER = 'Полевой журнал — резервные копии';
 const LIVE = (arr) => (arr || []).filter((d) => !d.deleted);
-const IMPORTABLE = ['points', 'journal', 'days', 'entries', 'cabinetSettings', 'todos', 'notes'];
+const IMPORTABLE = ['points', 'journal', 'days', 'entries', 'cabinetSettings', 'todos', 'notes', 'pulls'];
 const REFERENCE = ['catalog', 'types', 'cables', 'devices', 'configs', 'units', 'culprits', 'delayReasons'];
 
 export function buildBackup(project, data, now = new Date()) {

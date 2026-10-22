@@ -192,6 +192,7 @@ export function projectView(ui) {
         h('button', { class: 'sec', onclick: () => ui.go('meter') }, '📏 Точки'))),
     h('div', { class: 'btns' },
       h('button', { class: 'wide', onclick: () => openToday(ui) }, '📝 Сегодня'),
+      h('button', { class: 'wide', onclick: () => import('./pullview.js').then((m) => m.openPulls()) }, '🧵 Протяжки'),
       h('button', { class: 'sec', onclick: () => ui.open('projects') }, 'Все проекты'),
       autoBackupLine(p),
       h('div', { class: 'mut', style: { width: '100%' } }, readsLine()),

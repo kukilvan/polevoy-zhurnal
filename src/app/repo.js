@@ -13,7 +13,7 @@ import {
 
 // Подколлекции проекта, которые приложение читает целиком (журнал изменений читается отдельно)
 export const COLLECTIONS = ['points', 'days', 'entries', 'journal', 'catalog', 'types', 'cables', 'devices', 'configs',
-  'units', 'culprits', 'delayReasons', 'cabinetSettings', 'todos', 'notes'];
+  'units', 'culprits', 'delayReasons', 'cabinetSettings', 'todos', 'notes', 'pulls'];
 
 // В id документа Firestore нельзя '/', а у справочников id = название («Поставка / склад»)
 export const docKey = (id) => String(id).replace(/\//g, '_');

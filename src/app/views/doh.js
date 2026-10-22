@@ -178,6 +178,7 @@ function entryForm(day, entry, preset) {
     });
     repo.save(pid, ops); made.forEach(([id, ids]) => syncJournal(id, ids)); bumpLastWork(day.date);
     toast(groups.length > 1 ? `Сохранено записей: ${groups.length}` : 'Сохранено');
+    preset?.onSaved?.(v.pointIds || []);
   };
   modal = formModal({
     title: entry ? 'Запись' : 'Добавить работу', submitLabel: 'Сохранить',
@@ -255,6 +256,7 @@ function entryForm(day, entry, preset) {
       syncJournal(id, pointIds);
       bumpLastWork(day.date);
       toast('Сохранено');
+      if (!entry) preset?.onSaved?.(pointIds);
     },
     extra: entry ? [{ label: 'Удалить', kind: 'danger', closes: false, onClick: async (v, { close }) => {
       if (!(await confirmDialog('Удалить запись? Её можно будет вернуть из истории.', { yes: 'Удалить', danger: true }))) return;

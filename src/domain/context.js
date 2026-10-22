@@ -18,6 +18,7 @@ export function buildContext(data) {
     delayReasons: byId(data.delayReasons),
     todos: byId(data.todos),
     notes: byId(data.notes),
+    pulls: byId(data.pulls),
     cabinetSettings: live(data.cabinetSettings),
     journalByPoint: new Map(),
   };

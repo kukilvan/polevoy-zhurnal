@@ -22,15 +22,15 @@ import { doorPicker } from './doorcfgview.js';
 import { doorChips } from './doorchips.js';
 import { doorShortColor } from '../../domain/index.js';
 // подпись точки на плане: у двери с конфигурацией — ещё ЭМ / МХ
-const shOf = (p) => { const c = doorCfgOf(p, state.ctx); const t = c ? doorCfgShort(state.ctx, c) : ''; return t ? { text: t, color: doorShortColor(state.ctx, c) || '#111' } : null; };
-const tagOf = (p) => { const c = doorCfgOf(p, state.ctx); const sh = c ? doorCfgShort(state.ctx, c) : ''; return sh ? `${p.label} ${sh}` : p.label; };
+export const shOf = (p) => { const c = doorCfgOf(p, state.ctx); const t = c ? doorCfgShort(state.ctx, c) : ''; return t ? { text: t, color: doorShortColor(state.ctx, c) || '#111' } : null; };
+export const tagOf = (p) => { const c = doorCfgOf(p, state.ctx); const sh = c ? doorCfgShort(state.ctx, c) : ''; return sh ? `${p.label} ${sh}` : p.label; };
 import { typeMatch, typeFilterOptions } from '../typegroups.js';
 
 export { STATUS_COLORS, statusColor } from '../../domain/index.js';
 import { statusColor, STATUS_COLORS } from '../../domain/index.js';
 // подпись на чертеже — рамка вокруг текста; значок без подписи — кружок его размера
-const isText = (pos) => { const w = pos.w || 0; const hh = pos.h || 0; return w && hh && Math.max(w, hh) / Math.min(w, hh) > 1.6; };
-function outline(g, api, pos, color, { width = 1.5, pad = 1.5, fill = null } = {}) {
+export const isText = (pos) => { const w = pos.w || 0; const hh = pos.h || 0; return w && hh && Math.max(w, hh) / Math.min(w, hh) > 1.6; };
+export function outline(g, api, pos, color, { width = 1.5, pad = 1.5, fill = null } = {}) {
   const s = api.view.s; const [x, y] = api.toScr(pos.x, pos.y);
   g.strokeStyle = color; g.lineWidth = width; g.beginPath();
   if (isText(pos)) { const w = (pos.w / 2 + pad) * s; const hh = (pos.h / 2 + pad) * s; g.rect(x - Math.max(w, 4), y - Math.max(hh, 3), 2 * Math.max(w, 4), 2 * Math.max(hh, 3)); }
@@ -41,7 +41,7 @@ function outline(g, api, pos, color, { width = 1.5, pad = 1.5, fill = null } = {
 const labelLike = (t = '') => /\d/.test(t) && !/[\u0590-\u05FF]/.test(t) && t.length <= 24 && !/\s{2,}/.test(t);
 // подписи значков (точки без надписи на чертеже): растут вместе с приближением, в рамке цвета статуса,
 // ставятся туда, где не закрывают значки и другие подписи
-function placeTags(g, api, tags, circles, frames = []) {
+export function placeTags(g, api, tags, circles, frames = []) {
   const fs = Math.round(Math.min(26, Math.max(12, 5.5 * api.view.s)));
   g.font = `bold ${fs}px system-ui`; g.textBaseline = 'middle';
   const placed = [...frames]; const padX = 4;
