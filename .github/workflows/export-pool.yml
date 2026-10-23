@@ -1,6 +1,7 @@
 name: Export starter pool
 
-# Вручную: копия общего пула → src/data/starter-pool.json (стартовый набор открытой версии «Менеджер проектов»)
+# Вручную: общий пул → src/data/starter-pool.json (стартовый набор для новых баз и режима «на устройстве»).
+# Берётся из последней серверной копии (repo polevoy-backups) — база не читается, лимит Firestore не тратится.
 on:
   workflow_dispatch:
 
@@ -15,10 +16,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm i --no-save firebase-admin@13
-      - run: node scripts/export-pool.mjs src/data/starter-pool.json
-        env:
-          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - uses: actions/checkout@v4
+        with:
+          repository: kukilvan/polevoy-backups
+          token: ${{ secrets.BACKUP_REPO_TOKEN }}
+          path: backups
+      - run: node scripts/starter-from-backup.mjs backups src/data/starter-pool.json
       - name: Сохранить
         run: |
           git config user.name "pool-bot"
