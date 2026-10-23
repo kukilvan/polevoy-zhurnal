@@ -172,15 +172,16 @@ export function projectView(ui) {
   const go = (label, fn, extra = {}) => h('button', { class: 'sec', style: { margin: 0, ...extra }, onclick: fn }, label);
   return h('div', {},
     h('div', { class: 'card', style: { padding: '6px 12px' } }, h('div', { style: { fontSize: '16px', fontWeight: 700 } }, p.name)),
-    h('div', { class: 'card' }, h('b', {}, 'Точки'), readiness(), h('div', { style: { marginTop: '8px' } }, summary(ui))),
     h('div', { class: 'card' },
       h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' } },
         go('📝 Сегодня', () => openToday(ui)),
         go('🧵 Протяжки', () => import('./pullview.js').then((m) => m.openPulls())),
         go('🗺 План', () => import('./planmodal.js').then((m) => m.planModal()))),
-      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginTop: '8px' } },
+      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px', marginTop: '8px' } },
         go('🧾 Что осталось', () => import('./points.js').then((m) => m.remainingModal())),
+        go('📊 Таблицы', () => ui.open('sheets')),
         go('🗄 Шкафы и шильют', () => ui.open('racks')))),
+    h('div', { class: 'card' }, h('b', {}, 'Точки'), readiness(), h('div', { style: { marginTop: '8px' } }, summary(ui))),
     h('div', { class: 'btns' },
       autoBackupLine(p),
       h('div', { class: 'mut', style: { width: '100%' } }, readsLine())));
