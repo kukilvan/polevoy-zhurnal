@@ -10,7 +10,7 @@ import { manualsCard } from './manualsview.js';
 const SECTIONS = [
   {
     id: 'intro', icon: '👋', title: 'Что это за приложение',
-    short: 'Полевой журнал — это список всех точек проекта (камеры, двери, розетки…) и отметки о том, что на каждой уже сделано. Из этих отметок само собирается ежедневное отчёт для руководителя. Работает и без интернета.',
+    short: 'Полевой журнал — приложение для ведения проектов и записи работ. В нём список всех точек проекта (камеры, двери, розетки…), отметки о том, что на каждой уже сделано, чертежи, шкафы, шильют, метраж, дела и заметки. Из этих отметок само собирается ежедневный отчёт для руководителя. Работает и без интернета.',
     more: [
       'Точка — место, где что-то подключается: камера, дверь, вайфай, розетка. Для каждой точки приложение помнит, что на ней сделано: протянут ли кабель, подключён ли, установлено ли устройство, проверено ли. Всё это видят все участники проекта.',
       '# Вкладки внизу',
@@ -36,7 +36,7 @@ const SECTIONS = [
     more: [
       '• «Тема» переключает по кругу: тёмная → светлая → как в телефоне. Выбор действует только на этом устройстве.',
       '• «Обновить приложение»: нажмите, если вышли новые функции, а на экране их нет. Приложение загрузит свежую версию и перезапустится. Данные проекта не теряются.',
-      '• Приложение можно добавить на экран «Домой» (в Safari: «Поделиться» → «На экран “Домой”»), тогда оно открывается как обычная программа.',
+      '• Приложение можно добавить на главный экран телефона, тогда оно открывается как обычная программа. В браузере откройте меню (в Safari — кнопка «Поделиться», в Chrome — три точки) и выберите «На экран “Домой”» или «Добавить на главный экран» / «Установить приложение».',
     ],
   },
   {
@@ -414,10 +414,51 @@ export function openGuide(ui, id, part = null) {
   ui.open('guide');
 }
 
+// Поиск по руководству: названия разделов, названия кнопок в «…» и строки текста
+function searchIndex() {
+  const out = [];
+  for (const sec of SECTIONS) {
+    const seen = new Set();
+    const add = (term, snippet) => { const k = term.toLowerCase(); if (seen.has(k)) return; seen.add(k); out.push({ term, snippet, sec }); };
+    add(sec.title);
+    for (const line of [sec.short, ...(sec.more || [])]) {
+      for (const m of line.matchAll(/«([^»]{2,60})»/g)) add(m[1].replace(/^[^\p{L}\p{N}]+/u, ''), line.replace(/^[•#]\s*/, ''));
+    }
+  }
+  return out;
+}
+function searchBox(ui) {
+  const input = h('input', { type: 'search', placeholder: '🔎 Найти: кнопку, слово, раздел…', style: { width: '100%', marginBottom: '8px' } });
+  const box = h('div', { style: { marginBottom: '8px' } });
+  const go = (sec) => { open.add(sec.id); focusId = sec.id; ui.render(); };
+  const norm = (x) => x.toLowerCase().replace(/ё/g, 'е');
+  const update = () => {
+    box.innerHTML = '';
+    const q = norm(input.value.trim());
+    if (q.length < 2) return;
+    const idx = searchIndex();
+    const hits = idx.filter((e) => norm(e.term).includes(q));
+    const seenLine = new Set(hits.map((e) => e.sec.id + e.snippet));
+    for (const sec of SECTIONS) for (const line of [sec.short, ...(sec.more || [])]) {
+      const t = line.replace(/^[•#]\s*/, '');
+      if (hits.length >= 12) break;
+      if (norm(t).includes(q) && !seenLine.has(sec.id + t) && !hits.some((e) => e.sec === sec && norm(e.term).includes(q))) { seenLine.add(sec.id + t); hits.push({ term: t.length > 70 ? t.slice(0, 70) + '…' : t, sec, line: true }); }
+    }
+    if (!hits.length) { box.append(h('div', { class: 'mut' }, 'Ничего не найдено. Попробуйте другое слово или загляните в «Словарик».')); return; }
+    for (const e of hits.slice(0, 8)) {
+      box.append(h('button', { class: 'sec', style: { display: 'block', width: '100%', textAlign: 'left', marginBottom: '4px' }, onclick: () => go(e.sec) },
+        h('div', {}, e.term), h('div', { class: 'mut', style: { fontSize: '12px' } }, `${e.sec.icon} ${e.sec.title}`)));
+    }
+  };
+  input.addEventListener('input', update);
+  return h('div', {}, input, box);
+}
+
 export function guideView(ui) {
   if (guidePart === 'manuals') return h('div', {}, manualsCard());
   if (guidePart === 'dict') return h('div', {}, dictCard());
   const wrap = h('div', {},
+    searchBox(ui),
     h('div', { class: 'mut', style: { margin: '0 2px 10px' } }, 'Коротко о том, как работать в приложении. Нажмите «Подробнее», чтобы увидеть детали.'),
     ...SECTIONS.map((s) => sectionCard(s, ui)));
   if (focusId) {
