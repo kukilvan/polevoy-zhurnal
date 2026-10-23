@@ -1,10 +1,12 @@
 // Движок тура: затемнение с «окном» вокруг нужного элемента, подпись и кнопка «Далее».
 // Шаг: { title, text, sel (функция → элемент или null), go (подготовка экрана), click (ждём нажатия на подсвеченное) }
 import { h } from '../ui.js';
+import { tr } from '../../i18n/index.js';
 
 const vis = (e) => { if (!e) return false; const r = e.getBoundingClientRect(); return r.width > 0 && r.height > 0; };
 /** Найти видимый элемент по селектору и тексту */
-export const find = (sel, text) => () => [...document.querySelectorAll(sel)].filter((e) => !e.closest('.tour-ui') && vis(e) && (!text || e.textContent.includes(text)))[0] || null;
+// текст сравнивается и по-русски, и в переводе (интерфейс может быть на другом языке)
+export const find = (sel, text) => () => [...document.querySelectorAll(sel)].filter((e) => !e.closest('.tour-ui') && vis(e) && (!text || e.textContent.includes(text) || e.textContent.includes(tr(text))))[0] || null;
 /** Окно (модальное) поверх приложения */
 export const sheet = () => [...document.querySelectorAll('.backdrop .sheet')].filter(vis).pop() || null;
 export const closeModals = () => { [...document.querySelectorAll('.backdrop .sheet-head .x')].reverse().forEach((b) => b.click()); };
@@ -59,7 +61,7 @@ function draw(st) {
       ? h('button', { class: 'sec', title: 'Нажать за вас', onclick: () => { const t = st.target; if (t) t.click(); else next(st); } }, 'Нажать за меня')
       : h('button', { onclick: () => next(st) }, last ? 'Готово' : 'Далее'));
   st.cap.replaceChildren(...[
-    h('div', { class: 'tour-count' }, `${st.i + 1} из ${n}${step.topic ? ` · ${step.topic}` : ''}`),
+    h('div', { class: 'tour-count' }, `${st.i + 1} из ${n}`, step.topic ? ' · ' : '', step.topic || ''),
     step.title ? h('b', { class: 'tour-title' }, step.title) : null,
     h('div', { class: 'tour-text' }, step.text),
     step.click ? h('div', { class: 'tour-tap' }, '👆 Нажмите на подсвеченное') : null,

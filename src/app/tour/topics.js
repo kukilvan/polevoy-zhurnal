@@ -1,8 +1,9 @@
 // Темы тура. Тексты короткие и простые: тур рассчитан на тех, кто не знаком ни с приложением, ни со слаботочкой.
 import { find, sheet } from './engine.js';
 import { isLocal } from '../../edition.js';
+import { tr } from '../../i18n/index.js';
 
-const field = (name) => () => [...document.querySelectorAll('.sheet .field')].find((l) => (l.querySelector('span')?.textContent || '').trim().startsWith(name) && l.getBoundingClientRect().height > 0) || null;
+const field = (name) => () => [...document.querySelectorAll('.sheet .field')].find((l) => { const x = (l.querySelector('span')?.textContent || '').trim(); return (x.startsWith(name) || x.startsWith(tr(name))) && l.getBoundingClientRect().height > 0; }) || null;
 const tab = (name) => find('nav button', name);
 const btn = (text) => find('button', text);
 const topbar = (i) => () => document.querySelectorAll('.topbar > button, .topbar > .pill')[i] || null;
@@ -11,7 +12,7 @@ export function buildTopics(ui) {
   const tabGo = (id) => () => ui.go(id);
   const menuOpen = (section) => async () => {
     document.querySelector('.topbar button')?.click(); await wait(120);
-    if (section) { [...document.querySelectorAll('.backdrop .group')].find((g) => g.textContent.includes(section))?.click(); await wait(80); }
+    if (section) { [...document.querySelectorAll('.backdrop .group')].find((g) => g.textContent.includes(section) || g.textContent.includes(tr(section)))?.click(); await wait(80); }
   };
   const wait = (ms) => new Promise((r) => setTimeout(r, ms));
   const T = (topic) => (s) => ({ topic, ...s });
@@ -36,7 +37,7 @@ export function buildTopics(ui) {
       know({ title: 'Добро пожаловать', center: true, text: 'Это короткий тур. Он идёт на демо-проекте: всё, что вы нажимаете, остаётся только здесь и пропадёт, когда вы выйдете. Ваши настоящие проекты не пострадают.', go: tabGo('project') }),
       know({ title: 'Пять вкладок', sel: find('nav'), text: 'Внизу главные разделы: Проект, Точки, Дела и заметки, Отчёты, Ещё. Между ними вы будете переключаться чаще всего.', go: tabGo('project') }),
       know({ title: 'Меню', sel: topbar(0), text: 'Кнопка ☰ открывает меню: все проекты, участники, история, руководство, тема, копии данных.' }),
-      know({ title: 'Онлайн и офлайн', sel: find('.topbar .pill', 'лайн'), text: isLocal() ? 'Значок показывает, есть ли интернет. У вас всё хранится в этом телефоне, приложение работает и без связи. Чтобы не потерять данные, время от времени делайте копию на Google Диск: ☰ → Данные → «Резервная копия на Диск».' : 'Значок показывает, есть ли связь. Без интернета тоже можно работать: записи хранятся в телефоне и сами уйдут на сервер, когда связь появится.' }),
+      know({ title: 'Онлайн и офлайн', sel: () => [...document.querySelectorAll('.topbar .pill')].find((e) => ['онлайн', 'офлайн', tr('онлайн'), tr('офлайн')].includes(e.textContent.trim())) || null, text: isLocal() ? 'Значок показывает, есть ли интернет. У вас всё хранится в этом телефоне, приложение работает и без связи. Чтобы не потерять данные, время от времени делайте копию на Google Диск: ☰ → Данные → «Резервная копия на Диск».' : 'Значок показывает, есть ли связь. Без интернета тоже можно работать: записи хранятся в телефоне и сами уйдут на сервер, когда связь появится.' }),
       know({ title: 'Быстрые кнопки', sel: find('.card', 'Протяжки'), text: 'На вкладке «Проект» собраны кнопки для главного: Сегодня, Протяжки, План, Что осталось, Таблицы, Шкафы и шильют.' }),
     ] },
     { id: 'look', icon: '🎨', title: 'Оформление', steps: [
