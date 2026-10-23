@@ -3,10 +3,13 @@ name: Export starter pool
 # Вручную: общий пул → src/data/starter-pool.json (стартовый набор для новых баз и режима «на устройстве»).
 # Берётся из последней серверной копии (repo polevoy-backups) — база не читается, лимит Firestore не тратится.
 on:
+  schedule:
+    - cron: '0 9 * * 1'   # раз в неделю, в понедельник (после утренней автокопии)
   workflow_dispatch:
 
 permissions:
   contents: write
+  actions: write   # запустить выкладку сайта, если набор изменился
 
 jobs:
   export:
@@ -27,4 +30,9 @@ jobs:
           git config user.name "pool-bot"
           git config user.email "pool-bot@users.noreply.github.com"
           git add src/data/starter-pool.json
-          git diff --cached --quiet || (git commit -m "Стартовый набор: обновлён из общего пула" && git push)
+          if git diff --cached --quiet; then echo "::notice::Набор не изменился"; else
+            git commit -m "Стартовый набор: обновлён из общего пула" && git push
+            gh workflow run pages.yml --ref main
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
