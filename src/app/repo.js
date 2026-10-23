@@ -43,19 +43,23 @@ const clean = (obj) => JSON.parse(JSON.stringify(obj, (k, v) => (v === undefined
 const strip = (obj) => { const c = clean(obj); delete c._pending; return c; };
 
 // ---------- хранилище: память ----------
-export function createMemoryBackend() {
+// persist (необязательно) — хранение на устройстве (localdb.js): initial — что уже сохранено, put/putProject/putSettings — запись изменений
+export function createMemoryBackend({ initial = null, persist = null, kind = 'memory' } = {}) {
   const projects = new Map(); // pid -> doc
   const colls = new Map();    // `${pid}/${name}` -> Map(key -> doc)
   const listeners = new Set();
-  let settings = {};
+  let settings = { ...(initial?.settings || {}) };
   const bucket = (pid, name) => {
     const k = `${pid}/${name}`;
     if (!colls.has(k)) colls.set(k, new Map());
     return colls.get(k);
   };
+  (initial?.projects || []).forEach((p) => projects.set(p.id, p));
+  (initial?.docs || []).forEach(({ pid, coll, key, doc }) => bucket(pid, coll).set(key, doc));
   const notify = () => listeners.forEach((fn) => fn());
+  const saveSettings = () => persist?.putSettings(settings);
   return {
-    kind: 'memory',
+    kind,
     listenProjects(uid, cb) {
       const run = () => cb([...projects.values()].filter((p) => (p.memberUids || []).includes(uid)).map((p) => ({ ...p })));
       listeners.add(run); run(); return () => listeners.delete(run);
@@ -72,28 +76,29 @@ export function createMemoryBackend() {
       listeners.add(run); run(); return () => listeners.delete(run);
     },
     listenUserPrefs(uid, cb) { const run = () => cb({ ...settings }); listeners.add(run); run(); return () => listeners.delete(run); },
-    async saveUserPrefs(uid, patch) { settings = { ...settings, ...patch }; notify(); },
+    async saveUserPrefs(uid, patch) { settings = { ...settings, ...patch }; saveSettings(); notify(); },
     async commit(pid, writes) {
       for (const w of writes) {
         if (w.coll === 'projects') {
           const cur = { ...(projects.get(w.id) || {}), ...w.data };
           Object.entries(w.arrayOps || {}).forEach(([k, o]) => { const a = cur[k] || []; cur[k] = o.union ? [...new Set([...a, ...o.union])] : a.filter((x) => !o.remove.includes(x)); });
-          projects.set(w.id, cur); continue;
+          projects.set(w.id, cur); persist?.putProject(cur); continue;
         }
         const b = bucket(pid, w.coll); const key = docKey(w.id);
-        b.set(key, { ...(b.get(key) || {}), ...w.data });
+        const d = { ...(b.get(key) || {}), ...w.data };
+        b.set(key, d); persist?.put(pid, w.coll, key, d);
       }
       notify();
     },
     async loadAdmin() { return settings.__admin || null; },
-    async claimAdmin(email) { if (!settings.__admin) settings.__admin = email; return settings.__admin; },
+    async claimAdmin(email) { if (!settings.__admin) { settings.__admin = email; saveSettings(); } return settings.__admin; },
     async loadSettings() { return { ...settings }; },
-    async saveSettings(patch) { settings = { ...settings, ...patch }; },
+    async saveSettings(patch) { settings = { ...settings, ...patch }; saveSettings(); },
     // общий пул и входящие (в памяти — для тестов)
     listenPool(kind, cb) { const run = () => cb([...bucket('_pool', kind).values()].map((d) => ({ ...d }))); listeners.add(run); run(); return () => listeners.delete(run); },
-    async commitPool(writes) { writes.forEach((w) => { const b = bucket('_pool', w.coll); if (w.remove) b.delete(docKey(w.id)); else b.set(docKey(w.id), { ...(b.get(docKey(w.id)) || {}), ...w.data }); }); notify(); },
+    async commitPool(writes) { writes.forEach((w) => { const b = bucket('_pool', w.coll); const key = docKey(w.id); if (w.remove) { b.delete(key); persist?.del('_pool', w.coll, key); } else { const d = { ...(b.get(key) || {}), ...w.data }; b.set(key, d); persist?.put('_pool', w.coll, key, d); } }); notify(); },
     listenInbox(cb) { const run = () => cb([...bucket('_pool', 'inbox').values()].map((d) => ({ ...d }))); listeners.add(run); run(); return () => listeners.delete(run); },
-    async setInbox(list) { const b = bucket('_pool', 'inbox'); list.forEach((x) => b.set(x.key, { ...(b.get(x.key) || {}), ...x.data })); notify(); },
+    async setInbox(list) { if (persist) return; const b = bucket('_pool', 'inbox'); list.forEach((x) => b.set(x.key, { ...(b.get(x.key) || {}), ...x.data })); notify(); },
     dump: () => ({ projects: [...projects.values()], colls: [...colls.entries()].map(([k, v]) => [k, [...v.values()]]) }),
   };
 }

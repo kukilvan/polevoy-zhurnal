@@ -4,7 +4,7 @@ import { sheetsView } from './views/sheetslist.js';
 import { projectWizard } from './views/wizard.js';
 import { startPool } from './pool.js';
 import { seedStarterPool } from './starter.js';
-import { APP_NAME, connection } from '../edition.js';
+import { APP_NAME, connection, isLocal } from '../edition.js';
 import { startManuals } from './manuals.js';
 import { startDoorPool } from './doorpool.js';
 import { h, openModal, toast, confirmDialog, setShortcutsProvider } from './ui.js';
@@ -90,7 +90,7 @@ export function createShell({ user, onLogout, diag }) {
       p ? item('🩺 Проверка справочников', auditModal) : null,
       p ? item('📥 Импорт данных (замена всего проекта)', () => open('import')) : null]),
       h('div', { class: 'mut', style: { padding: '10px 4px' } }, user.displayName || user.email),
-      item('🚪 Выйти', onLogout)));
+      item(isLocal() ? '🔄 Сменить режим работы' : '🚪 Выйти', onLogout)));
   }
 
   function invitesBanner() {

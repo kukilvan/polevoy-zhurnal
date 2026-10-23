@@ -1,7 +1,7 @@
 // Участники проекта: имена, приглашения, удаление (с предложением откатить правки участника).
 import { h, formModal, confirmDialog, toast } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
-import { connection, connectLink, APP_NAME } from '../../edition.js';
+import { connection, connectLink, APP_NAME, isLocal } from '../../edition.js';
 
 export const memberKey = (email) => String(email).toLowerCase().replace(/\./g, '_');
 export const memberName = (p, email) => p.memberNames?.[memberKey(email)] || '';
@@ -48,6 +48,12 @@ function memberForm(p, email, ui) {
 }
 
 export function membersView(ui) {
+  if (isLocal()) {
+    return h('div', { class: 'card' },
+      h('b', {}, '👥 Участники'),
+      h('div', { style: { margin: '6px 0', lineHeight: 1.45 } }, 'Сейчас приложение работает только на этом устройстве, поэтому приглашать коллег нельзя.'),
+      h('div', { class: 'mut' }, 'Чтобы работать вместе, нужна своя база в облаке (Firebase, около 10 минут настройки, лучше с компьютера). Ваши проекты перенесутся в неё.'));
+  }
   const p = currentProject(); const repo = getRepo();
   const me = String(repo.user.email || '').toLowerCase();
   const invited = p.invitedEmails || []; const canManage = repo.isCreator(p);

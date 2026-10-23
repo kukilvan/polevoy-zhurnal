@@ -2,6 +2,7 @@
 // Обязательные шаги: данные проекта → типы точек из общего пула → устройства → кабели → работы → итог «Создать проект».
 // Что нужно выбранному уровнем выше — серые отмеченные галочки («нужно для: …»), остальное из пула можно добавить.
 // После создания — необязательные шаги (каждый можно пропустить): участники, чертежи, точки, для руководства.
+import { isLocal } from '../../edition.js';
 import { h, openModal, toast, confirmDialog } from '../ui.js';
 import { state, getRepo, currentProject, setCurrentProject, subscribe } from '../store.js';
 import { POOL_KINDS, POOL_TITLES, poolMaps, depsOf, isSystemType, mainTable, withTable } from '../../domain/index.js';
@@ -86,10 +87,12 @@ export function projectWizard(ui) {
   ];
   async function create() {
     if (!data.name.trim()) { toast('Впишите название проекта'); step = 0; draw(); return; }
-    if (!new URLSearchParams(location.search).get('mem') && (!poolReady() || !poolHasData())) { toast('Общий пул ещё не скачан на телефон. Подключитесь к интернету, подождите минуту и повторите — иначе проект создастся пустым'); return; }
+    const noPool = !poolHasData();
+    if (!new URLSearchParams(location.search).get('mem') && !isLocal() && (!poolReady() || noPool)) { toast('Общий пул ещё не скачан на телефон. Подключитесь к интернету, подождите минуту и повторите — иначе проект создастся пустым'); return; }
     const f = finalSet(); const m = maps();
-    if (!f.types.size && !new URLSearchParams(location.search).get('mem') && !(await confirmDialog('Не выбран ни один тип точек: проект создастся без типов, добавлять точки будет нельзя, пока вы не добавите типы из общего пула. Всё равно создать?', { yes: 'Создать без типов' }))) { step = 1; draw(); return; }
-    const refs = Object.fromEntries(POOL_KINDS.map((k) => [k, [...f[k]].map((id) => m[k].get(id)).filter(Boolean).map((x) => bare(x))]));
+    if (!f.types.size && !(isLocal() && noPool) && !new URLSearchParams(location.search).get('mem') && !(await confirmDialog('Не выбран ни один тип точек: проект создастся без типов, добавлять точки будет нельзя, пока вы не добавите типы из общего пула. Всё равно создать?', { yes: 'Создать без типов' }))) { step = 1; draw(); return; }
+    // на устройстве без пула (стартовый набор не загружен) — встроенный набор справочников
+    const refs = isLocal() && noPool ? null : Object.fromEntries(POOL_KINDS.map((k) => [k, [...f[k]].map((id) => m[k].get(id)).filter(Boolean).map((x) => bare(x))]));
     const pid = getRepo().createProject({ ...data, name: data.name.trim(), oneOff: !!data.oneOff }, refs);
     setCurrentProject(pid, { pending: true });
     close(); ui.go('project'); toast('Проект создан');

@@ -9,7 +9,7 @@ import * as store from './app/store.js';
 import { createShell } from './app/shell.js';
 
 import { captureTokenFromUrl } from './app/google.js';
-import { APP_NAME, connection, saveConnection, parseConnect, setAdminEmail } from './edition.js';
+import { APP_NAME, connection, saveConnection, parseConnect, setAdminEmail, mode, setLocalMode, localUser, isStandalone } from './edition.js';
 document.title = APP_NAME;
 captureTokenFromUrl();
 const BUILD = typeof __BUILD__ !== 'undefined' ? __BUILD__ : 'dev';
@@ -59,7 +59,7 @@ function showLogin(message = '', busy = false) {
       h('button', { class: 'sec', disabled: busy, onclick: () => attempt(() => fb.loginRedirect()) }, 'Войти (запасной способ)'),
       message ? h('div', { style: { color: 'var(--err)', marginTop: '10px' } }, message) : null),
     h('div', { class: 'mut', style: { margin: '10px 2px' } }, `База: ${connection()?.firebase?.projectId || '—'}`,
-      h('button', { class: 'sec', style: { marginLeft: '8px' }, onclick: async () => { if (!confirm('Открыть мастер настройки подключения?')) return; const { setupView } = await import('./app/setup.js'); app.replaceChildren(setupView({ onDone: () => location.reload() })); } }, '⚙ Подключение'))));
+      h('button', { class: 'sec', style: { marginLeft: '8px' }, onclick: async () => { if (!confirm('Открыть мастер настройки подключения?')) return; const { setupView } = await import('./app/setup.js'); app.replaceChildren(setupView({ onDone: () => location.reload(), onBack: () => location.reload() })); } }, '⚙ Подключение'))));
 }
 
 async function startSession(user) {
@@ -75,17 +75,47 @@ async function startSession(user) {
   });
 }
 
-// Открытая версия: ссылка-приглашение (?connect=…) сохраняет подключение; без подключения — мастер настройки
-async function openEditionGate() {
-  const p = new URLSearchParams(location.search).get('connect');
+// Что показать при запуске: ссылка-приглашение (?connect=…) → база Firebase; ?setup=1 → мастер своей базы;
+// режим «на устройстве» → локальные данные (на телефоне — только со значка); иначе — экран первого запуска.
+async function gate() {
+  const q = new URLSearchParams(location.search);
+  const { needsInstallGate, startView } = await import('./app/start.js');
+  const p = q.get('connect');
   if (p) {
-    try { saveConnection(parseConnect(p)); info('Подключение из ссылки-приглашения сохранено'); } catch (e) { error('Ссылка-приглашение', e); toast(`Ссылка-приглашение повреждена: ${e.message}`); }
+    try { saveConnection(parseConnect(p)); setLocalMode(false); info('Подключение из ссылки-приглашения сохранено'); } catch (e) { error('Ссылка-приглашение', e); toast(`Ссылка-приглашение повреждена: ${e.message}`); }
     history.replaceState(null, '', location.pathname);
   }
-  if (connection()) return true;
-  const { setupView } = await import('./app/setup.js');
-  app.replaceChildren(setupView({ onDone: () => location.reload() }));
-  return false;
+  const wizard = async () => {
+    const { setupView } = await import('./app/setup.js');
+    app.replaceChildren(setupView({ onDone: () => location.replace(location.pathname), onBack: () => location.replace(location.pathname) }));
+  };
+  if (q.has('setup') && !connection()) { await wizard(); return null; }
+  const m = mode();
+  if (m === 'firebase') return 'firebase';
+  const sv = startView({ onLocal: () => location.reload(), onFirebase: wizard, onConnected: () => location.reload() });
+  if (m === 'local') {
+    if (!needsInstallGate()) return 'local';
+    app.replaceChildren(sv.el); sv.install(); return null;
+  }
+  app.replaceChildren(sv.el);
+  if (isStandalone()) sv.how();
+  return null;
+}
+
+async function startLocal() {
+  const { createLocalBackend } = await import('./app/localdb.js');
+  const backend = await createLocalBackend();
+  const user = localUser();
+  const repo = createRepo(backend, user);
+  store.start(repo);
+  shell = createShell({
+    user,
+    onLogout: async () => {
+      if (!confirm('Выйти из режима «на устройстве»? Данные останутся в этом устройстве и вернутся, если снова выбрать этот режим.')) return;
+      setLocalMode(false); location.reload();
+    },
+    diag: { build: BUILD, device: DEVICE, standalone, backend: 'на устройстве (IndexedDB)', cacheMode: '—', userEmail: '' },
+  });
 }
 
 // Открытая версия: кто администратор базы (первый вошедший становится им сам)
@@ -112,7 +142,11 @@ async function resolveAdmin(repo, user) {
 }
 
 async function boot() {
-  if (!memoryMode && !(await openEditionGate())) return;
+  if (!memoryMode) {
+    const g = await gate();
+    if (!g) return;
+    if (g === 'local') { await startLocal(); return; }
+  }
   if (memoryMode) { startSession({ uid: 'test-user', displayName: 'Тестовый пользователь', email: new URLSearchParams(location.search).get('memEmail') || 'test@example.com' }); window.__pz = { store, repo: window.__pzRepo }; return; }
   showMessage('Проверяю вход…');
   fb = await import('./firebase.js');

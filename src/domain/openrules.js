@@ -7,6 +7,8 @@ export function openRules(rules) {
     'function poolAdmin() { return signedIn() && exists(/databases/$(database)/documents/meta/admin)',
     '      && request.auth.token.email.lower() == get(/databases/$(database)/documents/meta/admin).data.email; }',
     '    // Администратор базы — первый вошедший: документ создаётся один раз и больше не меняется',
+    '    // Проверка из мастера настройки (без входа): если этот пустой документ читается — правила вставлены',
+    '    match /meta/probe { allow read: if true; allow write: if false; }',
     '    match /meta/admin {',
     '      allow read: if signedIn();',
     '      allow create: if signedIn() && request.resource.data.email == request.auth.token.email.lower();',

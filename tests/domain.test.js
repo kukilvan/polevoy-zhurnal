@@ -778,3 +778,23 @@ test('правила открытой версии: без вшитой почт
   assert.match(r, /function poolAdmin\(\) \{ return signedIn\(\) && exists/);
   assert.equal(fs.readFileSync(new URL('../firestore.open.rules', import.meta.url), 'utf8'), r, 'firestore.open.rules устарел: пересоздайте из firestore.rules (openRules)');
 });
+
+test('мастер своей базы: проверки по ответам Google', async () => {
+  const m = await import('../src/domain/fbcheck.js');
+  const cfg = { apiKey: 'k', projectId: 'p' };
+  const resp = (status, body) => async () => ({ ok: status >= 200 && status < 300, status, json: async () => body });
+  assert.equal((await m.checkConfig(cfg, resp(400, { error: { message: 'CONFIGURATION_NOT_FOUND' } }))).ok, true);
+  assert.equal((await m.checkConfig(cfg, resp(400, { error: { message: 'API key not valid. Please pass a valid API key.' } }))).ok, false);
+  assert.equal((await m.checkGoogle(cfg, 'https://x/', resp(200, { authUri: 'https://accounts.google.com/...' }))).ok, true);
+  assert.match((await m.checkGoogle(cfg, 'https://x/', resp(400, { error: { message: 'OPERATION_NOT_ALLOWED' } }))).msg, /не включён/);
+  assert.equal((await m.checkDomain(cfg, 'kukilvan.github.io', resp(200, { authorizedDomains: ['localhost', 'kukilvan.github.io'] }))).ok, true);
+  assert.equal((await m.checkDomain(cfg, 'kukilvan.github.io', resp(200, { authorizedDomains: ['localhost'] }))).ok, false);
+  let f = await m.checkFirestore(cfg, resp(404, { error: { message: 'The database (default) does not exist for project p', status: 'NOT_FOUND' } }));
+  assert.equal(f.db.ok, false);
+  f = await m.checkFirestore(cfg, resp(403, { error: { message: 'Missing or insufficient permissions.', status: 'PERMISSION_DENIED' } }));
+  assert.equal(f.db.ok, true); assert.equal(f.rules.ok, false);
+  f = await m.checkFirestore(cfg, resp(404, { error: { message: 'Document "projects/p/databases/(default)/documents/meta/probe" not found.', status: 'NOT_FOUND' } }));
+  assert.equal(f.rules.ok, true);
+  f = await m.checkFirestore(cfg, async () => { throw new Error('offline'); });
+  assert.equal(f.db.ok, false);
+});
