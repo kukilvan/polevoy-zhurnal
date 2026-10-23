@@ -121,3 +121,13 @@ test('шилют по портам: точка закрывается, когд�
   assert.equal([...stuckPortsOf(pt, whole)].length, 2);
   assert.equal(itogShtuk({ workId: 'CHK_FLUKE', workType: 'Проверка', pointIds: ['c1'], portQty: [{ id: 'c1', v: 1 }] }, half), 1);
 });
+
+test('синхронизация: причины отказа сервера и пороги лимита записей', async () => {
+  const { rejectReason, writeWarnLevel } = await import('../src/domain/sync.js');
+  assert.match(rejectReason('permission-denied').title, /прав/);
+  assert.match(rejectReason('resource-exhausted').fix, /10:00/);
+  assert.match(rejectReason('invalid-argument').fix, /журнал/);
+  assert.equal(writeWarnLevel(15000, 16100), 0.8);
+  assert.equal(writeWarnLevel(16100, 16200), 0);
+  assert.equal(writeWarnLevel(18000, 19100), 0.95);
+});

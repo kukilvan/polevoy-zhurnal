@@ -374,7 +374,7 @@ export function addWorkForPoint(pointId) {
 }
 
 // строки журнала записи: добавить недостающие, убрать лишние
-function syncJournal(entryId, pointIds) {
+export function syncJournal(entryId, pointIds) {
   const repo = getRepo(); const pid = currentProject().id;
   const have = state.data.journal.filter((r) => r.entryId === entryId);
   const want = new Set(pointIds);

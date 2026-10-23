@@ -39,7 +39,10 @@ service cloud.firestore {
       allow read: if signedIn() && (request.auth.uid in resource.data.memberUids
         || request.auth.token.email in resource.data.get('invitedEmails', []));
       allow update: if signedIn() && (
-        request.auth.uid in resource.data.memberUids
+        // участник меняет проект; состав участников и приглашения — только создатель проекта
+        (request.auth.uid in resource.data.memberUids
+          && (request.auth.uid == resource.data.get('createdBy', request.auth.uid)
+              || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['memberUids', 'memberEmails', 'invitedEmails', 'removedMembers'])))
         || (request.auth.token.email in resource.data.get('invitedEmails', [])
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
                  ['memberUids', 'memberEmails', 'invitedEmails', 'updatedAt', 'updatedBy', 'updatedByName', 'updatedAtServer'])

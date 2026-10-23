@@ -4,7 +4,7 @@ import { sheetsView } from './views/sheetslist.js';
 import { projectWizard } from './views/wizard.js';
 import { startPool } from './pool.js';
 import { startDoorPool } from './doorpool.js';
-import { h, openModal, toast, setShortcutsProvider } from './ui.js';
+import { h, openModal, toast, confirmDialog, setShortcutsProvider } from './ui.js';
 import { currentShortcuts } from './views/latinfix.js';
 setShortcutsProvider(() => currentShortcuts());
 setSnapProvider((id, data) => entryLine({ ...(state.ctx?.entries.get(id) || {}), ...data, id }, state.ctx, 'ru'));
@@ -14,8 +14,9 @@ import { settingsView, refView, REFS } from './views/settings.js';
 import { membersView } from './views/members.js';
 import { installView } from './views/install.js';
 import { PENDING } from './google.js';
-import { onPendingChange, onReadChange, readStatus, readsResetAt, setSnapProvider } from './repo.js';
-import { entryLine } from '../domain/index.js';
+import { onPendingChange, onReadChange, readStatus, readsResetAt, setSnapProvider, rejectedList, onRejectedChange, dropRejected, onWriteWarn, DAILY_WRITE_LIMIT } from './repo.js';
+import { asText } from '../log.js';
+import { entryLine, rejectReason } from '../domain/index.js';
 import { makeWorker } from './views/tohnitview.js';
 import { assignOnPlan } from './views/planassign.js';
 // для проверок в браузере (как window.__pz)
@@ -141,6 +142,35 @@ export function createShell({ user, onLogout, diag }) {
     paintRead();
     return rbadge;
   }
+  // «⚠ N»: записи, которые сервер не принял. Хранятся на телефоне — можно разобраться в причине и повторить
+  let xbadge = null;
+  const paintRej = () => { if (!xbadge) return; const n = rejectedList().length; xbadge.style.display = n ? '' : 'none'; xbadge.textContent = `⚠ ${n}`; xbadge.title = `Сервер не принял записей: ${n}`; };
+  function rejectedModal() {
+    const box = h('div', {}); const repo = getRepo();
+    const when = (t) => new Date(t).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
+    const colls = (it) => [...new Set(it.writes.map((w) => w.coll).filter((c) => c !== 'history'))].join(', ');
+    const draw = () => {
+      const list = rejectedList();
+      if (!list.length) { box.replaceChildren(h('div', { class: 'empty' }, 'Всё принято сервером.')); return; }
+      box.replaceChildren(
+        h('div', { class: 'mut' }, 'Эти записи сервер не принял: на телефоне они сохранены, но другие их не видят. Устраните причину и нажмите «Повторить».'),
+        ...list.map((it) => { const r = rejectReason(it.code); return h('div', { class: 'card', style: { margin: '8px 0' } },
+          h('b', {}, r.title), h('div', { class: 'mut', style: { fontSize: '13px' } }, `${when(it.at)} · разделы: ${colls(it) || '—'} · код: ${it.code || '—'}`),
+          h('div', { style: { margin: '6px 0' } }, r.fix),
+          h('button', { class: 'sec', onclick: async () => { if (await confirmDialog('Удалить эту запись из списка? Она не попадёт на сервер никогда.', { yes: 'Удалить', danger: true })) { dropRejected(it.id); draw(); } } }, 'Не нужна — удалить')); }),
+        h('div', { class: 'btns' },
+          h('button', { onclick: () => { const n = repo.retryRejected(); toast(`Отправляю повторно: ${n}`); setTimeout(draw, 1500); } }, '🔁 Повторить все'),
+          h('button', { class: 'sec', onclick: async () => { try { await navigator.clipboard.writeText(asText()); toast('Журнал скопирован — пришлите его'); } catch { toast('Не удалось скопировать — «Меню → Журнал событий»'); } } }, '📋 Скопировать журнал')));
+    };
+    draw(); const off = onRejectedChange(() => draw());
+    openModal('⚠ Не принято сервером', box, { onClose: () => off() });
+  }
+  function rejectedBadge() {
+    xbadge = h('span', { class: 'pill err', style: { display: 'none', cursor: 'pointer', whiteSpace: 'nowrap' }, onclick: rejectedModal });
+    paintRej(); return xbadge;
+  }
+  onRejectedChange(paintRej);
+  onWriteWarn((lvl, n) => toast(lvl >= 0.95 ? `⚠ Записей за сутки: ${n.toLocaleString('ru-RU')} из ${DAILY_WRITE_LIMIT.toLocaleString('ru-RU')} — лимит почти исчерпан. Дальше записи могут не приниматься до 10:00.` : `Записей за сутки: ${n.toLocaleString('ru-RU')} из ${DAILY_WRITE_LIMIT.toLocaleString('ru-RU')} (80% лимита). Большие операции лучше отложить до 10:00.`));
   setInterval(() => { paintBadge(); paintRead(); }, 5000);
   onPendingChange(paintBadge); onReadChange(paintRead);
 
@@ -151,6 +181,7 @@ export function createShell({ user, onLogout, diag }) {
       h('div', { class: 'topbar' },
         ui.screen ? h('button', { class: 'sec', onclick: () => ui.back() }, '←') : h('button', { class: 'sec', onclick: menu }, '☰'),
         h('div', { class: 'title' }, title),
+        rejectedBadge(),
         readBadge(),
         pendingBadge(),
         h('span', { class: `pill ${state.online ? 'ok' : 'warn'}` }, state.online ? 'онлайн' : 'офлайн'),

@@ -3,7 +3,7 @@ import './app/theme.js';
 import { initKeyboard } from './app/keyboard.js';
 initKeyboard();
 import { info, warn, error } from './log.js';
-import { h } from './app/ui.js';
+import { h, toast } from './app/ui.js';
 import { createRepo, createMemoryBackend, createFirestoreBackend } from './app/repo.js';
 import * as store from './app/store.js';
 import { createShell } from './app/shell.js';
@@ -24,6 +24,18 @@ const DEVICE = `${platform}-${deviceId()}${standalone ? ' (на экране Д�
 info(`Запуск, сборка ${BUILD}`); info(`Устройство: ${DEVICE}`); info(`standalone=${standalone}, online=${navigator.onLine}${memoryMode ? ', ТЕСТОВЫЙ РЕЖИМ (память)' : ''}`);
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.ready.then(() => info('Service worker активен')).catch(() => {});
+// Вышла новая версия, а приложение было открыто со старой: подгружаемые части (Протяжки, Точки, мастер…) прежних имён больше нет
+window.addEventListener('vite:preloadError', (e) => {
+  e.preventDefault(); warn('Часть приложения не загрузилась — вышла новая версия');
+  let last = 0; try { last = Number(sessionStorage.getItem('pz.reloaded') || 0); } catch { /* ok */ }
+  if (Date.now() - last < 15000) { toast('Не удалось загрузить раздел. Закройте приложение и откройте снова.'); return; }
+  try { sessionStorage.setItem('pz.reloaded', String(Date.now())); } catch { /* ok */ }
+  toast('Вышла новая версия — перезапускаю…'); setTimeout(() => location.reload(), 1500);
+});
+if ('serviceWorker' in navigator) {
+  const had = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener('controllerchange', () => { if (had) toast('Вышла новая версия приложения. Когда будет удобно — закройте и снова откройте его.'); });
+}
 else warn('Service worker не поддерживается');
 
 let fb = null; let shell = null;

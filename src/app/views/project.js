@@ -1,6 +1,6 @@
 // Вкладка «Проект»: карточка текущего проекта и сводка по точкам.
 import { projectWizard } from './wizard.js';
-import { readsCount, readsToday, readsResetAt, DAILY_READ_LIMIT } from '../repo.js';
+import { readsCount, readsToday, readsResetAt, DAILY_READ_LIMIT, writesToday, DAILY_WRITE_LIMIT } from '../repo.js';
 import { state, currentProject, pointsSorted, infoOf, getRepo } from '../store.js';
 import { projectForm } from './projects.js';
 import { pointForm, generatorForm } from './points.js';
@@ -148,7 +148,8 @@ function readsLine() {
   const used = readsToday(); const left = Math.max(0, DAILY_READ_LIMIT - used);
   const at = readsResetAt(); const hhmm = at.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
   const day = at.toDateString() === new Date().toDateString() ? 'сегодня' : 'завтра';
-  return `📈 Чтений базы: осталось ${left.toLocaleString('ru-RU')} из ${DAILY_READ_LIMIT.toLocaleString('ru-RU')} (с этого телефона; за этот запуск ${readsCount()}). Лимит сбросится ${day} в ${hhmm}`;
+  const w = Math.max(0, DAILY_WRITE_LIMIT - writesToday());
+  return `📈 Чтений базы: осталось ${left.toLocaleString('ru-RU')} из ${DAILY_READ_LIMIT.toLocaleString('ru-RU')} (с этого телефона; за этот запуск ${readsCount()}). Записей осталось ${w.toLocaleString('ru-RU')} из ${DAILY_WRITE_LIMIT.toLocaleString('ru-RU')}. Лимит сбросится ${day} в ${hhmm}`;
 }
 
 // Ночная копия на сервере: когда была последняя; красным, если давно (копии идут раз в 2 дня)

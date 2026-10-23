@@ -2,17 +2,19 @@
 import { h, confirmDialog, toast } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { dateText, entryLine } from '../../domain/index.js';
-import { todayIso } from './doh.js';
+import { todayIso, syncJournal } from './doh.js';
 
 const COLL_NAMES = {
   points: 'Точка', days: 'День', entries: 'Запись дня', journal: 'Журнал', catalog: 'Каталог', types: 'Тип точек', cables: 'Кабель',
   configs: 'Конфигурация', units: 'Единица', culprits: 'Виновник', delayReasons: 'Причина задержки', cabinetSettings: 'Настройка шкафа',
-  todos: 'Дело', notes: 'Заметка',
+  todos: 'Дело', notes: 'Заметка', devices: 'Устройство', pulls: 'Протяжка',
 };
 const ACTIONS = { create: 'создал', update: 'изменил', delete: 'удалил', restore: 'вернул', rollback: 'откатил' };
 
 let filter = { uid: '', from: null, to: null };
 let cache = null; // { key, rows }
+const HIST_MAX = 2000;
+let truncated = false;   // история за период длиннее, чем загружено
 
 export function describe(coll, data) {
   if (!data) return '—';
@@ -37,7 +39,8 @@ const endOfDay = (iso) => new Date(`${iso}T23:59:59.999`).getTime();
 async function load() {
   const pid = currentProject().id;
   const since = startOfDay(filter.from);
-  const rows = (await getRepo().loadHistory(pid, since)).filter((r) => r.at <= endOfDay(filter.to) && r.coll !== 'history');
+  const raw = await getRepo().loadHistory(pid, since, HIST_MAX); truncated = raw.length >= HIST_MAX;
+  const rows = raw.filter((r) => r.at <= endOfDay(filter.to) && r.coll !== 'history');
   return rows;
 }
 
@@ -49,6 +52,11 @@ function planUserRollback(rows, uid) {
   // записи, которые после этого менял кто-то другой — отмечаем как «конфликт»
   plan.forEach((v, k) => { v.conflict = rows.some((r) => `${r.coll}/${r.docId}` === k && r.by !== uid && r.at > v.at); });
   return [...plan.values()];
+}
+
+// после отката записи дня её строки журнала (по точкам) приводим в соответствие с вернувшимся списком точек
+function fixJournal(coll, docId, before) {
+  if (coll === 'entries' && before && !before.deleted && Array.isArray(before.pointIds)) syncJournal(docId, before.pointIds);
 }
 
 export function historyView(ui) {
@@ -82,17 +90,17 @@ export function historyView(ui) {
           h('div', { class: 'sub' }, `${when} · ${r.byName || names.get(r.by) || r.by}`)),
         h('button', { class: 'sec', style: { flex: 'none' }, onclick: async () => {
           if (!(await confirmDialog(`Отменить это изменение (${COLL_NAMES[r.coll] || r.coll})? Запись вернётся к состоянию до него.`, { yes: 'Откатить' }))) return;
-          repo.revertTo(pid, r.coll, r.docId, r.before); toast('Откат выполнен'); setTimeout(reload, 400);
+          repo.revertTo(pid, r.coll, r.docId, r.before); fixJournal(r.coll, r.docId, r.before); toast('Откат выполнен'); setTimeout(reload, 400);
         } }, '↩'));
     });
-    const bulk = filter.uid ? h('div', { class: 'btns' }, h('button', { class: 'danger', onclick: async () => {
+    const bulk = filter.uid && truncated ? h('div', { class: 'card l-warn' }, `Показаны не все события: загружены последние ${HIST_MAX}. Массовый откат отключён — выберите период покороче (до того, как событий станет ${HIST_MAX}).`) : filter.uid ? h('div', { class: 'btns' }, h('button', { class: 'danger', onclick: async () => {
       const plan = planUserRollback(rows, filter.uid);
       if (!plan.length) { toast('У этого участника нет изменений за период'); return; }
       const conflicts = plan.filter((x) => x.conflict).length;
       const withConf = conflicts ? await confirmDialog(`Записей к откату: ${plan.length}. Из них ${conflicts} позже менял кто-то другой. Откатить и их тоже? («Нет» — только остальные ${plan.length - conflicts})`, { yes: 'Да, и их', no: 'Только остальные' }) : true;
       const todo = plan.filter((x) => withConf || !x.conflict);
       if (!(await confirmDialog(`Откатить ${todo.length} записей участника ${names.get(filter.uid) || ''} за период ${dateText(filter.from)} – ${dateText(filter.to)}?`, { yes: 'Откатить', danger: true }))) return;
-      todo.forEach((x) => repo.revertTo(pid, x.coll, x.docId, x.before));
+      todo.forEach((x) => { repo.revertTo(pid, x.coll, x.docId, x.before); fixJournal(x.coll, x.docId, x.before); });
       toast(`Откачено записей: ${todo.length}`); setTimeout(reload, 600);
     } }, '↩ Откатить все правки участника за период')) : null;
     box.replaceChildren(bulk, h('div', { class: 'mut', style: { margin: '8px 2px' } }, `Событий: ${shown.length}${shown.length > 300 ? ' · показаны первые 300' : ''}`),

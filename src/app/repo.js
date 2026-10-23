@@ -3,10 +3,10 @@
 //  - память (для автотестов интерфейса, включается адресом ?mem=1).
 // Общая логика здесь: кто и когда изменил, история изменений, мягкое удаление.
 import {
-  collection, doc, onSnapshot, setDoc, query, where, writeBatch, serverTimestamp, getDocs, getDocsFromCache, orderBy, limit as fbLimit, Timestamp,
+  collection, doc, onSnapshot, setDoc, query, where, writeBatch, serverTimestamp, arrayUnion, arrayRemove, getDocs, getDocsFromCache, orderBy, limit as fbLimit, Timestamp,
 } from 'firebase/firestore';
 import { info, error } from '../log.js';
-import { DELTA_MARGIN, decideMode, maxMillis } from '../domain/sync.js';
+import { DELTA_MARGIN, decideMode, maxMillis, DAILY_WRITE_LIMIT, writeWarnLevel } from '../domain/sync.js';
 import {
   CATALOG, POINT_TYPES, CABLES, CONFIGS, UNITS, CULPRITS, DELAY_REASONS, DEVICES, composedTypes, fixLatin, fixCabinet,
 } from '../domain/index.js';
@@ -74,7 +74,11 @@ export function createMemoryBackend() {
     async saveUserPrefs(uid, patch) { settings = { ...settings, ...patch }; notify(); },
     async commit(pid, writes) {
       for (const w of writes) {
-        if (w.coll === 'projects') { projects.set(w.id, { ...(projects.get(w.id) || {}), ...w.data }); continue; }
+        if (w.coll === 'projects') {
+          const cur = { ...(projects.get(w.id) || {}), ...w.data };
+          Object.entries(w.arrayOps || {}).forEach(([k, o]) => { const a = cur[k] || []; cur[k] = o.union ? [...new Set([...a, ...o.union])] : a.filter((x) => !o.remove.includes(x)); });
+          projects.set(w.id, cur); continue;
+        }
         const b = bucket(pid, w.coll); const key = docKey(w.id);
         b.set(key, { ...(b.get(key) || {}), ...w.data });
       }
@@ -115,6 +119,27 @@ export function readsResetAt() {
   const t = ptNow(); const left = 86400 - (Number(t.hour) * 3600 + Number(t.minute) * 60 + Number(t.second));
   return new Date(Date.now() + left * 1000);
 }
+// ---------- записи: суточный счётчик и не принятые сервером ----------
+export { DAILY_WRITE_LIMIT };
+export function writesToday() {
+  try { const o = JSON.parse(localStorage.getItem('pz.writes') || 'null'); return o && o.day === ptDay() ? o.n : 0; } catch { return 0; }
+}
+const writeSubs = new Set();
+export const onWriteWarn = (fn) => { writeSubs.add(fn); return () => writeSubs.delete(fn); };
+const addWrites = (n) => {
+  if (!n) return; const before = writesToday(); const after = before + n;
+  try { localStorage.setItem('pz.writes', JSON.stringify({ day: ptDay(), n: after })); } catch { /* без хранилища */ }
+  const lvl = writeWarnLevel(before, after); if (lvl) writeSubs.forEach((f) => { try { f(lvl, after); } catch { /* */ } });
+};
+const REJ_KEY = 'pz.rejected';
+let rejected = metaGet(REJ_KEY) || [];
+const rejSubs = new Set();
+const rejEmit = () => { metaSet(REJ_KEY, rejected); rejSubs.forEach((f) => { try { f(); } catch { /* */ } }); };
+export const rejectedList = () => rejected.slice();
+export const onRejectedChange = (fn) => { rejSubs.add(fn); return () => rejSubs.delete(fn); };
+export const dropRejected = (id) => { rejected = rejected.filter((x) => x.id !== id); rejEmit(); };
+const addRejected = (item) => { rejected = [...rejected, item].slice(-50); rejEmit(); };
+
 // ---------- состояние чтения с сервера (значок «⬇» вверху) ----------
 // Каждый слушатель ждёт первый ответ сервера; пока не дождался — он «в очереди на чтение». Ошибка (например, лимит) — запоминаем.
 const readWait = new Map(); const readFail = new Map(); const readSubs = new Set();
@@ -225,6 +250,7 @@ export function createFirestoreBackend(db, uid) {
     },
     // Запись пачками (в одной пачке до 500 операций). Не ждём ответа сервера: офлайн запись остаётся в очереди.
     commit(pid, writes) {
+      addWrites(writes.length);
       const CHUNK = 400;
       const chunks = [];
       for (let i = 0; i < writes.length; i += CHUNK) {
@@ -232,6 +258,8 @@ export function createFirestoreBackend(db, uid) {
         writes.slice(i, i + CHUNK).forEach((w) => {
           const ref = w.coll === 'projects' ? doc(db, 'projects', w.id) : doc(db, 'projects', pid, w.coll, docKey(w.id));
           const data = { ...w.data, updatedAtServer: serverTimestamp() };
+          // списки участников меняем «добавить/убрать один элемент», а не заменой целиком
+          Object.entries(w.arrayOps || {}).forEach(([k, o]) => { data[k] = o.union ? arrayUnion(...o.union) : arrayRemove(...o.remove); });
           // replace: словари в записи заменяются целиком (иначе merge оставляет удалённые ключи)
           // точки — всегда целиком по полям (место на чертеже pos не склеивается со старым: иначе остаются прежние icon, text, w, h)
           batch.set(ref, data, w.replace || w.coll === 'points' ? { mergeFields: Object.keys(data) } : { merge: true });
@@ -246,6 +274,7 @@ export function createFirestoreBackend(db, uid) {
       return deltaListen(collection(db, `pool_${kind}`), `pz.sync.${uid}.pool.${kind}`, (d) => d.data(), `Чтение общего пула (${kind})`, (list) => cb(list.filter((x) => !x.deleted)));
     },
     commitPool(writes) {
+      addWrites(writes.length);
       const batch = writeBatch(db);
       writes.forEach((w) => { const ref = doc(db, `pool_${w.coll}`, docKey(w.id)); if (w.remove) batch.set(ref, { deleted: true, updatedAtServer: serverTimestamp() }, { merge: true }); else batch.set(ref, { ...w.data, updatedAtServer: serverTimestamp() }, { merge: true }); });
       return batch.commit();
@@ -287,8 +316,22 @@ export function createRepo(backend, user) {
     return [{ coll, id, data: clean(stamped) }, { coll: 'history', id: history.id, data: history }];
   }
 
+  // сервер не принял запись: сохраняем её на телефоне (с кодом ошибки), чтобы можно было повторить после устранения причины
+  const onReject = (kind, pid, writes) => (e) => {
+    error('Запись отклонена', `${e.code || ''} ${e.message || e}`);
+    addRejected({ id: newId(), kind, pid, writes, code: e?.code || '', msg: String(e?.message || e), at: Date.now() });
+  };
+  const send = (item) => (item.kind === 'pool' ? backend.commitPool(item.writes) : backend.commit(item.pid, item.writes));
+
   const api = {
     backend, user, by,
+    /** Повторить не принятые записи (после устранения причины); успешно ушедшие убираются из списка */
+    retryRejected(ids = null) {
+      const list = rejected.filter((x) => !ids || ids.includes(x.id));
+      list.forEach((it) => { dropRejected(it.id); track(send(it), it.writes.length)?.catch?.(onReject(it.kind, it.pid, it.writes)); });
+      return list.length;
+    },
+    isCreator: (project) => !project?.createdBy || project.createdBy === user.uid,
     listenProjects: (cb) => backend.listenProjects(user.uid, cb),
     listenUserPrefs: (cb) => backend.listenUserPrefs(user.uid, (p) => { api.prefs = p || {}; cb(api.prefs); }),
     saveUserPrefs: (patch, replace = false) => backend.saveUserPrefs(user.uid, patch, replace),
@@ -326,7 +369,7 @@ export function createRepo(backend, user) {
         ids.push(id);
       });
       info(`Запись в базу: ${ops.map((o) => `${o.coll}${o.data?.deleted ? '(удал.)' : ''}`).join(', ')}`);
-      track(backend.commit(pid, writes), ops.length)?.catch?.((e) => error('Запись отклонена', `${e.code || ''} ${e.message || e}`));
+      track(backend.commit(pid, writes), ops.length)?.catch?.(onReject('project', pid, writes));
       return ids;
     },
     // Мягкое удаление: запись остаётся, помечается deleted (откат — restore)
@@ -360,10 +403,11 @@ export function createRepo(backend, user) {
       return pid;
     },
     // replace: true — словари в patch заменяются целиком (чтобы можно было убрать ключ)
-    saveProject(pid, patch, { replace = false } = {}) {
+    saveProject(pid, patch, { replace = false, arrayOps = null } = {}) {
       const now = Date.now();
       const data = clean({ ...patch, id: pid, updatedBy: by.uid, updatedByName: by.name, updatedAt: now });
-      track(backend.commit(pid, [{ coll: 'projects', id: pid, data, replace }]), 1)?.catch?.((e) => error('Запись проекта отклонена', `${e.code || ''} ${e.message || e}`));
+      const writes = [{ coll: 'projects', id: pid, data, replace, ...(arrayOps ? { arrayOps } : {}) }];
+      track(backend.commit(pid, writes), 1)?.catch?.(onReject('project', pid, writes));
     },
     // История изменений и откат. Откат сам записывается в историю, поэтому его тоже можно отменить.
     loadHistory: (pid, since, max = 2000) => backend.loadHistory(pid, since, max),
@@ -383,49 +427,45 @@ export function createRepo(backend, user) {
       const now = Date.now();
       const writes = ops.map((o) => (o.remove ? { coll: o.coll, id: o.id, remove: true } : { coll: o.coll, id: o.id, data: clean({ ...o.data, id: o.id, updatedBy: by.uid, updatedByName: by.name, updatedAt: now }) }));
       info(`Общий пул: ${ops.map((o) => `${o.coll}${o.remove ? '(удал.)' : ''}`).join(', ')}`);
-      return track(backend.commitPool(writes), ops.length)?.catch?.((e) => error('Запись в общий пул отклонена', `${e.code || ''} ${e.message || e}`));
+      return track(backend.commitPool(writes), ops.length)?.catch?.(onReject('pool', null, writes));
     },
     listenInbox: (cb) => backend.listenInbox?.(cb) || (() => {}),
     setInbox: (list) => backend.setInbox(list.map((x) => ({ key: x.key, data: clean(x.data) })))?.catch?.((e) => error('Входящие пула', `${e.code || ''} ${e.message || e}`)),
     // Приглашения по почте Google: приглашённый видит проект и сам вступает (правила базы это проверяют)
     listenInvitations: (cb) => backend.listenInvitations(emailOf(user), user.uid, cb),
     invite(project, email) {
+      if (!api.isCreator(project)) throw new Error('Приглашать может только создатель проекта');
       const e = String(email).trim().toLowerCase();
       if (!/^\S+@\S+\.\S+$/.test(e)) throw new Error('Некорректная почта');
-      const list = [...new Set([...(project.invitedEmails || []), e])];
-      api.saveProject(project.id, { invitedEmails: list });
+      api.saveProject(project.id, {}, { arrayOps: { invitedEmails: { union: [e] } } });
     },
     // Подпись участника (видна всем в проекте). Ключ — почта без точек, т.к. точка в ключе Firestore неудобна
     renameMember(project, email, name) {
       api.saveProject(project.id, { memberNames: { [String(email).toLowerCase().replace(/\./g, '_')]: String(name || '').trim() } });
     },
-    // Убрать участника: он теряет доступ; его прежние правки остаются, а uid запоминается для отката в «Истории»
+    // Убрать участника (только создатель): он теряет доступ; его прежние правки остаются, а uid запоминается для отката в «Истории»
     removeMember(project, email) {
+      if (!api.isCreator(project)) throw new Error('Убирать участников может только создатель проекта');
       const e = String(email).toLowerCase();
       const emails = project.memberEmails || []; const uids = project.memberUids || [];
       const i = emails.findIndex((x) => String(x).toLowerCase() === e);
       if (i < 0 || emails.length !== uids.length) throw new Error('Не удалось определить участника');
       if (uids[i] === user.uid) throw new Error('Себя убрать нельзя');
       const uid = uids[i];
-      api.saveProject(project.id, {
-        memberUids: uids.filter((_, k) => k !== i), memberEmails: emails.filter((_, k) => k !== i),
-        removedMembers: { ...(project.removedMembers || {}), [uid]: e },
-      });
+      api.saveProject(project.id, { removedMembers: { ...(project.removedMembers || {}), [uid]: e } },
+        { arrayOps: { memberUids: { remove: [uid] }, memberEmails: { remove: [emails[i]] } } });
       return uid;
     },
     cancelInvite(project, email) {
-      api.saveProject(project.id, { invitedEmails: (project.invitedEmails || []).filter((x) => x !== email) });
+      if (!api.isCreator(project)) throw new Error('Отзывать приглашения может только создатель проекта');
+      api.saveProject(project.id, {}, { arrayOps: { invitedEmails: { remove: [email] } } });
     },
     acceptInvite(project) {
       const me = emailOf(user);
-      api.saveProject(project.id, {
-        memberUids: [...new Set([...(project.memberUids || []), user.uid])],
-        memberEmails: [...new Set([...(project.memberEmails || []), me])],
-        invitedEmails: (project.invitedEmails || []).filter((x) => x !== me),
-      });
+      api.saveProject(project.id, {}, { arrayOps: { memberUids: { union: [user.uid] }, memberEmails: { union: [me] }, invitedEmails: { remove: [me] } } });
     },
     declineInvite(project) {
-      api.saveProject(project.id, { invitedEmails: (project.invitedEmails || []).filter((x) => x !== emailOf(user)) });
+      api.saveProject(project.id, {}, { arrayOps: { invitedEmails: { remove: [emailOf(user)] } } });
     },
     loadSettings: () => backend.loadSettings(),
     saveSettings: (p) => backend.saveSettings(p),
