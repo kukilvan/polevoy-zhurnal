@@ -163,37 +163,25 @@ function autoBackupLine(p) {
   return h('div', { class: days > 4 ? 'pill st-bad' : 'mut', style: { width: '100%' } }, days > 4 ? `⚠️ Автокопия не делалась ${Math.floor(days)} дн. (последняя: ${when})` : `🛡 Автокопия на сервере: ${when}`);
 }
 
-function members(p, ui) {
-  const me = getRepo().user.email?.toLowerCase();
-  const invited = p.invitedEmails || [];
-  return h('div', { class: 'card' }, h('b', {}, 'Участники'),
-    h('div', { style: { marginTop: '6px' } }, (p.memberEmails || []).map((e) =>
-      h('div', { class: 'mut' }, `${memberLabel(p, e)}${e === me ? ' (вы)' : ''}`))),
-    invited.length ? h('div', { class: 'mut', style: { marginTop: '6px' } }, `Приглашены: ${invited.join(', ')}`) : null);
-}
-
 export function projectView(ui) {
   const p = currentProject();
   if (!p) {
     return h('div', { class: 'empty' }, h('p', {}, 'У вас пока нет проекта.'),
       h('button', { onclick: () => projectWizard(ui) }, '➕ Создать проект'));
   }
+  const go = (label, fn, extra = {}) => h('button', { class: 'sec', style: { margin: 0, ...extra }, onclick: fn }, label);
   return h('div', {},
+    h('div', { class: 'card', style: { padding: '6px 12px' } }, h('div', { style: { fontSize: '16px', fontWeight: 700 } }, p.name)),
+    h('div', { class: 'card' }, h('b', {}, 'Точки'), readiness(), h('div', { style: { marginTop: '8px' } }, summary(ui))),
     h('div', { class: 'card' },
-      h('div', { style: { fontSize: '18px', fontWeight: 700 } }, p.name),
-      h('div', { class: 'mut' }, [p.contractor, p.object].filter(Boolean).join(' · ')),
-      h('div', { class: 'mut' }, `Помощник по умолчанию: ${p.helper || 'сам'}${p.oneOff ? ' · разовый выезд' : ''}`),
-      p.note ? h('div', { class: 'mut' }, p.note) : null),
-    members(p, ui),
-    h('div', { class: 'card' }, h('b', {}, 'План'),
-      h('div', { class: 'mut', style: { marginTop: '6px' } }, (p.drawings || []).filter((d) => !d.deleted).length ? `Чертежей: ${(p.drawings || []).filter((d) => !d.deleted).map((d) => d.name).join(', ')}` : 'Чертежей пока нет — добавьте PDF тохнита, точки появятся на нём по статусу.'),
-      h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => import('./planmodal.js').then((m) => m.planModal()) }, '🗺 Открыть план'))),
-    h('div', { class: 'card' }, h('b', {}, 'Точки'), readiness(), h('div', { style: { marginTop: '8px' } }, summary(ui)),
-      h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => ui.open('racks') }, '🗄 Шкафы и шильют'))),
+      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '8px' } },
+        go('📝 Сегодня', () => openToday(ui)),
+        go('🧵 Протяжки', () => import('./pullview.js').then((m) => m.openPulls())),
+        go('🗺 План', () => import('./planmodal.js').then((m) => m.planModal()))),
+      h('div', { style: { display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '8px', marginTop: '8px' } },
+        go('🧾 Что осталось', () => import('./points.js').then((m) => m.remainingModal())),
+        go('🗄 Шкафы и шильют', () => ui.open('racks')))),
     h('div', { class: 'btns' },
-      h('button', { class: 'wide', onclick: () => openToday(ui) }, '📝 Сегодня'),
-      h('button', { class: 'wide', onclick: () => import('./pullview.js').then((m) => m.openPulls()) }, '🧵 Протяжки'),
-      h('button', { class: 'wide sec', onclick: () => import('./points.js').then((m) => m.remainingModal()) }, '🧾 Что осталось'),
       autoBackupLine(p),
       h('div', { class: 'mut', style: { width: '100%' } }, readsLine())));
 }

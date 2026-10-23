@@ -51,31 +51,38 @@ export function createShell({ user, onLogout, diag }) {
   function menu() {
     const p = currentProject();
     const item = (label, fn) => h('button', { class: 'menu-item', onclick: () => { close(); fn(); } }, label);
-    const head = (t) => h('div', { class: 'group', style: { position: 'static', paddingLeft: '4px' } }, t);
+    // разделы свёрнуты по умолчанию; нажатие на заголовок раскрывает / сворачивает
+    const section = (title, items) => {
+      const list = h('div', { style: { display: 'none' } }, ...items.filter(Boolean));
+      const mark = h('span', {}, '▸ ');
+      const head = h('div', { class: 'group', style: { position: 'static', paddingLeft: '4px', cursor: 'pointer', userSelect: 'none' },
+        onclick: () => { const on = list.style.display === 'none'; list.style.display = on ? '' : 'none'; mark.textContent = on ? '▾ ' : '▸ '; } }, mark, title);
+      return h('div', {}, head, list);
+    };
     const close = openModal('Меню', h('div', {},
-      head('Проект'),
+      section('Проект', [
       item('📁 Все проекты', () => open('projects')),
       p ? item('✏️ Данные проекта', () => projectForm(p, ui)) : null,
       p ? item('👥 Участники', () => open('members')) : null,
       item('➕ Новый проект', () => projectWizard(ui)),
       item('🧾 Журнал событий', () => open('log')),
       p ? item('🕘 История и откат', () => open('history')) : null,
-      p ? item('📅 Месяц (отчёт начальнику)', () => open('month')) : null,
-      head('Руководства'),
+      p ? item('📅 Месяц (отчёт начальнику)', () => open('month')) : null]),
+      section('Руководства', [
       item('📖 Как пользоваться', () => openGuide(ui)),
       item('📚 Инструкции', () => openGuide(ui, null, 'manuals')),
-      item('🔤 Словарик', () => openGuide(ui, null, 'dict')),
-      head('Настройки'),
+      item('🔤 Словарик', () => openGuide(ui, null, 'dict'))]),
+      section('Настройки', [
       item(`🎨 Тема: ${themeLabel()} → ${themeLabel(nextTheme())}`, () => { setTheme(nextTheme()); render(); }),
-      item(`🔄 Обновить приложение (сборка ${typeof __BUILD__ !== 'undefined' ? __BUILD__ : 'dev'})`, refreshApp),
-      p ? head('Данные') : null,
+      item(`🔄 Обновить приложение (сборка ${typeof __BUILD__ !== 'undefined' ? __BUILD__ : 'dev'})`, refreshApp)]),
+      p ? section('Данные', [
       p ? item('🔄 Обновить таблицу для руководства', updateManagerTable) : null,
       p && mainTable(p).link ? item('📊 Открыть таблицу руководства', () => window.open(mainTable(p).link, '_blank')) : null,
       p ? item(p.backupAt ? `💾 Резервная копия на Диск (последняя: ${new Date(p.backupAt).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })})` : '💾 Резервная копия на Диск', backupNow) : null,
       p ? item('📁 Разложить файлы на Диске по папкам', organizeDrive) : null,
       p ? item('📊 Выгрузить всё в Excel', exportExcel) : null,
       p ? item('🩺 Проверка справочников', auditModal) : null,
-      p ? item('📥 Импорт данных (замена всего проекта)', () => open('import')) : null,
+      p ? item('📥 Импорт данных (замена всего проекта)', () => open('import')) : null]) : null,
       h('div', { class: 'mut', style: { padding: '10px 4px' } }, user.displayName || user.email),
       item('🚪 Выйти', onLogout)));
   }

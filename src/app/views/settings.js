@@ -285,18 +285,19 @@ export async function refreshApp() {
   location.reload();
 }
 
+let refsOpen = false;   // справочники в Настройках свёрнуты по умолчанию
 export function settingsView(ui) {
   const p = currentProject();
   const row = (icon, title, sub, fn) => h('div', { class: 'item', onclick: fn }, h('div', { class: 'name' }, `${icon} ${title}`, sub ? h('div', { class: 'sub' }, sub) : null));
   const ref = (k) => row('📋', REFS[k].title, `${REFS[k].items().length} пунктов`, () => { state.settingsRef = k; ui.open('ref'); });
   return h('div', {},
     h('div', { class: 'card', style: { padding: 0 } },
-      h('div', { class: 'group', style: { padding: '10px 14px 4px' } }, 'Выпадающие списки (справочники)'),
-      ['types', 'devices', 'cables', 'catalog', 'configs', 'units', 'culprits', 'delayReasons'].map(ref),
-      row('⌨', 'Быстрый ввод латиницей', 'Слова вроде «тв», «кам» сами становятся TV, CAM при вводе названий', () => import('./latinfix.js').then((m) => m.shortcutsModal()))),
-    h('div', { class: 'card', style: { padding: 0 } },
       h('div', { class: 'group', style: { padding: '10px 14px 4px' } }, `Проект «${p.name}»`),
       row('👔', 'Для руководства', `Папка со ссылкой · таблиц: ${tablesOf(p).length} · основная: ${mainTable(p).name}`, () => ui.open('tables')),
       row('🗄', 'Шкафы и шильют', `План шкафа: точки cat7 по панелям и портам${Object.keys(p.racks || {}).length ? ` · планов: ${Object.keys(p.racks).length}` : ''}`, () => ui.open('racks')),
-      row('📊', 'Таблицы', `Google Таблицы проекта «${p.name}»${(p.sheetLinks || []).length ? ` · добавлено: ${p.sheetLinks.length}` : ''}`, () => ui.open('sheets'))));
+      row('📊', 'Таблицы', `Google Таблицы проекта «${p.name}»${(p.sheetLinks || []).length ? ` · добавлено: ${p.sheetLinks.length}` : ''}`, () => ui.open('sheets'))),
+    h('div', { class: 'card', style: { padding: 0 } },
+      h('div', { class: 'group', style: { padding: '10px 14px 4px', cursor: 'pointer', userSelect: 'none' }, onclick: () => { refsOpen = !refsOpen; ui.render(); } }, `${refsOpen ? '▾' : '▸'} Выпадающие списки (справочники)`),
+      ...(refsOpen ? [['types', 'devices', 'cables', 'catalog', 'configs', 'units', 'culprits', 'delayReasons'].map(ref),
+        row('⌨', 'Быстрый ввод латиницей', 'Слова вроде «тв», «кам» сами становятся TV, CAM при вводе названий', () => import('./latinfix.js').then((m) => m.shortcutsModal()))] : [])));
 }
