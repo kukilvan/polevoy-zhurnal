@@ -1,0 +1,110 @@
+{
+"новая": [
+"new",
+"חדשה"
+],
+"померяно": [
+"measured",
+"נמדד"
+],
+"протянуто частично": [
+"partly pulled",
+"הושחל חלקית"
+],
+"протянуто": [
+"pulled",
+"הושחל"
+],
+"захивучено": [
+"terminated",
+"חווט"
+],
+"установлено не всё": [
+"partly installed",
+"הותקן חלקית"
+],
+"установлено": [
+"installed",
+"הותקן"
+],
+"проверено": [
+"tested",
+"נבדק"
+],
+"проблема": [
+"problem",
+"בעיה"
+],
+"Ш": [
+"L",
+"ש"
+],
+"П": [
+"S",
+"ה"
+],
+"шилют есть": [
+"labels exist",
+"יש שילוט"
+],
+"шилют поклеен": [
+"labels stuck on",
+"השילוט הודבק"
+],
+"Конфигурацию нельзя перенести: в проекте и в общем пуле нет «{}»": [
+"The configuration can't be moved: neither the project nor the shared pool has “{}”",
+"אי אפשר להעביר את התצורה: אין „{}” בפרויקט ובמאגר המשותף"
+],
+"нет такой": [
+"no such item",
+"לא קיים"
+],
+"стандартную удалить нельзя — её можно только открепить": [
+"the standard one can't be deleted — only detached",
+"אי אפשר למחוק את הסטנדרטית — רק לנתק"
+],
+"она назначена конфигурацией по умолчанию для проекта — сначала смените её в настройках проекта": [
+"it's the project's default configuration — change it in the project settings first",
+"היא תצורת ברירת המחדל של הפרויקט — קודם שנו אותה בהגדרות הפרויקט"
+],
+"она стоит на дверях проекта ({}) — сначала смените им конфигурацию": [
+"it's used on project doors ({}) — change their configuration first",
+"היא בשימוש בדלתות הפרויקט ({}) — קודם שנו להן את התצורה"
+],
+"Диск не дал адрес для загрузки": [
+"Drive didn't return an upload address",
+"הדרייב לא החזיר כתובת להעלאה"
+],
+"Загрузка на Диск: HTTP {}": [
+"Upload to Drive: HTTP {}",
+"העלאה לדרייב: HTTP {}"
+],
+"Сервер не видит файл таблицы: откройте её для сервера кнопкой «Обновить» в приложении": [
+"The server can't see the sheet file: open it for the server with the “Update” button in the app",
+"השרת לא רואה את קובץ הטבלה: פתחו אותו לשרת בכפתור „עדכון” באפליקציה"
+],
+"Сервер не видит файл таблицы шкафов: откройте её для сервера кнопкой «Обновить таблицу» в приложении": [
+"The server can't see the cabinets sheet file: open it for the server with the “Update the sheet” button in the app",
+"השרת לא רואה את קובץ טבלת הארונות: פתחו אותו לשרת בכפתור „עדכון הטבלה” באפליקציה"
+],
+"В таблице не выбран ни один столбец": [
+"No column is selected in the sheet",
+"לא נבחרה אף עמודה בטבלה"
+],
+"Это не файл точек (нужен format: \"{}\")": [
+"This isn't a points file (format: \"{}\" is required)",
+"זה לא קובץ נקודות (נדרש format: \"{}\")"
+],
+"Ошибка сервера ({})": [
+"Server error ({})",
+"שגיאת שרת ({})"
+],
+"Как называть шкаф в подписях и таблице ({шкаф}) — пусто: как в приложении (название шкафа или его части). Если указать своё, оно заменит название шкафа в начале подписей. Галка у шкафа убирает его название из подписей (1A-C5 → C5) — только у этого шкафа.": [
+"What to call the cabinet in labels and the sheet ({шкаф}) — empty: as in the app (the cabinet or section name). If you set your own, it replaces the cabinet name at the start of labels. The tick next to a cabinet removes its name from labels (1A-C5 → C5) — for that cabinet only.",
+"איך לקרוא לארון בתוויות ובטבלה ({шкаф}) — ריק: כמו באפליקציה (שם הארון או החלק שלו). אם תכתבו שם משלכם, הוא יחליף את שם הארון בתחילת התוויות. הסימון ליד ארון מסיר את שמו מהתוויות (1A-C5 → C5) — רק לארון הזה."
+],
+"Шаблон — по желанию: {имя} — обозначение точки, {номер} — без названия шкафа, {№} — только цифры номера (B16 → 16, 1A-25 → 25, 2B/27 → 27, 05 → 05), {шкаф}, {U}, {порт}. Например, для бакаров «B-{№}» даст B-16 при любом исходном виде названия. Пусто — подпись остаётся как есть. Название шкафа в начале подписи добавляется само (если у обозначения его нет), пока у шкафа не включено «убрать название»; если в шаблоне есть {шкаф}, шкаф ставится там, где вы его напишете. Свою подпись для отдельного порта можно задать в плане шкафа.": [
+"Template — optional (type the tokens exactly as shown): {имя} — the point label, {номер} — without the cabinet name, {№} — only the number digits (B16 → 16, 1A-25 → 25, 2B/27 → 27, 05 → 05), {шкаф} — cabinet, {U}, {порт} — port. For example, for controllers “B-{№}” gives B-16 whatever the original name looks like. Empty — the label stays as is. The cabinet name is added at the start of the label automatically (if the label lacks it), unless “remove name” is on for the cabinet; if the template has {шкаф}, the cabinet goes where you put it. A custom label for a single port can be set in the cabinet plan.",
+"תבנית — לא חובה (הקלידו את הסימנים בדיוק כפי שמופיעים): {имя} — סימון הנקודה, {номер} — בלי שם הארון, {№} — רק ספרות המספר (B16 → 16, 1A-25 → 25, 2B/27 → 27, 05 → 05), {шкаф} — ארון, {U}, {порт} — פורט. לדוגמה, לבקרים „B-{№}” ייתן B-16 בכל צורה של השם המקורי. ריק — התווית נשארת כמו שהיא. שם הארון מתווסף אוטומטית בתחילת התווית (אם אין בה), כל עוד לא הופעל בארון „הסרת השם”; אם בתבנית יש {шкаф}, הארון יופיע איפה שכתבתם. תווית משלכם לפורט בודד אפשר להגדיר בתוכנית הארון."
+]
+}
