@@ -16,7 +16,7 @@ export const monthTitle = (ym, lang = 'ru') => {
   return `${(lang === 'he' ? MONTHS_HE : MONTHS_RU)[m - 1]} ${y}`;
 };
 
-// «Дохот» + все дохи месяца подряд (как файл Дохот.txt для начальника)
+// «Отчёты» + все отчёты месяца подряд (как файл Отчёты.txt для начальника)
 export function monthReportRu(ctx, ym) {
   const days = monthDays(ctx, ym);
   return ['Дохот', ...days.map((d) => doh(d, ctx, 'ru'))].join('\n\n\n');
@@ -44,7 +44,7 @@ export function monthSummary(ctx, ym) {
   return { days: days.length, minutes, hours: round2(minutes / 60), works: [...works.values()], pulls: [...pulls.values()] };
 }
 
-// Месячный отчёт на иврите: часы, список дней (дох HE), количества, протяжка по кабелям
+// Месячный отчёт на иврите: часы, список дней (отчёт HE), количества, протяжка по кабелям
 export function monthReportHe(ctx, ym) {
   const s = monthSummary(ctx, ym); const days = monthDays(ctx, ym);
   const lines = [`דוח חודשי – ${monthTitle(ym, 'he')}`, `סה"כ שעות: ${s.hours}`, '', ...days.flatMap((d) => [doh(d, ctx, 'he'), ''])];
@@ -53,7 +53,7 @@ export function monthReportHe(ctx, ym) {
   return lines.join('\n').trim();
 }
 
-// Список рабочих дней месяца по ВСЕМ проектам: «Рабочие дни за <месяц>» + шапка каждого доха (дата и место)
+// Список рабочих дней месяца по ВСЕМ проектам: «Рабочие дни за <месяц>» + шапка каждого отчёта (дата и место)
 export function workdaysList(days, projects, ym) {
   const ctx = { projects: new Map(projects.map((p) => [p.id, p])) };
   return days.filter((d) => !d.deleted && String(d.date).startsWith(ym) && ctx.projects.has(d.projectId))

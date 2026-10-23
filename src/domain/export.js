@@ -24,7 +24,7 @@ export function exportSheets(project, ctx, { nameOf = (u) => s(u) } = {}) {
   });
   jr.sort((a, b) => byDate(a, b) || a.r.order - b.r.order);
   sheets.push({
-    name: 'Журнал по точкам',
+    name: 'История по точкам',
     rows: [['Дата', 'Точка', 'Шкаф', 'Тип', 'Этап', 'Работа', 'Результат', 'Кто внёс', 'Правка без записи'],
       ...jr.map(({ date, p, r }) => [date, p.label, s(p.cabinet), s(p.typeId), s(r.action), s(ctx.catalog.get(r.workId)?.name || r.workId), s(r.result), nameOf(r.by), r.fromEdit ? 'да' : ''])],
     widths: [12, 16, 10, 14, 12, 28, 14, 18, 10],

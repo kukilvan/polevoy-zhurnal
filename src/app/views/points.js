@@ -240,7 +240,7 @@ export function generatorForm() {
   ];
   const labelsOf = (v) => generateLabels({ prefix: v.prefix ?? '', from: v.from, to: v.to, step: v.step ?? 1, digits: v.digits ?? 0, suffixes: parseSuffixes(v.suffixes), pair: !!v.pair });
   formModal({
-    title: 'Добавить точки пачкой', fields, values: { step: 1, digits: 0, typeId: typeOptions()[0]?.value, configId: doorPins()[0] }, submitLabel: 'Создать',
+    title: 'Группа новых точек', fields, values: { step: 1, digits: 0, typeId: typeOptions()[0]?.value, configId: doorPins()[0] }, submitLabel: 'Создать',
     preview: (v) => {
       const l = labelsOf(v); if (!l.length) return 'Укажите «от» и «до»';
       const total = generatedTotal({ from: v.from, to: v.to, step: v.step ?? 1, suffixes: parseSuffixes(v.suffixes), pair: !!v.pair });
@@ -333,10 +333,10 @@ export function pointCard(startPoint, { fromPlan = false } = {}) {
     const info = infoOf(p);
     const hasLen = p.length !== undefined && p.length !== null && p.length !== '';
     const facts = [
-      ['Шкаф / этаж', [p.cabinet && `шкаф ${p.cabinet}`, p.floor && `этаж ${p.floor}`].filter(Boolean).join(', ')],
-      ['Тип', p.typeId], ['Конфигурация', (doorCfgOf(p, ctx) && doorChips(doorCfgOf(p, ctx))) || ''], ['Состав', compText(p)], ['Имя в плане', p.planName], ['Кабели', `${info.cableList?.length ? cablesText(info.cableList) : info.cable || ''}${Array.isArray(p.cableOverride) ? ' (свои у точки)' : ''}`],
+      ['Этаж', p.floor ? `Этаж ${p.floor}` : ''], ['Шкаф', p.cabinet ? `Шкаф ${p.cabinet}` : ''],
+      ['Тип', p.typeId], ['Конфигурация', (doorCfgOf(p, ctx) && doorChips(doorCfgOf(p, ctx))) || ''], ['Имя на плане', p.planName], ['Кабели', `${info.cableList?.length ? cablesText(info.cableList) : info.cable || ''}${Array.isArray(p.cableOverride) ? ' (свои у точки)' : ''}`],
       ['Длина', hasLen ? `${p.length} м на 1 кабель${info.metrage ? ` (всего ${Math.round(info.metrage * 100) / 100} м)` : ''}` : ''],
-      ['Порт в свитче', p.port], ['Порт в панели', panelText(p, proj)], ['Серийный номер', p.serial], ['MAC', p.mac], ['Причина задержки', p.delayReasonId], ['Примечание', p.note],
+      ['Порт в панели', panelText(p, proj)], ['Порт в свитче', p.port], ['Серийный номер', p.serial], ['MAC', p.mac], ['Причина задержки', p.delayReasonId], ['Примечание', p.note],
     ].filter(([, v]) => v);
     const left = leftTasksOf(p);
     const rows = (ctx.journalByPoint.get(p.id) || []).map((r) => ({ ...r, work: `${ctx.catalog.get(r.workId)?.name || r.action || '?'}${r.action === 'Протяжка' && r.cableId ? ` (${r.cableId})` : ''}` }))
@@ -375,7 +375,7 @@ export function pointCard(startPoint, { fromPlan = false } = {}) {
 }
 
 // «Что осталось»: все работы, которые ещё ждут точки проекта (по составу точки), с фильтрами по работе, шкафу, типу и протяжке.
-// Галочками выбрать точки → «✅ Записать работу» (форма записи доха с выбранной работой и точками).
+// Галочками выбрать точки → «✅ Записать работу» (форма записи отчёта с выбранной работой и точками).
 function leftTasksOf(point) {
   const ctx = state.ctx; const info = infoOf(point); const out = new Map();
   const add = (key, label, chip) => { if (!out.has(key)) out.set(key, { key, label, chip }); };
@@ -410,7 +410,7 @@ export function remainingModal() {
     sel('Все работы', workOpts.map((w) => [w.key, `${w.label} (${w.n})`]), fWork, (v) => { fWork = v; }),
     cabs.length > 1 ? sel('Все шкафы', cabs.map((c) => (c ? [c, `Шкаф ${c}`] : ['__none', 'Без шкафа'])), fCab, (v) => { fCab = v; }) : null,
     sel('Все типы', typeFilterOptions(all.map((r) => r.point.typeId)), fType, (v) => { fType = v; }),
-    cfgFilterOptions(all.map((r) => r.point)).length ? sel('Все конфигурации', cfgFilterOptions(all.map((r) => r.point)), fCfg, (v) => { fCfg = v; }) : null,
+    cfgFilterOptions(all.map((r) => r.point)).length ? sel('Все конфигурации дверей', cfgFilterOptions(all.map((r) => r.point)), fCfg, (v) => { fCfg = v; }) : null,
     sel('Протяжка: все', [['yes', 'Только протянутые'], ['no', 'Ещё не протянутые']], fPull, (v) => { fPull = v; }));
   const bar = h('div', { class: 'btns', style: { marginTop: '6px' } });
   const listBox = h('div', {});
@@ -612,7 +612,7 @@ export function meterView(ui) {
     const pts = pointsSorted().filter((p) => (!q || latinKey(`${p.label} ${p.planName ?? ''} ${panelText(p)}`).includes(qk) || matchesPanelQuery(p, q))
       && (!fCab || (fCab === '__none' ? !p.cabinet : p.cabinet === fCab)) && typeMatch(fType, p.typeId) && cfgMatch(fCfg, p) && planOk(p));
     list.replaceChildren();
-    if (!pts.length) { list.append(total.length ? h('div', { class: 'empty' }, 'Ничего не найдено') : hint(ui, 'Точек пока нет. Добавьте их пачкой («Точки пачкой») или по одной. Нажмите точку: откроется её карточка с историей работ, там же кнопка «📏 Длина».', 'meter', '📖 Как вносить метраж')); return; }
+    if (!pts.length) { list.append(total.length ? h('div', { class: 'empty' }, 'Ничего не найдено') : hint(ui, 'Точек пока нет. Добавьте их группой («Группа новых точек») или по одной. Нажмите точку: откроется её карточка с историей работ, там же кнопка «📏 Длина».', 'meter', '📖 Как вносить метраж')); return; }
     let lastKey = null;
     pts.forEach((p) => {
       const key = `${p.cabinet || ''}\u0000${p.typeId}`;
@@ -640,17 +640,17 @@ export function meterView(ui) {
   const filters = h('div', { style: { display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' } },
     sel('Все шкафы', cabs.map((c) => (c ? [c, `Шкаф ${c}`] : ['__none', 'Без шкафа'])), fCab, (v) => { fCab = v; }),
     sel('Все типы', typeFilterOptions(types), fType, (v) => { fType = v; }),
-    cfgFilterOptions(total).length ? sel('Все конфигурации', cfgFilterOptions(total), fCfg, (v) => { fCfg = v; }) : null,
+    cfgFilterOptions(total).length ? sel('Все конфигурации дверей', cfgFilterOptions(total), fCfg, (v) => { fCfg = v; }) : null,
     sel('План: все', [['off', '📍 Нет на плане'], ['on', '🗺 На плане']], fPlan, (v) => { fPlan = v; }));
   fill();
   return h('div', {},
     h('div', { class: 'btns', style: { marginTop: 0 } },
-      h('button', { onclick: () => generatorForm() }, '➕ Точки пачкой'),
+      h('button', { onclick: () => generatorForm() }, '➕ Группа новых точек'),
       h('button', { class: 'sec', onclick: () => pointForm(null) }, 'Новая точка'),
       h('button', { class: 'sec', onclick: () => planModal() }, '🗺 План'),
       h('button', { class: 'sec', onclick: () => import('./pullview.js').then((m) => m.openPulls()) }, '🧵 Протяжки'),
       h('button', { class: 'wide sec', onclick: () => remainingModal() }, '🧾 Что осталось'),
-      total.some((p) => p.typeId === UNSORTED_TYPE) ? h('button', { class: 'wide', onclick: () => unsortedModal(ui) }, `❓ Не разобрано: ${total.filter((p) => p.typeId === UNSORTED_TYPE).length} — разобрать`) : null),
+      total.some((p) => p.typeId === UNSORTED_TYPE) ? h('button', { class: 'wide', onclick: () => unsortedModal(ui) }, `❓ Точки без типа: ${total.filter((p) => p.typeId === UNSORTED_TYPE).length} — разобрать`) : null),
     h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '10px 2px' } },
       h('span', { class: 'mut' }, `Точек: ${total.length} · с длиной: ${withLen}`),
       selMode ? null : h('button', { class: 'sec', style: { padding: '6px 12px' }, onclick: () => { selMode = true; ui.render(); } }, '☑ Выбрать')),

@@ -153,9 +153,9 @@ function afterCreate(pid, ui) {
       } }, 'Добавить и дальше')];
   }
   function points() {
-    return [h('div', { class: 'mut' }, 'Точки можно добавить сразу: из файла (после разбора тохнита) или разобрать тохниты проекта («📐 Из чертежа»: разобранные отмечаются ✅, внизу — «Дальше»). Потом здесь — «Дальше» или «Пропустить».'),
+    return [h('div', { class: 'mut' }, 'Точки можно добавить сразу: из файла (после разбора тохнита) или разобрать тохниты проекта («📐 Добавить точки из чертежа»: разобранные отмечаются ✅, внизу — «Дальше»). Потом здесь — «Дальше» или «Пропустить».'),
       h('div', { class: 'btns' },
-        h('button', { class: 'sec', onclick: () => import('./tohnitview.js').then((m) => m.drawingsHub({ extra: added, onNext: () => {} })) }, '📐 Из чертежа')),
+        h('button', { class: 'sec', onclick: () => import('./tohnitview.js').then((m) => m.drawingsHub({ extra: added, onNext: () => {} })) }, '📐 Добавить точки из чертежа')),
       h('button', { onclick: next }, 'Дальше')];
   }
   function managers() {

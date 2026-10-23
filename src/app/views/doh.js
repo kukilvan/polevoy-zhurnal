@@ -1,4 +1,4 @@
-// Вкладка «Дохот»: дни работ, записи дня, текст доха RU/HE, копирование и ссылка на команду «Doh».
+// Вкладка «Отчёты»: дни работ, записи дня, текст отчёта RU/HE, копирование и ссылка на команду «Doh».
 import { typeMatch, typeFilterOptions } from '../typegroups.js';
 import { latinKey } from '../../domain/index.js';
 import { rackPortsOf, stuckPortsOf } from '../../domain/rack.js';
@@ -53,7 +53,7 @@ function dayForm(day, ui) {
       { key: 'helper', label: 'Помощник (пусто = сам)', type: 'text', placeholder: 'сам' },
       { key: 'helperHe', label: 'Помощник на иврите', type: 'text' },
       { key: 'object', label: 'Объект (для разового выезда)', type: 'text', visible: () => !!p.oneOff },
-      { key: 'comment', label: 'Комментарий в конце доха', type: 'textarea' },
+      { key: 'comment', label: 'Комментарий в конце отчёта', type: 'textarea' },
     ],
     values: {
       date: day.date, comment: day.comment, object: day.object,
@@ -61,11 +61,11 @@ function dayForm(day, ui) {
       helperHe: isNew ? p.helperHe : (day.helperHe === 'сам' ? '' : day.helperHe),
     },
     onSubmit: async (v) => {
-      // один день на одну дату: второй дох за ту же дату не создаём
+      // один день на одну дату: второй отчёт за ту же дату не создаём
       const same = daysSorted().find((d) => d.date === v.date && d.id !== day.id);
       if (same) {
         if (isNew) { toast('На эту дату день уже есть — открываю его'); openDayId = same.id; ui?.go?.('doh'); ui?.render?.(); return; }
-        toast('На эту дату уже есть другой день — две даты в одном дохе нельзя'); return false;
+        toast('На эту дату уже есть другой день — две даты в одном отчёте нельзя'); return false;
       }
       // дата сильно отличается от сегодняшней — скорее всего опечатка в годе или дне
       const diff = (Date.parse(v.date) - Date.parse(todayIso())) / 86400000;
@@ -122,7 +122,7 @@ export function pointsPicker({ typesOf, fits, onPick }) {
     const cabSel = h('select', { onchange: (e) => { fCab = e.target.value; fill(); } }, h('option', { value: '' }, 'Все шкафы'), ...cabs.map((c) => (c ? h('option', { value: c }, `Шкаф ${c}`) : h('option', { value: '__none' }, 'Без шкафа'))));
     const typeSel = h('select', { onchange: (e) => { fType = e.target.value; fill(); } }, h('option', { value: '' }, 'Все типы'), ...typeFilterOptions(pts.map((pt) => pt.typeId)).map(([v, t]) => h('option', { value: v }, t)));
     const cfgOpts = cfgFilterOptions(pts);
-    const cfgSel = cfgOpts.length ? h('select', { onchange: (e) => { fCfg = e.target.value; fill(); } }, h('option', { value: '' }, 'Все конфигурации'), ...cfgOpts.map(([v, t]) => h('option', { value: v }, t))) : null;
+    const cfgSel = cfgOpts.length ? h('select', { onchange: (e) => { fCfg = e.target.value; fill(); } }, h('option', { value: '' }, 'Все конфигурации дверей'), ...cfgOpts.map(([v, t]) => h('option', { value: v }, t))) : null;
     const close = openModal('Точки', h('div', {},
       search, h('div', { style: { display: 'flex', gap: '8px', marginTop: '8px', flexWrap: 'wrap' } }, cabs.length > 1 ? cabSel : null, typeSel, cfgSel), h('div', { class: 'row', style: { margin: '8px 0' } }, count,
         h('button', { type: 'button', class: 'sec', onclick: () => { (list._shown || []).forEach((pt) => chosen.add(pt.id)); fill(); } }, 'Все показанные'),
@@ -245,7 +245,7 @@ function entryForm(day, entry, preset) {
       { key: 'minutes', label: 'Время, мин', type: 'number', visible: (v) => !isText(v) && !!v.workType && (isTime(v) || !blank(entry?.minutes)) },
       { key: 'culprit', label: 'Виновник (прежняя запись)', type: 'select', visible: () => !blank(entry?.culprit),
         options: [...ctx.culprits.values()].map((c) => ({ value: c.id, label: c.id })) },
-      // задержка к этой работе: в дохе — строкой сразу под работой; вся необязательная
+      // задержка к этой работе: в отчёте — строкой сразу под работой; вся необязательная
       { key: 'delayReason', label: '⏱ Задержка: причина', type: 'select', emptyLabel: '—', visible: (v) => !isText(v) && !!v.workType,
         options: [...ctx.delayReasons.values()].map((r) => ({ value: r.id, label: r.id })) },
       { key: 'delayCulprit', label: '⏱ Задержка: виновник', type: 'select', emptyLabel: '—', visible: (v) => !isText(v) && !!v.workType,
@@ -254,7 +254,7 @@ function entryForm(day, entry, preset) {
       { key: 'delayMinutes', label: '⏱ Задержка: время, мин', type: 'number', visible: (v) => !isText(v) && !!v.workType },
       { key: 'result', label: 'Результат проверки', type: 'select', visible: (v) => v.workType === 'Проверка',
         options: [{ value: 'Работает', label: 'Работает' }, { value: 'Не работает', label: 'Не работает' }] },
-      { key: 'note', label: 'Приписка', type: 'textarea', hint: 'Для «своей строки» — весь текст строки доха.', visible: (v) => !!v.workType },
+      { key: 'note', label: 'Приписка', type: 'textarea', hint: 'Для «своей строки» — весь текст строки отчёта.', visible: (v) => !!v.workType },
     ],
     values: {
       workType: entry?.workType ?? preset?.workType, workId: entry?.workId ?? preset?.workId, pointIds: entry?.pointIds ?? preset?.pointIds,
@@ -379,7 +379,7 @@ export function markShilutForPoints(pointIds, portsByPoint = null) {
   const made = [];
   byWork.forEach((ids, workId) => {
     const id = newId(); const data = { dayId, workType: 'Шилют', workId, pointIds: ids };
-    // часть портов точки: в дох идёт число поклеенных портов, точка закроется, когда наберутся все
+    // часть портов точки: в отчёт идёт число поклеенных портов, точка закроется, когда наберутся все
     const portQty = ids.map((pid) => ({ id: pid, v: (fresh.get(pid) || []).length })).filter((q) => portsByPoint && q.v > 0 && q.v < rackPortsOf(ctx.points.get(q.id), ctx));
     if (portQty.length) data.portQty = portQty;
     if (portsByPoint) data.portIdx = ids.map((pid) => ({ id: pid, i: [...(fresh.get(pid) || [])] })).filter((q) => q.i.length);   // какие именно порты поклеены этой записью (чтобы при удалении записи снять их)
@@ -482,7 +482,7 @@ function batchForm(day) {
   });
 }
 
-// Данные записи изменились с момента сохранения (длина точки, число кабелей, удалённая точка…) — дох показывает уже другие цифры
+// Данные записи изменились с момента сохранения (длина точки, число кабелей, удалённая точка…) — отчёт показывает уже другие цифры
 const RED = '#ff453a';
 const changedSince = (e, ctx) => !!e.snap && e.snap !== entryLine(e, ctx, 'ru');
 
@@ -496,23 +496,23 @@ function dayScreen(day, ui) {
   return h('div', {},
     h('div', { class: 'btns', style: { marginTop: 0 } },
       h('button', { class: 'sec', onclick: () => { openDayId = null; ui.render(); } }, '← Все дни'),
-      h('button', { class: 'sec', onclick: () => dayForm(day, ui) }, '✏️ День')),
+      h('button', { class: 'sec', onclick: () => dayForm(day, ui) }, '✏️ Изменить день')),
     h('div', { class: 'card' },
       h('div', { style: { fontSize: '18px', fontWeight: 700 } }, dateText(day.date)),
-      entries.some((e) => changedSince(e, ctx)) ? h('div', { style: { color: RED, fontWeight: 600, margin: '6px 0' } }, '⚠ В этом дохе изменились данные с момента записи (красные строки). Если дох уже отправлен — он отличается от того, что видно сейчас.',
+      entries.some((e) => changedSince(e, ctx)) ? h('div', { style: { color: RED, fontWeight: 600, margin: '6px 0' } }, '⚠ В этом отчёте изменились данные с момента записи (красные строки). Если отчёт уже отправлен — он отличается от того, что видно сейчас.',
         h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => { getRepo().save(currentProject().id, entries.filter((e) => changedSince(e, ctx)).map((e) => ({ coll: 'entries', id: e.id, data: {} }))); toast('Принято: пометки сняты'); } }, '✔ Принять новые данные'))) : null,
       entries.length ? h('div', { style: { marginTop: '8px' } }, entries.map((e) =>
         h('div', { class: 'item', onclick: () => entryForm(day, e) },
           h('div', { class: 'name' }, entryLine(e, ctx, 'ru') || '—',
             changedSince(e, ctx) ? h('div', { class: 'sub', style: { color: RED, fontWeight: 600 } }, `⚠ данные изменились после записи (было: ${e.snap.replace(/\n/g, ' / ')})`) : null,
             e.updatedByName ? h('div', { class: 'sub' }, e.updatedByName) : null))))
-        : hint(ui, 'Записей пока нет. «Добавить работу» — одна работа (можно сразу на много точек). «Несколько работ» — выбрать точки один раз и отметить сразу несколько работ.', 'doh', '📖 Что такое дох и как его заполнять'),
+        : hint(ui, 'Записей пока нет. «Добавить работу» — одна работа (можно сразу на много точек). «Несколько работ» — выбрать точки один раз и отметить сразу несколько работ.', 'doh', '📖 Что такое отчёт и как его заполнять'),
       h('div', { class: 'btns' },
         h('button', { onclick: () => entryForm(day, null) }, '➕ Добавить работу'),
         h('button', { class: 'sec', onclick: () => batchForm(day) }, 'Несколько работ'))),
-    h('div', { class: 'card' }, h('b', {}, 'Дох (русский)'), textBlock(ru, false),
+    h('div', { class: 'card' }, h('b', {}, 'Отчёт (русский)'), textBlock(ru, false),
       h('div', { class: 'btns' }, act('📋 Копировать RU', ru, ''), link('➡️ Отправить', ru))),
-    h('div', { class: 'card' }, h('b', {}, 'Дох (иврит)'), textBlock(he, true),
+    h('div', { class: 'card' }, h('b', {}, 'Отчёт (иврит)'), textBlock(he, true),
       h('div', { class: 'btns' }, act('📋 Копировать HE', he, ''), link('➡️ Отправить', he))));
 }
 
@@ -527,11 +527,11 @@ export function dohView(ui) {
     h('div', { class: 'btns', style: { marginTop: 0 } },
       h('button', { onclick: () => openToday(ui) }, '📝 Сегодня'),
       h('button', { class: 'sec', onclick: () => dayForm({ date: todayIso() }, ui) }, 'Другой день'),
-      h('button', { class: 'sec', onclick: () => ui.open('month') }, '📅 Месяц')),
+      h('button', { class: 'sec', onclick: () => ui.open('month') }, '📅 Отчёт за месяц')),
     days.length ? h('div', { class: 'card', style: { padding: 0, marginTop: '10px' } }, days.map((d) => {
       const n = dayEntries(d, ctx).length;
       return h('div', { class: 'item', onclick: () => { openDayId = d.id; ui.render(); } },
         h('div', { class: 'name' }, dateText(d.date), dayEntries(d, ctx).some((e) => changedSince(e, ctx)) ? h('span', { style: { color: RED, fontWeight: 700 } }, '  ⚠ данные изменились') : null,
           h('div', { class: 'sub' }, `${n ? `записей: ${n}` : 'пока без записей'}${d.createdByName ? ` · ${d.createdByName}` : ''}`)));
-    })) : hint(ui, 'Дней пока нет. Нажмите «Сегодня» и внесите сделанные работы: из них соберётся дох — отчёт за день.', 'doh', '📖 Что такое дох и как его заполнять'));
+    })) : hint(ui, 'Дней пока нет. Нажмите «Сегодня» и внесите сделанные работы: из них соберётся отчёт за день.', 'doh', '📖 Что такое отчёт и как его заполнять'));
 }

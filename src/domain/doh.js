@@ -1,8 +1,8 @@
-// Текст «доха» (отчёт за день) на русском и иврите (раздел 3.5, Приложение А).
+// Текст «отчёта» (отчёт за день) на русском и иврите (раздел 3.5, Приложение А).
 import { round2, cableCountFor } from './points.js';
 import { taskQty } from './compose.js';
 
-// Формат доха как в настоящих дохах Ивана (WhatsApp): дата, на следующей строке объект и помощник,
+// Формат отчёта как в настоящих дохах Ивана (WhatsApp): дата, на следующей строке объект и помощник,
 // затем каждая работа отдельным абзацем. Однострочная шапка (дата объект помощник) — для месячного списка.
 export const DOH_FORMAT = { headerSep: '\n', blockSep: '\n\n', oneLineSep: ' ' };
 
@@ -126,7 +126,7 @@ export function doh(day, ctx, lang = 'ru') {
   return blocks.join(DOH_FORMAT.blockSep);
 }
 
-// Две первые строки доха: дата и место работы (для списка рабочих дней месяца)
+// Две первые строки отчёта: дата и место работы (для списка рабочих дней месяца)
 export function dohTop(day, ctx, lang = 'ru') {
   const { date, place } = headerParts(day, ctx, lang);
   return `${date}${DOH_FORMAT.headerSep}${place}`;

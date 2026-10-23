@@ -247,7 +247,7 @@ export function drawingsHub({ onNext = null, extra = [] } = {}) {
         h('button', { class: 'sec', onclick: () => import('./catalogview.js').then((m) => m.catalogModal()) }, `🧩 Каталог подписей (моих правил: ${(getRepo().prefs?.tohnitLearned?.labels || []).length + (getRepo().prefs?.tohnitLearned?.skip || []).length})`)),
       onNext ? h('div', { class: 'btns' }, h('button', { onclick: () => { close(); onNext(); } }, 'Дальше')) : null].filter(Boolean));
   }
-  close = openModal('📐 Точки из чертежа', box, { sticky: true, onClose: () => unsub() });
+  close = openModal('📐 Добавить точки из чертежа', box, { sticky: true, onClose: () => unsub() });
   draw();
   return close;
 }
@@ -258,7 +258,7 @@ export function unsortedModal(ui) {
   const pid = currentProject().id;
   const box = h('div', {});
   let redraw = null; const unsub = subscribe(() => { if (redraw && state.ctx !== redraw) { redraw = null; draw(); } });  // перерисовать, когда изменения дошли до данных
-  const close = openModal('❓ Не разобрано', h('div', {},
+  const close = openModal('❓ Точки без типа', h('div', {},
     h('div', { class: 'mut' }, 'Точки, отложенные при разборе чертежа. Выберите тип для группы (или снимите галочки с лишних точек) и нажмите «Применить». «🚫 Не точки» — удалить их (вернуть можно из истории).'), box), { sticky: true, onClose: () => { unsub(); ui?.render?.(); } });
   function draw() {
     const pts = [...state.ctx.points.values()].filter((p) => p.typeId === UNSORTED_TYPE).sort((a, b) => a.label.localeCompare(b.label, 'ru', { numeric: true }));

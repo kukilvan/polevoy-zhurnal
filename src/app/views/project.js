@@ -131,7 +131,7 @@ function summary(ui) {
     if (info.checked) r.checked += 1; if (info.status === 'Неисправна') r.bad += 1;
     rows.set(pt.typeId, r);
   });
-  if (!rows.size) return hint(ui, 'Точек пока нет. Сначала создайте все точки проекта по плану заказчика: вкладка «Точки» → «Точки пачкой» создаёт их (например, 1A-01 … 1A-24).', 'points', '📖 Как добавить точки');
+  if (!rows.size) return hint(ui, 'Точек пока нет. Сначала создайте все точки проекта по плану заказчика: вкладка «Точки» → «Группа новых точек» создаёт их (например, 1A-01 … 1A-24).', 'points', '📖 Как добавить точки');
   const sum = [...rows.values()].reduce((a, r) => ({ total: a.total + r.total, pulled: a.pulled + r.pulled, installed: a.installed + r.installed, checked: a.checked + r.checked, bad: a.bad + r.bad }), { total: 0, pulled: 0, installed: 0, checked: 0, bad: 0 });
   const line = (name, r, bold) => h('tr', {}, h('td', {}, bold ? h('b', {}, name) : name), ...['total', 'pulled', 'installed', 'checked'].map((k) => h('td', {}, bold ? h('b', {}, r[k]) : r[k])));
   return h('div', {},

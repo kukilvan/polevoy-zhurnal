@@ -286,7 +286,7 @@ function rackEditor(ui, cab) {
     else if (res.writes.size) toast(`Точки сдвинуты: ${res.writes.size}`);
     setTimeout(() => ui.render(), 200);
   };
-  // ----- шилют: «есть» (напечатан и у меня; point.shHave — номера портов точки) и «поклеен» (работа «Шилют» в дохе) -----
+  // ----- шилют: «есть» (напечатан и у меня; point.shHave — номера портов точки) и «поклеен» (работа «Шилют» в отчёте) -----
   const shKey = (pnl) => `${pnl.s || ''}|${pnl.u}`;
   const shPorts = () => [...(shMode?.sel || [])].map((k) => { const [id, i] = k.split(':'); return [state.ctx.points.get(id), Number(i)]; }).filter(([pt]) => pt);
   const setHave = (list, on) => {
@@ -300,7 +300,7 @@ function rackEditor(ui, cab) {
     const allOn = all.length > 0 && all.every((k) => shMode.sel.has(k)); const none = !shMode.sel.size;
     return h('div', { style: { margin: '8px 0', padding: '8px', border: '1px solid #0a84ff', borderRadius: '8px' } },
       h('b', {}, `🏷 Шилют панели ${pName(cab, pnl)}: выбрано портов ${shMode.sel.size}`),
-      h('div', { class: 'mut', style: { margin: '4px 0', fontSize: '13px' } }, 'Нажимайте на порты — они отмечаются птичкой. «Есть шилют» — он напечатан и лежит у вас (идёт в таблицу «шилют есть»). «Поклеил» — записывается в дох как работа «Шилют»; на «есть шилют» не влияет.'),
+      h('div', { class: 'mut', style: { margin: '4px 0', fontSize: '13px' } }, 'Нажимайте на порты — они отмечаются птичкой. «Есть шилют» — он напечатан и лежит у вас (идёт в таблицу «шилют есть»). «Поклеил» — записывается в отчёт как работа «Шилют»; на «есть шилют» не влияет.'),
       h('div', { class: 'btns', style: { marginTop: '6px' } },
         h('button', { class: 'sec', onclick: () => { if (allOn) shMode.sel.clear(); else all.forEach((k) => shMode.sel.add(k)); ui.render(); } }, allOn ? 'Снять выделение' : 'Выделить панель целиком'),
         h('button', { disabled: none, onclick: () => { const l = shPorts(); setHave(l, true); shDone(`Есть шилют: ${l.length}`); } }, '📦 Есть шилют'),
@@ -310,14 +310,14 @@ function rackEditor(ui, cab) {
           const fresh = l.filter(([pt, i]) => !stuckPortsOf(pt, state.ctx).has(i));
           if (!fresh.length) { toast('Выбранные порты уже поклеены'); return; }
           const part = pts.filter((pt) => { const st = stuckPortsOf(pt, state.ctx); const total = rackPortsOf(pt, state.ctx); return total > 1 && [...new Set([...st, ...by.get(pt.id)])].length < total; });
-          if (!(await confirmDialog(`Записать в сегодняшний дох «Шилют»: портов ${fresh.length}, точек ${new Set(fresh.map(([pt]) => pt.id)).size}?${part.length ? `\n\nУ ${part.slice(0, 4).map((x) => x.label).join(', ')}${part.length > 4 ? '…' : ''} поклеены не все порты: в дох пойдут только эти порты, остальные останутся неотмеченными.` : ''}`, { yes: 'Записать' }))) return;
+          if (!(await confirmDialog(`Записать в сегодняшний отчёт «Шилют»: портов ${fresh.length}, точек ${new Set(fresh.map(([pt]) => pt.id)).size}?${part.length ? `\n\nУ ${part.slice(0, 4).map((x) => x.label).join(', ')}${part.length > 4 ? '…' : ''} поклеены не все порты: в отчёт пойдут только эти порты, остальные останутся неотмеченными.` : ''}`, { yes: 'Записать' }))) return;
           const r = markShilutForPoints(pts.map((x) => x.id), by);   // «есть шилют» не ставится: это отдельная отметка
-          shDone(`Поклеено портов: ${fresh.length}, в дох записано точек: ${pts.length - r.done.length - r.none.length}${r.done.length ? `; уже были поклеены: ${r.done.length}` : ''}${r.none.length ? `; у типа нет работы «Шилют» (только отметка): ${r.none.length}` : ''}`);
+          shDone(`Поклеено портов: ${fresh.length}, в отчёт записано точек: ${pts.length - r.done.length - r.none.length}${r.done.length ? `; уже были поклеены: ${r.done.length}` : ''}${r.none.length ? `; у типа нет работы «Шилют» (только отметка): ${r.none.length}` : ''}`);
         } }, '✅ Поклеил'),
         h('button', { class: 'sec', disabled: none, onclick: () => { const l = shPorts(); setHave(l, false); shDone('Отметка «есть шилют» снята'); } }, '↩ Нет шилюта'),
         h('button', { class: 'sec', onclick: () => { shMode = null; ui.render(); } }, 'Готово')));
   };
-  // выбор точек шкафа: изменить как в «Точки», переименовать, добавить работу как в «Дох»
+  // выбор точек шкафа: изменить как в «Точки», переименовать, добавить работу как в «Отчёт»
   const pickBar = () => {
     for (const id of [...pickSel]) if (!state.ctx.points.has(id)) pickSel.delete(id);
     const ids = [...pickSel]; const done = () => { pickSel.clear(); setTimeout(() => ui.render(), 300); };

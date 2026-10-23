@@ -6,9 +6,9 @@ import { purgeDate } from '../../domain/index.js';
 
 const PROJECT_FIELDS = (configs) => [
   { key: 'name', label: 'Название проекта', required: true, hint: 'Например: Mega Or' },
-  { key: 'contractor', label: 'Подрядчик', hint: 'Попадает в шапку доха' },
+  { key: 'contractor', label: 'Подрядчик', hint: 'Попадает в шапку отчёта' },
   { key: 'object', label: 'Объект' },
-  { key: 'helper', label: 'Помощник по умолчанию', hint: 'Пусто или «сам» — в доху будет «сам»' },
+  { key: 'helper', label: 'Помощник по умолчанию', hint: 'Пусто или «сам» — в отчёт будет «сам»' },
   { key: 'nameHe', label: 'Название (иврит)' },
   { key: 'objectHe', label: 'Объект (иврит)' },
   { key: 'helperHe', label: 'Помощник (иврит)' },
@@ -24,7 +24,7 @@ export function projectForm(existing, ui) {
   const fields = PROJECT_FIELDS(configs);
   if (!isNew) fields.push({ key: 'active', label: 'Проект активен', type: 'checkbox' });
   formModal({
-    title: isNew ? 'Новый проект' : 'Проект',
+    title: isNew ? 'Новый проект' : 'Редактировать проект',
     fields, values: isNew ? { helper: 'Марина', helperHe: 'מרינה' } : existing,
     submitLabel: isNew ? 'Создать' : 'Сохранить',
     extra: isNew || !repo.isCreator(existing) ? [] : [{ label: '📦 В архив', onClick: async () => {

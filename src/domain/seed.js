@@ -85,7 +85,7 @@ export const POINT_TYPES = [
   { id: 'Другое', nameHe: 'אחר', defaultCable: 'cat7', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Проверка'], isDoor: false },
 ];
 
-// accounting: 'Точки' — в доху считаются точки, 'Метры' — кабели и метры
+// accounting: 'Точки' — в отчёт считаются точки, 'Метры' — кабели и метры
 export const CABLES = [
   { id: 'cat7', nameHe: 'כבל CAT7', accounting: 'Точки', workIds: ['HIV_KEY', 'HIV_DEV', 'CHK_FLUKE', 'SHL'] },
   { id: '6005', nameHe: 'כבל 6005', accounting: 'Метры', workIds: ['HIV_DEV'] },

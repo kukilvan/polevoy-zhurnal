@@ -37,9 +37,9 @@ import { exportExcel } from './excel.js';
 import { mainTable } from '../domain/index.js';
 
 const TABS = [
-  ['project', 'Проект', '🏗'], ['meter', 'Точки', '📏'], ['todos', 'Дела', '✅'], ['journal', 'Журнал', '📒'], ['doh', 'Дохот', '📝'], ['settings', 'Настройки', '⚙️'],
+  ['project', 'Проект', '🏗'], ['meter', 'Точки', '📏'], ['todos', 'Дела и заметки', '✅'], ['journal', 'История', '📒'], ['doh', 'Отчёты', '📝'], ['settings', 'Настройки', '⚙️'],
 ];
-const SCREEN_TITLES = { projects: 'Все проекты', month: 'Месяц', history: 'История', import: 'Импорт', ref: 'Справочник', members: 'Участники', tables: 'Для руководства', racks: 'Шкафы и шильют', sheets: 'Таблицы', guide: 'Как пользоваться', log: 'Журнал событий' };
+const SCREEN_TITLES = { projects: 'Все проекты', month: 'Отчёт за месяц', history: 'Откат записей', import: 'Импорт', ref: 'Справочник', members: 'Участники', tables: 'Для руководства', racks: 'Шкафы и шильют', sheets: 'Таблицы', guide: 'Как пользоваться', log: 'Журнал событий' };
 
 export function createShell({ user, onLogout, diag }) {
   const root = document.getElementById('app');
@@ -62,12 +62,12 @@ export function createShell({ user, onLogout, diag }) {
     const close = openModal('Меню', h('div', {},
       section('Проект', [
       item('📁 Все проекты', () => open('projects')),
-      p ? item('✏️ Данные проекта', () => projectForm(p, ui)) : null,
+      p ? item('✏️ Редактировать проект', () => projectForm(p, ui)) : null,
       p ? item('👥 Участники', () => open('members')) : null,
       item('➕ Новый проект', () => projectWizard(ui)),
       item('🧾 Журнал событий', () => open('log')),
-      p ? item('🕘 История и откат', () => open('history')) : null,
-      p ? item('📅 Месяц (отчёт начальнику)', () => open('month')) : null]),
+      p ? item('🕘 Откат записей', () => open('history')) : null,
+      p ? item('📅 Отчёт за месяц', () => open('month')) : null]),
       section('Руководства', [
       item('📖 Как пользоваться', () => openGuide(ui)),
       item('📚 Инструкции', () => openGuide(ui, null, 'manuals')),

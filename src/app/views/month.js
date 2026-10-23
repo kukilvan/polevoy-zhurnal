@@ -1,4 +1,4 @@
-// Экран «Месяц»: рабочие дни месяца по всем проектам (дата и место, как в дохе), копирование и отправка.
+// Экран «Месяц»: рабочие дни месяца по всем проектам (дата и место, как в отчёте), копирование и отправка.
 import { h, toast } from '../ui.js';
 import { allDays, liveProjects, state, currentProject } from '../store.js';
 import { workdaysReport, monthTitle, downtimeByCulprit, hm, dateText } from '../../domain/index.js';
@@ -37,5 +37,5 @@ export function monthView(ui) {
       h('div', { class: 'btns' },
         h('button', { onclick: async () => toast((await copyText(rep.text)) ? 'Скопировано' : 'Не удалось скопировать') }, '📋 Копировать'),
         h('a', { class: 'btnlink', href: shortcutUrl(rep.text) }, '➡️ Отправить')))
-      : h('div', { class: 'empty' }, 'В этом месяце дней с дохами нет.'));
+      : h('div', { class: 'empty' }, 'В этом месяце дней с отчётами нет.'));
 }

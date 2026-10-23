@@ -72,7 +72,7 @@ const opts = (map, label) => [...map.values()].map((x) => ({ value: x.id, label:
 // name: поле с названием (если id = название, оно задаётся только при создании)
 export const REFS = {
   catalog: {
-    title: 'Каталог работ', coll: 'catalog', hint: 'Работы, которые выбираются в доху. Тип работы определяет, как работа влияет на статус точки.',
+    title: 'Каталог работ', coll: 'catalog', hint: 'Работы, которые выбираются в отчёт. Тип работы определяет, как работа влияет на статус точки.',
     idMode: 'generated', prefix: 'W_', nameKey: 'name',
     items: () => [...ctx().catalog.values()],
     group: (x) => x.workType, groupOrder: WORK_TYPES,
@@ -81,7 +81,7 @@ export const REFS = {
       { key: 'name', label: 'Название (русский)', required: true },
       { key: 'nameHe', label: 'Название (иврит)', required: true },
       { key: 'workType', label: 'Тип работы', type: 'select', required: true, options: WORK_TYPES.map((t) => ({ value: t, label: t })), emptyLabel: 'Выберите',
-        hint: 'Установка — влияет на статус «Установлено»; Протяжка, Хивут, Проверка, Шилют — на этапы точки; Время и Доп. работа — только в дох.' },
+        hint: 'Установка — влияет на статус «Установлено»; Протяжка, Хивут, Проверка, Шилют — на этапы точки; Время и Доп. работа — только в отчёт.' },
       { key: 'unit', label: 'Единица измерения', type: 'select', required: true, options: opts(ctx().units, (u) => u.id), emptyLabel: 'Выберите' },
       { key: 'multiplier', label: 'Множитель', type: 'number', hint: 'Обычно 1' },
       custom('forTypes', 'Для каких типов точек', opts(ctx().types, (t) => t.id), { hint: 'Ничего не выбрано — работа без точек (доп. работа, время).' }),
@@ -127,7 +127,7 @@ export const REFS = {
     items: () => [...ctx().cables.values()],
     line: (x) => [x.id, `${x.nameHe || '—'} · считается: ${x.accounting || '—'}${x.workIds?.length ? ` · работы: ${x.workIds.map((w) => nameOf('catalog', w)).join(', ')}` : ''}`],
     fields: () => [
-      { key: 'nameHe', label: 'Название в доху (иврит)', required: true, hint: 'Например: כבל CAT7' },
+      { key: 'nameHe', label: 'Название в отчёт (иврит)', required: true, hint: 'Например: כבל CAT7' },
       { key: 'accounting', label: 'Как считать протяжку', type: 'select', required: true, options: [{ value: 'Точки', label: 'По точкам' }, { value: 'Метры', label: 'По кабелям и метрам' }], emptyLabel: 'Выберите' },
       custom('workIds', 'Какие работы нужны каждому такому кабелю', taskWorks(), { hint: 'Например, cat7: хивут кистона, хивут в шкафу, проверка, шилют; 6005: хивут в шкафу. Протяжка учитывается всегда.', empty: 'Нет работ', ...creator('catalog', '🆕 Новая работа') }),
     ],
@@ -157,9 +157,9 @@ export const REFS = {
   },
   // вход во вкладку «Конфигурации дверей» (сама вкладка рисуется в doorcfgview.js)
   configs: { title: 'Конфигурации дверей', coll: 'configs', items: () => [...ctx().configs.values()].filter((c) => Array.isArray(c.devices) && !c.deleted) },
-  units: { title: 'Единицы измерения', coll: 'units', hint: 'Шт, м, мин… Показываются в доху.', idMode: 'name', nameLabel: 'Единица (русский)', heKey: 'he', heLabel: 'Единица (иврит)',
+  units: { title: 'Единицы измерения', coll: 'units', hint: 'Шт, м, мин… Показываются в отчёт.', idMode: 'name', nameLabel: 'Единица (русский)', heKey: 'he', heLabel: 'Единица (иврит)',
     items: () => [...ctx().units.values()], line: (x) => [x.id, x.he || '—'], usage: (x) => [...ctx().catalog.values()].filter((w) => w.unit === x.id).length },
-  culprits: { title: 'Виновники простоя', coll: 'culprits', hint: 'Кто виноват в простое или задержке — выбирается в доху.', idMode: 'name', nameLabel: 'Виновник (русский)', heKey: 'he', heLabel: 'Виновник (иврит)',
+  culprits: { title: 'Виновники простоя', coll: 'culprits', hint: 'Кто виноват в простое или задержке — выбирается в отчёт.', idMode: 'name', nameLabel: 'Виновник (русский)', heKey: 'he', heLabel: 'Виновник (иврит)',
     items: () => [...ctx().culprits.values()], line: (x) => [x.id, x.he || '—'], usage: (x) => [...ctx().entries.values()].filter((e) => e.culprit === x.id).length },
   delayReasons: { title: 'Причины задержки точек', coll: 'delayReasons', hint: 'Почему точка не сделана — выбирается в карточке точки.', idMode: 'name', nameLabel: 'Причина (русский)', heKey: 'he', heLabel: 'Причина (иврит)',
     items: () => [...ctx().delayReasons.values()], line: (x) => [x.id, x.he || '—'], usage: (x) => [...ctx().points.values()].filter((p) => p.delayReasonId === x.id).length },
@@ -184,7 +184,7 @@ export function itemForm(key, existing, { onSaved } = {}) {  // onSaved(id) — 
       const n = def.usage?.(existing) || 0;
       const msg = n ? `«${existing.name || existing.id}» используется (${def.uses ? usesText(def.uses(existing)) : n}). Если удалить, там пропадут связанные работы/кабели/устройства. Удалить из списка? Старые записи сохранятся, но выбрать пункт будет нельзя.` : `Удалить «${existing.name || existing.id}»?`;
       if (!(await confirmDialog(msg, { yes: 'Удалить', danger: true }))) return false;
-      repo.remove(pid, def.coll, existing.id); toast('Удалено (можно вернуть через «История и откат»)'); return true;
+      repo.remove(pid, def.coll, existing.id); toast('Удалено (можно вернуть через «Откат записей»)'); return true;
     } }] : [],
     onSubmit: (v) => {
       let id = existing?.id;

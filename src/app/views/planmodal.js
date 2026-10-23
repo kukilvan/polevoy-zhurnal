@@ -209,7 +209,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
         h('option', { value: UNL, selected: fType === UNL }, `❔ Не размеченые (${unl().length})`), h('option', { value: HID, selected: fType === HID }, `🙈 Скрытые (${hid().length})`));
       const cabSel = cabs.length ? h('select', { onchange: (e) => { fCab = e.target.value; viewer.draw(); } }, h('option', { value: '' }, 'Все шкафы'), ...cabs.map((c) => h('option', { value: c, selected: c === fCab }, `Шкаф ${c}`))) : null;
       const cfgOpts = cfgFilterOptions(sheetPts(d));
-      const cfgSel = cfgOpts.length ? h('select', { onchange: (e) => { fCfg = e.target.value; sel.clear(); selBar(); viewer.draw(); } }, h('option', { value: '' }, 'Все конфигурации'), ...cfgOpts.map(([v, t]) => h('option', { value: v, selected: v === fCfg }, t))) : null;
+      const cfgSel = cfgOpts.length ? h('select', { onchange: (e) => { fCfg = e.target.value; sel.clear(); selBar(); viewer.draw(); } }, h('option', { value: '' }, 'Все конфигурации дверей'), ...cfgOpts.map(([v, t]) => h('option', { value: v, selected: v === fCfg }, t))) : null;
       const stageSel = h('select', { onchange: (e) => { fStage = e.target.value; viewer.draw(); } }, h('option', { value: '' }, 'Все этапы'),
         ...STAGE_FILTERS.map(([v, t]) => h('option', { value: v, selected: v === fStage }, t)));
       const selBtn = h('button', { class: 'sec', onclick: () => { selMode = !selMode; rectSel = false; if (!selMode) sel.clear(); if (selMode) tool = null; toolBar(); selBar(); viewer.draw(); } });
@@ -565,9 +565,9 @@ export function planModal({ point = null, placeFor = null } = {}) {
     const sel = list.length > 1 ? h('select', { onchange: (e) => show(list.find((x) => x.id === e.target.value)) }, list.map((x) => h('option', { value: x.id, selected: x.id === d?.id }, `${drawingTitle(x)}${x.floor ? ` (этаж ${x.floor})` : ''}`))) : null;
     box.replaceChildren(
       h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } }, sel, h('button', { class: list.length ? 'sec' : '', onclick: addPdf }, '➕ Чертёж (PDF)'),
-        h('button', { class: 'sec', onclick: () => import('./tohnitview.js').then((m) => m.drawingsHub()) }, '📐 Из чертежа'),
+        h('button', { class: 'sec', onclick: () => import('./tohnitview.js').then((m) => m.drawingsHub()) }, '📐 Добавить точки из чертежа'),
         list.length ? h('button', { class: 'sec', onclick: () => namesModal() }, '✏️ Названия и порядок') : null),
-      list.length ? body : h('div', { class: 'empty', style: { marginTop: '10px' } }, 'Чертежей пока нет. Добавьте PDF тохнита — точки с местом на чертеже (после разбора «📐 Из чертежа» или из файла) появятся на нём. Чертёж хранится на вашем Google Диске и открыт участникам проекта.'));
+      list.length ? body : h('div', { class: 'empty', style: { marginTop: '10px' } }, 'Чертежей пока нет. Добавьте PDF тохнита — точки с местом на чертеже (после разбора «📐 Добавить точки из чертежа» или из файла) появятся на нём. Чертёж хранится на вашем Google Диске и открыт участникам проекта.'));
     if (d) show(d);
   }
   // свои названия чертежей и порядок в списке (имя файла не меняется — по нему связаны точки и ищутся дубликаты)

@@ -82,7 +82,7 @@ function previewBody(data, title, close, { off, missing, assign, setAssign }) {
     plan.newTypes.length ? list('Будут созданы типы (из файла)', plan.newTypes.map((t) => t.id)) : null,
     plan.poolTypes.length ? list('Будут добавлены типы из общего пула', plan.poolTypes.map((b) => `${b.type.id}${b.devices.length ? ` (${b.devices.map((d) => d.name).join(' + ')})` : ''}`)) : null,
     plan.blankTypes.filter((t) => t !== UNSORTED_TYPE).length ? list('⚠️ Будут созданы пустые типы (нет нигде) — состав настройте потом в «Типах точек»', plan.blankTypes.filter((t) => t !== UNSORTED_TYPE), 'l-warn') : null,
-    plan.add.some((p) => p.typeId === UNSORTED_TYPE) ? h('div', { class: 'mut', style: { margin: '8px 0' } }, `❓ Не разобрано: ${plan.add.filter((p) => p.typeId === UNSORTED_TYPE).length} — разберёте потом: «Точки» → «❓ Не разобрано»`) : null,
+    plan.add.some((p) => p.typeId === UNSORTED_TYPE) ? h('div', { class: 'mut', style: { margin: '8px 0' } }, `❓ Точки без типа: ${plan.add.filter((p) => p.typeId === UNSORTED_TYPE).length} — разберёте потом: «Точки» → «❓ Не разобрано»`) : null,
     plan.newDevices.length ? list('Будут созданы устройства', plan.newDevices.map((d) => d.name || d.id)) : null,
     list('❌ Ошибки — эти строки не добавятся', plan.errors, 'l-error'),
     plan.warnings.length ? h('div', { class: 'l-warn', style: { margin: '8px 0' } }, `⚠️ Подозрительные обозначения: ${plan.warnings.length} — отмечены ⚠️ в группах выше; снимите галочку, если это не точка.`) : null,

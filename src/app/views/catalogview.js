@@ -81,7 +81,7 @@ export function catalogModal() {
       ...DEFAULT_CATALOG.labels.map((e) => ruleRow('label', e, false)), ...DEFAULT_CATALOG.skip.map((e) => ruleRow('skip', e, false)));
     const tgl = h('button', { class: 'sec', onclick: () => { showBuiltin = !showBuiltin; draw(); } }, `${showBuiltin ? '▲' : '▼'} Встроенные правила (${DEFAULT_CATALOG.labels.length + DEFAULT_CATALOG.skip.length})`);
     box.replaceChildren(
-      h('div', { class: 'mut' }, 'По этим правилам «📐 Из чертежа» узнаёт точки. Мои правила — из ваших ответов («Запомнить») и добавленные здесь; они главнее встроенных. Каталог общий для всех проектов.'),
+      h('div', { class: 'mut' }, 'По этим правилам «📐 Добавить точки из чертежа» узнаёт точки. Мои правила — из ваших ответов («Запомнить») и добавленные здесь; они главнее встроенных. Каталог общий для всех проектов.'),
       h('label', { class: 'field' }, h('span', {}, '🔎 Проверить подпись'), testIn), testOut,
       h('div', { class: 'btns' }, h('button', { onclick: addForm }, '➕ Правило по примерам'),
         h('button', { class: 'sec', onclick: exportFile, disabled: !n }, '💾 Сохранить в файл'), h('button', { class: 'sec', onclick: () => fileIn.click() }, '📂 Загрузить из файла'), fileIn),

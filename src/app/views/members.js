@@ -37,7 +37,7 @@ function memberForm(p, email, ui) {
       let uid;
       try { uid = repo.removeMember(p, email); } catch (e) { toast(e.message); return false; }
       toast(`${who} убран из проекта`);
-      if (await confirmDialog(`Откатить изменения, внесённые «${who}»? Откроется «История и откат» с выбранным участником.`, { yes: 'Перейти к откату', no: 'Не нужно' })) {
+      if (await confirmDialog(`Откатить изменения, внесённые «${who}»? Откроется «Откат записей» с выбранным участником.`, { yes: 'Перейти к откату', no: 'Не нужно' })) {
         state.historyPreselect = uid; ui.open('history');
       }
       return true;

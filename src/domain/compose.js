@@ -3,7 +3,7 @@
 // Устройство (devices) — кабели (0..n видов с количеством) + свои работы (установка авизара и т. п.).
 // Тип точки (types) — состав по умолчанию: devices: [{ deviceId, count }] + работы на всю точку (workIds, например проверка двери).
 // Точка может иметь свой состав (point.devices). Тип без поля devices работает по старой схеме (status.js).
-// Работа в дохе отмечается на точку; entry.deviceIds (если есть) — только для этих устройств, entry.cableId — только этот вид кабеля.
+// Работа в отчёте отмечается на точку; entry.deviceIds (если есть) — только для этих устройств, entry.cableId — только этот вид кабеля.
 
 import { doorCfgOf } from './doorcfg.js';
 
@@ -154,7 +154,7 @@ export function composedInfo(point, ctx, comp) {
   };
 }
 
-// Сколько единиц работы даёт запись на точку (для доха): по задачам точки; null — точка старой схемы или задачи нет
+// Сколько единиц работы даёт запись на точку (для отчёта): по задачам точки; null — точка старой схемы или задачи нет
 export function taskQty(point, ctx, entry) {
   const comp = compositionOf(point, ctx); if (!comp) return null;
   const tasks = tasksOf(point, ctx, comp);
@@ -166,7 +166,7 @@ export function taskQty(point, ctx, entry) {
   return list.length ? list.reduce((n, t) => n + t.qty, 0) : null;
 }
 
-// Устройства точки, к которым относится работа (для галочек в дохе): [{ deviceId, name }]
+// Устройства точки, к которым относится работа (для галочек в отчёте): [{ deviceId, name }]
 export function devicesForWork(points, ctx, workId, workType, { onlyOpen = false } = {}) {
   const pick = (open) => {
     const seen = new Map();
@@ -199,7 +199,7 @@ export function missingDetails(info, ctx) {
   return [...by.entries()].sort((a, b) => ord(a[0]) - ord(b[0])).map(([stage, items]) => ({ stage, items }));
 }
 
-// ---------- работа с дохом ----------
+// ---------- работа с отчётом ----------
 const PULL_LIKE = ['Протяжка', 'Перетяжка', 'Перенос'];
 const ALL_STD = ['Камера', 'Дверь', 'Галай', 'Вайфай', 'Бакар', 'Точка', 'TV', 'Оптика', 'Другое'];
 // Подходит ли работа точке: старая схема — по «Для каких типов точек»; из устройств — если работа есть в её задачах

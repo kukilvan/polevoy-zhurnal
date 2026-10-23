@@ -1,4 +1,4 @@
-// Вкладка «Журнал»: строки точка × работа (из них считаются статусы) и «Правка» без записи в дох.
+// Вкладка «История»: строки точка × работа (из них считаются статусы) и «Правка» без записи в отчёт.
 import { h, formModal, toast } from '../ui.js';
 import { state, getRepo, currentProject, infoOf } from '../store.js';
 import { dateText, workApplicable } from '../../domain/index.js';
@@ -51,12 +51,12 @@ function editForm() {
     },
   };
   formModal({
-    title: 'Правка журнала', submitLabel: 'Применить',
+    title: 'Правка истории', submitLabel: 'Применить',
     fields: [
       { key: 'date', label: 'Дата', type: 'date', required: true },
       { key: 'pointIds', label: 'Точки', type: 'custom', required: true, build: (api) => { picker.bind(api.values, api.changed); return picker; } },
       { key: 'workIds', label: 'Работы', type: 'custom', required: true, build: () => works },
-      { key: 'remove', label: 'Убрать отметки (вместо добавления)', type: 'checkbox', hint: 'Без галочки — отметки добавятся с этой датой, если их ещё нет. В дох правка не попадает.' },
+      { key: 'remove', label: 'Убрать отметки (вместо добавления)', type: 'checkbox', hint: 'Без галочки — отметки добавятся с этой датой, если их ещё нет. В отчёт правка не попадает.' },
     ],
     values: { date: todayIso() },
     onSubmit: (v) => {
@@ -89,11 +89,11 @@ export function journalView(ui) {
       h('div', { class: 'item' },
         h('div', { class: 'name' }, `${r.label} · ${r.work}`,
           h('div', { class: 'sub' }, `${dateText(r.date)}${r.result === 'Не работает' ? ' · не работает' : ''}${r.fromEdit ? ' · правка' : ''}${whoIs(currentProject(), r.by) ? ` · ${whoIs(currentProject(), r.by)}` : ''}`)))))
-      : (all.length ? h('div', { class: 'empty' }, 'Ничего не найдено') : hint(ui, 'Строк журнала пока нет. Они появляются сами, когда в дохе отмечены работы на точках.', 'status', '📖 Как это работает')));
+      : (all.length ? h('div', { class: 'empty' }, 'Ничего не найдено') : hint(ui, 'Записей в истории пока нет. Они появляются сами, когда в отчёте отмечены работы на точках.', 'status', '📖 Как это работает')));
   };
   fill();
   return h('div', {},
-    h('div', { class: 'btns', style: { marginTop: 0 } }, h('button', { class: 'sec', onclick: editForm }, '✏️ Правка журнала')),
+    h('div', { class: 'btns', style: { marginTop: 0 } }, h('button', { class: 'sec', onclick: editForm }, '✏️ Правка истории')),
     info,
     h('input', { type: 'search', placeholder: 'Поиск: точка или работа', value: search, oninput: (e) => { search = e.target.value; fill(); } }),
     h('div', { style: { height: '10px' } }), box);

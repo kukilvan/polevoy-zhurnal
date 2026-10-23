@@ -1,4 +1,4 @@
-// «🧵 Протяжки»: выбор точек на плане → «До шкафа» → метраж по точкам (своя цифровая панель) → чеклист → «Завершить» (форма доха).
+// «🧵 Протяжки»: выбор точек на плане → «До шкафа» → метраж по точкам (своя цифровая панель) → чеклист → «Завершить» (форма отчёта).
 // Каждое действие сразу сохраняется на телефоне (localStorage) и на сервере (коллекция pulls) — открыл заново и продолжил с того же места.
 import { h, openModal, toast, confirmDialog, formModal } from '../ui.js';
 import { state, getRepo, currentProject, infoOf, subscribe } from '../store.js';
@@ -119,7 +119,7 @@ export async function openPull(id) {
   const chosen = () => (P.pointIds || []).map((x) => ctx().points.get(x)).filter(Boolean);
   const meas = (id) => isMeasured(P, id) || finSet().has(id);
   const meters = () => pairsToMap(P.meters); const kept = () => pairsToMap(P.kept);
-  // «протянута» в протяжке, но записи о протяжке в дохе уже нет (удалили) — точка снова не протянута
+  // «протянута» в протяжке, но записи о протяжке в отчёте уже нет (удалили) — точка снова не протянута
   const finSet = () => new Set((P.finished || []).filter((id) => {
     const pt = ctx().points.get(id); return !(pt && !infoOf(pt).pulled && Date.now() - (P.finishedAt || 0) > 60000);
   }));
@@ -190,7 +190,7 @@ export async function openPull(id) {
       h('div', { class: 'mut', style: { fontSize: '13px' } }, h('b', {}, 'Шаг 1. Выберите точки'), ' — нажатием, рамкой, поиском или «Все видимые» после фильтров. Серые — уже протянуты.'),
       h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', margin: '6px 0' } }, search,
         sel('Все типы', typeFilterOptions(types), fType, (v) => { fType = v; }),
-        cfgOpts.length ? sel('Все конфигурации', cfgOpts, fCfg, (v) => { fCfg = v; }) : null,
+        cfgOpts.length ? sel('Все конфигурации дверей', cfgOpts, fCfg, (v) => { fCfg = v; }) : null,
         cabs.length ? sel('Все шкафы', cabs.map((c) => [c, `Шкаф ${c}`]), fCab, (v) => { fCab = v; }) : null,
         h('label', { class: 'pickrow', style: { margin: 0 } }, h('input', { type: 'checkbox', checked: onlyOpen, onchange: (e) => { onlyOpen = e.target.checked; screen(); } }), h('span', {}, 'Только не протянутые'))),
       h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', margin: '4px 0' } }, ...viewer.zoomBtns(),
@@ -229,7 +229,7 @@ export async function openPull(id) {
       h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => { set({ screen: 'select' }); screen(); } }, '➕ Добавить точки')),
       h('div', { class: 'card', style: { marginTop: '10px' } },
         h('div', {}, h('b', {}, 'До шкафа, м')),
-        h('div', { class: 'mut', style: { fontSize: '13px', margin: '4px 0 8px' } }, 'Расстояние от шкафа до места, где кабели расходятся. Прибавится к метражу каждой точки.'),
+        h('div', { class: 'mut', style: { fontSize: '13px', margin: '4px 0 8px' } }, 'Сколько метров кабеля от шкафа до места, где трасса расходится к точкам (общий для всех участок). Эти метры прибавляются к метражу каждой точки.'),
         inp),
       h('div', { class: 'btns' }, h('button', { class: 'wide', onclick: go }, 'Далее →')),
     ];
@@ -249,6 +249,7 @@ export async function openPull(id) {
       h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', margin: '6px 0' } },
         h('b', {}, `Метраж: ${done} из ${all.length}`),
         h('button', { class: 'sec', onclick: () => { set({ screen: 'base' }); screen(); } }, `До шкафа: ${P.base ?? 0} м ✎`)),
+      h('div', { class: 'mut', style: { fontSize: '12px', margin: '-2px 0 6px' } }, '«До шкафа» — сколько метров кабеля от шкафа до места, где трасса расходится к точкам (общий для всех участок). Эти метры прибавляются к метражу каждой точки.'),
       h('div', { style: { display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center', margin: '4px 0' } }, ...viewer.zoomBtns(),
         done < all.length ? h('button', { class: 'sec', onclick: () => { const p = next(); if (p) numpad(p.id); } }, '▶ Следующая') : null,
         h('button', { onclick: () => { set({ screen: 'check' }); screen(); } }, '📋 Чеклист →')),

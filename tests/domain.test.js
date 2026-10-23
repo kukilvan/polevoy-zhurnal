@@ -414,7 +414,7 @@ test('exportSheets: листы выгрузки в Excel', async () => {
     types: [{ id: 'Камера', stages: ['Протяжка', 'Проверка'] }], days: [{ id: 'd', projectId: 'p', date: '2026-10-01', helper: 'сам' }],
     entries: [{ id: 'e', dayId: 'd', workType: 'Время', minutes: 30, note: 'ждали' }], catalog: [], cables: [], configs: [], units: [], culprits: [], delayReasons: [], journal: [] });
   const sh = exportSheets(project, ctx);
-  assert.deepEqual(sh.map((x) => x.name), ['Точки', 'Журнал по точкам', 'Дни и работы', 'Справочники']);
+  assert.deepEqual(sh.map((x) => x.name), ['Точки', 'История по точкам', 'Дни и работы', 'Справочники']);
   assert.equal(sh[0].rows[0][0], 'Обозначение'); assert.equal(sh[0].rows[1][0], '1A-01'); assert.ok(sh[0].rows[1].includes('GE1'));
   assert.equal(sh[2].rows[1][0], '2026-10-01'); assert.equal(sh[2].rows[1][8], 30);
 });
