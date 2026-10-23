@@ -1,7 +1,8 @@
 // Общий пул в приложении: слушает пул (все пользователи), входящие (только администратор пула)
 // и отправляет администратору новое/изменённое из текущего проекта.
 import { state, getRepo, subscribe, currentProject, demo } from './store.js';
-import { POOL_ADMIN, POOL_KINDS, poolMaps, inboxCandidates, deepHash, bundleFrom, coveredBy, candidateChanges } from '../domain/index.js';
+import { isAdminEmail } from '../edition.js';
+import { POOL_KINDS, poolMaps, inboxCandidates, deepHash, bundleFrom, coveredBy, candidateChanges } from '../domain/index.js';
 import { docKey } from './repo.js';
 
 export const pool = Object.fromEntries(POOL_KINDS.map((k) => [k, new Map()]));
@@ -10,7 +11,7 @@ export let inbox = [];
 const subs = new Set();
 export const onPool = (fn) => { subs.add(fn); return () => subs.delete(fn); };
 const emit = () => subs.forEach((f) => { try { f(); } catch { /* ok */ } });
-export const isPoolAdmin = () => String(getRepo()?.user?.email || '').toLowerCase() === POOL_ADMIN;
+export const isPoolAdmin = () => isAdminEmail(getRepo()?.user?.email);
 export const poolReady = () => loaded.size === POOL_KINDS.length;
 // Пул реально скачан на телефон (а не пустой из-за того, что связи ещё не было ни разу)
 export const poolHasData = () => POOL_KINDS.some((k) => pool[k].size > 0);

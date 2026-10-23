@@ -3,9 +3,10 @@
 //  - память (для автотестов интерфейса, включается адресом ?mem=1).
 // Общая логика здесь: кто и когда изменил, история изменений, мягкое удаление.
 import {
-  collection, doc, onSnapshot, setDoc, query, where, writeBatch, serverTimestamp, arrayUnion, arrayRemove, getDocs, getDocsFromCache, orderBy, limit as fbLimit, Timestamp,
+  collection, doc, onSnapshot, setDoc, getDoc, query, where, writeBatch, serverTimestamp, arrayUnion, arrayRemove, getDocs, getDocsFromCache, orderBy, limit as fbLimit, Timestamp,
 } from 'firebase/firestore';
 import { info, error } from '../log.js';
+import { isAdminEmail } from '../edition.js';
 import { DELTA_MARGIN, decideMode, maxMillis, DAILY_WRITE_LIMIT, writeWarnLevel } from '../domain/sync.js';
 import {
   CATALOG, POINT_TYPES, CABLES, UNITS, CULPRITS, DELAY_REASONS, DEVICES, composedTypes, fixLatin, fixCabinet,
@@ -84,6 +85,8 @@ export function createMemoryBackend() {
       }
       notify();
     },
+    async loadAdmin() { return settings.__admin || null; },
+    async claimAdmin(email) { if (!settings.__admin) settings.__admin = email; return settings.__admin; },
     async loadSettings() { return { ...settings }; },
     async saveSettings(patch) { settings = { ...settings, ...patch }; },
     // общий пул и входящие (в памяти — для тестов)
@@ -228,6 +231,13 @@ function deltaListen(col, key, shape, label, cb, retryDenied = false) {
 export function createFirestoreBackend(db, uid) {
   return {
     kind: 'firestore',
+    // Открытая версия: администратор базы — первый вошедший (документ meta/admin; правила разрешают создать его один раз)
+    async loadAdmin() { const d = await getDoc(doc(db, 'meta', 'admin')); return d.exists() ? d.data().email : null; },
+    async claimAdmin(email) {
+      const cur = await this.loadAdmin(); if (cur) return cur;
+      await setDoc(doc(db, 'meta', 'admin'), { email, at: Date.now() });
+      return email;
+    },
     listenProjects(_uid, cb) {
       const q = query(collection(db, 'projects'), where('memberUids', 'array-contains', uid)); const tr = readTrack('Список проектов');
       const un = onSnapshot(q, { includeMetadataChanges: true }, (snap) => { if (!snap.metadata.fromCache) tr.ok(); cb(snap.docs.map((d) => ({ ...d.data(), _pending: d.metadata.hasPendingWrites }))); },
@@ -475,12 +485,14 @@ export function createRepo(backend, user) {
     },
     // Администратор пула вносит в список разрешённых почты всех участников и приглашённых своих проектов (один раз на почту)
     allowEmails(list) {
-      if (emailOf(user) !== 'erudit199867@gmail.com' || !backend.allowEmails) return;
+      if (!isAdminEmail(emailOf(user)) || !backend.allowEmails) return;
       const key = `pz.allowed.${user.uid}`; let done = []; try { done = JSON.parse(localStorage.getItem(key) || '[]'); } catch { /* пусто */ }
       const fresh = [...new Set(list.map((e) => String(e || '').trim().toLowerCase()).filter((e) => /^\S+@\S+\.\S+$/.test(e) && !done.includes(e)))];
       if (!fresh.length) return;
       Promise.resolve(backend.allowEmails(fresh)).then(() => { try { localStorage.setItem(key, JSON.stringify([...done, ...fresh])); } catch { /* нет доступа */ } }).catch((e) => error('Список разрешённых почт', `${e.code || ''} ${e.message || e}`));
     },
+    loadAdmin: () => backend.loadAdmin?.(),
+    claimAdmin: (email) => backend.claimAdmin?.(email),
     loadSettings: () => backend.loadSettings(),
     saveSettings: (p) => backend.saveSettings(p),
   };

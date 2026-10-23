@@ -2,6 +2,7 @@
 // запись — в общей коллекции pool_manuals (видят и добавляют все участники), файл — на Google Диске владельца записи
 // в папке «Полевой журнал / Инструкции» (доступ «у кого есть ссылка — читатель»), копия — на устройстве (работает офлайн).
 import { getRepo } from './store.js';
+import { isAdminEmail } from '../edition.js';
 import { newId } from './repo.js';
 import { driveCall, dreq, cacheGet, cachePut } from './drawings.js';
 import { manualsFolder } from './drivefolders.js';
@@ -19,7 +20,7 @@ export function startManuals() {
 export const myManuals = () => visibleManuals(list, getRepo()?.user?.email);
 export const canEditManual = (m) => {
   const me = String(getRepo()?.user?.email || '').toLowerCase();
-  return me === 'erudit199867@gmail.com' || String(m.addedBy || '').toLowerCase() === me;
+  return isAdminEmail(me) || String(m.addedBy || '').toLowerCase() === me;
 };
 
 /** Большие фото ужимаем (длинная сторона до 2400, JPEG) — иначе на телефоне тяжело и долго */

@@ -2,7 +2,7 @@
 import { GoogleAuthProvider, reauthenticateWithPopup } from 'firebase/auth';
 import { auth } from '../firebase.js';
 
-export const CLIENT_ID = '473054171494-sin5sm8i45hi24oi23udnk13iduqtbrs.apps.googleusercontent.com'; // веб-клиент Firebase (публичный)
+import { clientId } from '../edition.js';
 const SCOPES = ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets'];
 let cached = { token: '', exp: 0 };
 
@@ -34,7 +34,7 @@ export async function getToken(action = 'managers') {
   if (useRedirect()) { // iPhone: окна Google закрываются, а результат Firebase-перехода Safari теряет — идём напрямую в Google и читаем токен из адреса
     try { localStorage.setItem(PENDING, action); } catch { /* ok */ }
     const q = new URLSearchParams({
-      client_id: CLIENT_ID, redirect_uri: location.origin + location.pathname, response_type: 'token', scope: SCOPES.join(' '),
+      client_id: clientId(), redirect_uri: location.origin + location.pathname, response_type: 'token', scope: SCOPES.join(' '),
       include_granted_scopes: 'true', state: 'pz_gsync', login_hint: auth.currentUser?.email || '',
     });
     location.href = `https://accounts.google.com/o/oauth2/v2/auth?${q}`;

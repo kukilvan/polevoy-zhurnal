@@ -768,3 +768,12 @@ test('workApplicable: точке предлагаются только подх�
   data.entries[1].result = 'Работает'; const ctx2 = buildContext(data);
   assert.equal(workApplicable(ctx2.points.get('p'), ctx2, ctx2.catalog.get('CHK')), false, 'проверена — снова не нужна');
 });
+
+test('правила открытой версии: без вшитой почты, администратор из meta/admin', async () => {
+  const fs = await import('node:fs');
+  const { openRules } = await import('../src/domain/openrules.js');
+  const r = openRules(fs.readFileSync(new URL('../firestore.rules', import.meta.url), 'utf8'));
+  assert.ok(!/erudit/.test(r));
+  assert.match(r, /match \/meta\/admin/);
+  assert.match(r, /function poolAdmin\(\) \{ return signedIn\(\) && exists/);
+});

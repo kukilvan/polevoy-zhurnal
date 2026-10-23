@@ -5,10 +5,10 @@ import {
   GoogleAuthProvider, signInWithPopup, signInWithRedirect, getRedirectResult, onAuthStateChanged, signOut,
 } from 'firebase/auth';
 import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager, memoryLocalCache } from 'firebase/firestore';
-import { firebaseConfig } from './firebase-config.js';
+import { firebaseConfig } from './edition.js';
 import { info, warn, error } from './log.js';
 
-const app = initializeApp(firebaseConfig);
+const app = initializeApp(firebaseConfig());
 export const auth = initializeAuth(app, {
   persistence: [indexedDBLocalPersistence, browserLocalPersistence],
   popupRedirectResolver: browserPopupRedirectResolver,
