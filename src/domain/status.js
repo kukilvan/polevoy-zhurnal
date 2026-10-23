@@ -1,7 +1,7 @@
 // Статусы точек, установка, комплектность (разделы 3.1–3.3, Приложение А).
 import { cableOf, cablesCountOf, metrageOf, cableListOf } from './points.js';
 import { defaultInstallBinding } from './seed.js';
-import { compositionOf, composedInfo, composedCables as composedCablesOf, doneByPorts } from './compose.js';
+import { compositionOf, composedInfo, composedCables as composedCablesOf, doneByPorts, workFits, STAGES } from './compose.js';
 
 // Привязка установки типа точек: поля типа (installMode/installWorkIds), для старых данных — стандартная привязка по названию типа
 export function installBinding(type) {
@@ -88,4 +88,30 @@ export function pointInfo(point, ctx) {
     pulled, pullDone, pullTotal, pulledKinds, cableList, hived, checked, shilut, checkResult, installedIds, install, installHe, status, statusHe,
     cable: cableOf(point, ctx), cables: cablesCountOf(point, ctx), metrage: metrageOf(point, ctx),
   };
+}
+
+/**
+ * Ждёт ли точка эту работу: подходит ей по составу/типу И ещё не сделана.
+ * Перетяжка и перенос — всегда можно; «Проверка» — повторно, если точка «Не работает»; «Время», «Доп. работа» — без задач.
+ * infoFn — функция статуса точки (в приложении — кэшированная infoOf).
+ */
+export function workApplicable(point, ctx, work, infoFn = pointInfo) {
+  if (!work || work.active === false || !workFits(point, ctx, work)) return false;
+  if (['Перетяжка', 'Перенос'].includes(work.workType)) return true;
+  const info = infoFn(point, ctx);
+  if (info.composed) {
+    if (!STAGES.includes(work.workType)) return true;   // свободная работа (доп. работа и т.п.) — задач у точки нет
+    const mine = info.tasks.filter((t) => (work.workType === 'Протяжка' ? t.stage === 'Протяжка' : t.workId === work.id));
+    if (!mine.length) return false;                      // такой работы у этой точки нет в составе
+    if (work.workType === 'Проверка' && info.checkResult === 'Не работает') return true;
+    return mine.some((t) => !t.done);
+  }
+  switch (work.workType) {
+    case 'Протяжка': return !info.pulled;
+    case 'Хивут': return work.id === 'HIV_DEV' || !info.hived;
+    case 'Установка': return !info.installedIds.includes(work.id);
+    case 'Проверка': return !info.checked || info.checkResult === 'Не работает';
+    case 'Шилют': return !info.shilut;
+    default: return true;
+  }
 }

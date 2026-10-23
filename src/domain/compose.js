@@ -167,17 +167,22 @@ export function taskQty(point, ctx, entry) {
 }
 
 // Устройства точки, к которым относится работа (для галочек в дохе): [{ deviceId, name }]
-export function devicesForWork(points, ctx, workId, workType) {
-  const seen = new Map();
-  points.forEach((p) => {
-    const comp = compositionOf(p, ctx); if (!comp) return;
-    tasksOf(p, ctx, comp).forEach((t) => {
-      if (!t.deviceId) return;
-      const ok = workType === 'Протяжка' ? t.stage === 'Протяжка' : t.workId === workId;
-      if (ok && !seen.has(t.deviceId)) seen.set(t.deviceId, partName(ctx, t.deviceId));
+export function devicesForWork(points, ctx, workId, workType, { onlyOpen = false } = {}) {
+  const pick = (open) => {
+    const seen = new Map();
+    points.forEach((p) => {
+      const comp = compositionOf(p, ctx); if (!comp) return;
+      (open ? composedInfo(p, ctx, comp).tasks : tasksOf(p, ctx, comp)).forEach((t) => {
+        if (!t.deviceId || (open && t.done)) return;
+        const ok = workType === 'Протяжка' ? t.stage === 'Протяжка' : t.workId === workId;
+        if (ok && !seen.has(t.deviceId)) seen.set(t.deviceId, partName(ctx, t.deviceId));
+      });
     });
-  });
-  return [...seen.entries()].map(([deviceId, name]) => ({ deviceId, name }));
+    return [...seen.entries()].map(([deviceId, name]) => ({ deviceId, name }));
+  };
+  // onlyOpen: только устройства, по которым работа ещё не сделана (если таких нет — все, например для повторной проверки)
+  const list = onlyOpen ? pick(true) : [];
+  return list.length ? list : pick(false);
 }
 
 // Чего не хватает составной точке: [{ stage, items: [название устройства или работы] }]

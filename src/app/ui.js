@@ -93,7 +93,7 @@ export function formModal({ title, fields, values = {}, submitLabel = 'Сохр�
     if (el.dataset.sig === sig) return;
     const keep = el.value || el.dataset.init || '';
     delete el.dataset.init;
-    el.replaceChildren(h('option', { value: '' }, f.emptyLabel ?? '—'),
+    el.replaceChildren(h('option', { value: '' }, (typeof f.emptyLabel === 'function' ? f.emptyLabel(v) : f.emptyLabel) ?? '—'),
       ...opts.map((o) => h('option', { value: o.value }, o.label)));
     el.dataset.sig = sig;
     el.value = opts.some((o) => String(o.value) === keep) ? keep : (opts.length === 1 ? String(opts[0].value) : '');

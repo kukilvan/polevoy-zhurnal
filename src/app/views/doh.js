@@ -7,7 +7,7 @@ import { h, formModal, openModal, confirmDialog, toast } from '../ui.js';
 import { hint } from './guide.js';
 import { state, getRepo, currentProject, pointsSorted, infoOf } from '../store.js';
 import { newId } from '../repo.js';
-import { doh, entryLine, dateText, dayEntries, workFits, workUsesPoints, openTasksFor, pullGroups, devicesForWork, compositionOf } from '../../domain/index.js';
+import { doh, entryLine, dateText, dayEntries, workFits, workUsesPoints, openTasksFor, pullGroups, devicesForWork, compositionOf, workApplicable } from '../../domain/index.js';
 
 let openDayId = null;
 const WORK_TYPES = ['Протяжка', 'Хивут', 'Установка', 'Проверка', 'Шилют', 'Перетяжка', 'Перенос', 'Доп. работа', 'Время', 'Текст'];
@@ -146,6 +146,20 @@ function entryForm(day, entry, preset) {
   const repo = getRepo(); const pid = currentProject().id; const ctx = state.ctx;
   const catalog = [...ctx.catalog.values()].filter((w) => w.active !== false);
   const workOf = (v) => ctx.catalog.get(v.workId);
+  // что ждёт точка: работа подходит ей и ещё не сделана (правка записи: её собственные работа и точки остаются)
+  const appl = (pt, w) => workApplicable(pt, ctx, w, infoOf);
+  const ownPts = new Set(entry?.pointIds || []);
+  const okFor = (pt, w) => appl(pt, w) || (!!entry && entry.workId === w.id && ownPts.has(pt.id));
+  // работа по точке уже сделана (с учётом выбранных устройств); повторная проверка неработающей точки — не «сделано»
+  const isDoneFor = (p, v) => {
+    const w = workOf(v); if (!w) return false;
+    if (w.workType === 'Проверка' && infoOf(p).checkResult === 'Не работает') return false;
+    if (v.deviceIds?.length && infoOf(p).composed && ['Хивут', 'Установка', 'Проверка', 'Шилют'].includes(w.workType)) return !(openTasksFor(p, ctx, w, v.deviceIds) || []).length;
+    return !appl(p, w);
+  };
+  const chosenPts = (v) => (v.pointIds || []).map((id) => ctx.points.get(id)).filter(Boolean);
+  // работа доступна, если не привязана к точкам или нужна хотя бы одной выбранной точке
+  const workOk = (w, v) => { const pts = chosenPts(v); return !pts.length || !workUsesPoints(w, ctx) || (entry?.workId === w.id) || pts.some((pt) => okFor(pt, w)); };
   const isTime = (v) => v.workType === 'Время' || workOf(v)?.unit === 'мин';
   const isText = (v) => v.workType === 'Текст';
   const usesCache = new Map();
@@ -153,12 +167,13 @@ function entryForm(day, entry, preset) {
   const effPts = (v) => (hasPointsWork(v) ? (v.pointIds || []) : []);
   const ptsOf = (v) => effPts(v).map((id) => ctx.points.get(id)).filter(Boolean);
   const anyLegacy = (v) => ptsOf(v).some((p) => !compositionOf(p, ctx));
-  const devOpts = (v) => (workOf(v) && ptsOf(v).length ? devicesForWork(ptsOf(v), ctx, v.workId, v.workType) : []);
+  const devOpts = (v) => (workOf(v) && ptsOf(v).length ? devicesForWork(ptsOf(v), ctx, v.workId, v.workType, { onlyOpen: !entry }) : []);
   // галочки «к каким устройствам относится» (для точек из устройств)
   const devBox = (() => {
-    const el = h('div', { class: 'picklist', style: { maxHeight: '200px' } }); let sig = ''; const boxes = new Map();
+    const el = h('div', { class: 'picklist', style: { maxHeight: '200px' } }); let sig = ''; let total = 0; const boxes = new Map();
     const draw = (v) => {
       const opts = devOpts(v); const s = opts.map((o) => o.deviceId).join(',');
+      total = workOf(v) && ptsOf(v).length ? devicesForWork(ptsOf(v), ctx, v.workId, v.workType).length : 0;   // сколько устройств всего (часть уже сделана и скрыта)
       if (s === sig) return; sig = s;
       const keep = new Map([...boxes].map(([k, cb]) => [k, cb.checked])); boxes.clear();
       el.replaceChildren(...opts.map((o) => {
@@ -167,11 +182,11 @@ function entryForm(day, entry, preset) {
         return h('label', { class: 'pickrow' }, cb, h('span', {}, o.name));
       }));
     };
-    return { el, update: draw, get: () => { const all = [...boxes]; const on = all.filter(([, cb]) => cb.checked).map(([k]) => k); return on.length === all.length ? undefined : on; } };
+    return { el, update: draw, get: () => { const all = [...boxes]; const on = all.filter(([, cb]) => cb.checked).map(([k]) => k); return on.length === all.length && all.length === total ? undefined : on; } };
   })();
   let modal = null;
   const picker = pointsPicker({
-    fits: (pt, v) => !workOf(v) || workFits(pt, ctx, workOf(v)),
+    fits: (pt, v) => !workOf(v) || okFor(pt, workOf(v)),
     onPick: (ids) => { // для протяжки подставляем кабель первой точки, если ещё не выбран
       const first = ctx.points.get(ids[0]);
       if (first && modal) modal.set?.('cableId', infoOf(first).cable);
@@ -183,8 +198,8 @@ function entryForm(day, entry, preset) {
   picker.update = (v) => {
     const key = `${v.workType || ''}|${v.workId || ''}`; if (key === lastWork) return; lastWork = key;
     const work = workOf(v); const ids = picker.get(); if (!work || !ids.length) return;
-    const keep = ids.filter((id) => { const pt = ctx.points.get(id); return !pt || workFits(pt, ctx, work); });
-    if (keep.length !== ids.length) { picker.set(keep); toast(`Убрано точек, которым «${work.name}» не подходит: ${ids.length - keep.length}`); }
+    const keep = ids.filter((id) => { const pt = ctx.points.get(id); return !pt || okFor(pt, work); });
+    if (keep.length !== ids.length) { picker.set(keep); toast(`Убрано точек, которым «${work.name}» не подходит или уже сделана: ${ids.length - keep.length}`); }
   };
 
   // новая запись, разбитая на несколько (виды кабеля / пропуск сделанного); время, виновник и приписка — в первую
@@ -207,10 +222,12 @@ function entryForm(day, entry, preset) {
     title: entry ? 'Запись' : 'Добавить работу', submitLabel: 'Сохранить',
     fields: [
       { key: 'workType', label: 'Тип работы', type: 'select', required: true, emptyLabel: 'Выберите…',
-        options: WORK_TYPES.map((t) => ({ value: t, label: t === 'Текст' ? 'Своя строка (текст)' : t })) },
-      { key: 'workId', label: 'Работа', type: 'select', emptyLabel: 'Выберите…',
+        // только те типы, где есть работа, которую ждёт хотя бы одна из выбранных точек (если точки уже выбраны)
+        optionsFn: (v) => WORK_TYPES.filter((t) => t === 'Текст' || t === entry?.workType || catalog.some((w) => w.workType === t && workOk(w, v)))
+          .map((t) => ({ value: t, label: t === 'Текст' ? 'Своя строка (текст)' : t })) },
+      { key: 'workId', label: 'Работа', type: 'select', emptyLabel: (v) => (chosenPts(v).length && catalog.some((w) => w.workType === v.workType) && !catalog.some((w) => w.workType === v.workType && workOk(w, v)) ? 'Нет работ, которые ждут эти точки' : 'Выберите…'),
         visible: (v) => !!v.workType && !isText(v),
-        optionsFn: (v) => catalog.filter((w) => w.workType === v.workType).map((w) => ({ value: w.id, label: w.name })) },
+        optionsFn: (v) => catalog.filter((w) => w.workType === v.workType && workOk(w, v)).map((w) => ({ value: w.id, label: w.name })) },
       { key: 'pointIds', label: 'Точки', type: 'custom', visible: (v) => !isText(v) && hasPointsWork(v),
         build: (api) => { picker.bind(api.values, api.changed); return picker; } },
       { key: 'deviceIds', label: 'Устройства', type: 'custom', hint: 'Снимите галочку, если работа сделана не на всех устройствах точки.',
@@ -218,7 +235,9 @@ function entryForm(day, entry, preset) {
       { key: 'quantity', label: 'Количество', type: 'number', visible: (v) => !isText(v) && !!v.workId && !isTime(v) && !effPts(v).length && v.workType !== 'Протяжка' },
       { key: 'cableId', label: 'Кабель', type: 'select', visible: (v) => v.workType === 'Протяжка' && (!effPts(v).length || anyLegacy(v) || !!entry),
         hint: 'Для точек из устройств кабели берутся из их состава — по записи на каждый вид кабеля.',
-        options: [...ctx.cables.values()].map((c) => ({ value: c.id, label: c.id })) },
+        // кабели выбранных точек (и свой кабель записи при правке); пока точек нет — все кабели проекта
+        optionsFn: (v) => { const pts = chosenPts(v); const ids = pts.length ? [...new Set(pts.flatMap((p) => (infoOf(p).cableList || []).map((c) => c.cable)))] : [...ctx.cables.keys()];
+          if (entry?.cableId && !ids.includes(entry.cableId)) ids.push(entry.cableId); return ids.filter((id) => ctx.cables.has(id)).map((id) => ({ value: id, label: id })); } },
       { key: 'pullCount', label: 'Сколько кабелей / точек', type: 'number', visible: (v) => v.workType === 'Протяжка' && !effPts(v).length },
       { key: 'meters', label: 'Метры', type: 'number', visible: (v) => v.workType === 'Протяжка' && !effPts(v).length && ctx.cables.get(v.cableId)?.accounting === 'Метры' },
       // время работы — только у работ в минутах (ожидание, поиск неисправности…); у остальных считается по количеству
@@ -263,7 +282,7 @@ function entryForm(day, entry, preset) {
           const added = pointIds.filter((id) => !(entry.pointIds || []).includes(id)).map((id) => ctx.points.get(id)).filter(Boolean);
           if (added.length) {
             const done = v.workType === 'Протяжка' ? pullGroups(added, ctx, v.deviceIds, (p) => v.cableId || infoOf(p).cable).done
-              : added.filter((p) => { const o = openTasksFor(p, ctx, workOf(v), v.deviceIds); return o !== null && !o.length; }).map((p) => p.label);
+              : added.filter((p) => isDoneFor(p, v)).map((p) => p.label);
             if (done.length) { toast(`Уже отмечено другой записью: ${done.slice(0, 5).join(', ')}${done.length > 5 ? '…' : ''}`); return false; }
           }
         }
@@ -283,7 +302,7 @@ function entryForm(day, entry, preset) {
           if (r.done.length) toast(`Пропущено (уже протянуто): ${r.done.join(', ')}`);
           groups = r.groups;
         } else {
-          const done = pts.filter((p) => { const o = openTasksFor(p, ctx, workOf(v), v.deviceIds); return o !== null && !o.length; });
+          const done = pts.filter((p) => isDoneFor(p, v));
           if (done.length === pts.length) { toast(`Уже отмечено: ${done.map((p) => p.label).join(', ')}`); return false; }
           if (done.length) toast(`Пропущено (уже отмечено): ${done.map((p) => p.label).join(', ')}`);
           groups = [[undefined, pointIds.filter((x) => !done.some((p) => p.id === x))]];
@@ -407,21 +426,15 @@ export function syncJournal(entryId, pointIds) {
 // ---------- несколько работ сразу по одним и тем же точкам ----------
 function batchForm(day) {
   const repo = getRepo(); const pid = currentProject().id; const ctx = state.ctx;
-  const picker = pointsPicker({ typesOf: () => null });
+  // только точки, которым ещё есть что делать
+  const anyOpen = (pt) => [...ctx.catalog.values()].some((w) => w.active !== false && w.workType !== 'Время' && workApplicable(pt, ctx, w, infoOf));
+  const picker = pointsPicker({ fits: (pt) => anyOpen(pt) });
   let selected = new Set();
   let box = null; let lastKey = '';
   const applicable = (ptIds) => {
     const pts = ptIds.map((id) => ctx.points.get(id)).filter(Boolean);
     if (!pts.length) return [];
-    const legacyOk = (w, pt) => w.forTypes.includes(pt.typeId)
-      && (w.workType !== 'Хивут' || w.id === 'HIV_DEV' || !infoOf(pt).hived)
-      && (w.workType !== 'Установка' || !infoOf(pt).installedIds.includes(w.id))
-      && (w.workType !== 'Шилют' || !infoOf(pt).shilut);
-    // точка из устройств: работа есть в её задачах и ещё не сделана (перетяжка/перенос — всегда)
-    const composedOk = (w, pt) => workFits(pt, ctx, w)
-      && (['Перетяжка', 'Перенос'].includes(w.workType) || (openTasksFor(pt, ctx, w) || []).length > 0);
-    return [...ctx.catalog.values()].filter((w) => w.active !== false && w.workType !== 'Время'
-      && pts.some((pt) => (compositionOf(pt, ctx) ? composedOk(w, pt) : (w.forTypes || []).length && legacyOk(w, pt))));
+    return [...ctx.catalog.values()].filter((w) => w.active !== false && w.workType !== 'Время' && pts.some((pt) => workApplicable(pt, ctx, w, infoOf)));
   };
   const works = {
     el: (box = h('div', { class: 'picklist' }, h('div', { class: 'mut' }, 'Сначала выберите точки'))),
@@ -453,7 +466,7 @@ function batchForm(day) {
         // протяжка: отдельная запись на каждый вид кабеля, только непротянутое; остальные работы — только где не сделано
         const groups = w.workType === 'Протяжка'
           ? pullGroups(pts, ctx, null, (pt) => infoOf(pt).cable).groups
-          : [[undefined, pts.filter((pt) => { const o = openTasksFor(pt, ctx, w); return o === null || o.length > 0 || ['Перетяжка', 'Перенос'].includes(w.workType); }).map((pt) => pt.id)]];
+          : [[undefined, pts.filter((pt) => workApplicable(pt, ctx, w, infoOf)).map((pt) => pt.id)]];
         groups.forEach(([cableId, ids]) => {
           if (!ids.length) return;
           const id = newId();

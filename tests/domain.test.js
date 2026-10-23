@@ -790,3 +790,25 @@ test('общий пул: изменения части видны и прини�
   assert.ok(ch.includes('Работа «Хивут в шкафу» — Единица: шт → мин'));
   assert.deepEqual(changedParts(type, pool).map((p) => p.item.id).sort(), ['W_B', 'W_S', 'Телефон']);
 });
+
+test('workApplicable: точке предлагаются только подходящие и ещё не сделанные работы', async () => {
+  const { buildContext, workApplicable } = await import('../src/domain/index.js');
+  const W = (id, workType, forTypes) => ({ id, name: id, workType, forTypes, active: true });
+  const data = {
+    catalog: [W('PULL', 'Протяжка', ['Камера', 'Дверь']), W('HIV', 'Хивут', ['Камера']), W('INS_CAM', 'Установка', ['Камера']), W('INS_DOOR', 'Установка', ['Дверь']), W('CHK', 'Проверка', ['Камера']), W('RE', 'Перетяжка', ['Камера']), W('EXTRA', 'Доп. работа', ['Камера'])],
+    cables: [{ id: 'cat6', workIds: ['PULL'] }],
+    devices: [{ id: 'DV', name: 'Камера', cables: [{ cable: 'cat6', count: 1 }], workIds: ['HIV', 'INS_CAM', 'CHK'] }],
+    types: [{ id: 'Камера', devices: [{ deviceId: 'DV', count: 1 }], cables: [], workIds: [] }],
+    points: [{ id: 'p', label: 'P1', typeId: 'Камера' }], days: [{ id: 'd', date: '2026-10-20' }],
+    entries: [{ id: 'e1', dayId: 'd', workType: 'Протяжка', workId: 'PULL', pointIds: ['p'] }, { id: 'e2', dayId: 'd', workType: 'Проверка', workId: 'CHK', pointIds: ['p'], result: 'Не работает' }],
+    journal: [{ id: 'j1', entryId: 'e1', pointId: 'p' }, { id: 'j2', entryId: 'e2', pointId: 'p' }],
+  };
+  const ctx = buildContext(data); const p = ctx.points.get('p'); const ok = (id) => workApplicable(p, ctx, ctx.catalog.get(id));
+  assert.equal(ok('PULL'), false, 'протянутая — протяжка не нужна');
+  assert.equal(ok('HIV'), true); assert.equal(ok('INS_CAM'), true);
+  assert.equal(ok('INS_DOOR'), false, 'работа другого типа точек');
+  assert.equal(ok('CHK'), true, 'неработающую точку можно проверить повторно');
+  assert.equal(ok('RE'), true, 'перетяжка — всегда'); assert.equal(ok('EXTRA'), true, 'свободная работа без задач');
+  data.entries[1].result = 'Работает'; const ctx2 = buildContext(data);
+  assert.equal(workApplicable(ctx2.points.get('p'), ctx2, ctx2.catalog.get('CHK')), false, 'проверена — снова не нужна');
+});

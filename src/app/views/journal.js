@@ -1,7 +1,7 @@
 // Вкладка «Журнал»: строки точка × работа (из них считаются статусы) и «Правка» без записи в дох.
 import { h, formModal, toast } from '../ui.js';
-import { state, getRepo, currentProject } from '../store.js';
-import { dateText } from '../../domain/index.js';
+import { state, getRepo, currentProject, infoOf } from '../store.js';
+import { dateText, workApplicable } from '../../domain/index.js';
 import { hint } from './guide.js';
 import { memberName } from './members.js';
 import { pointsPicker, todayIso } from './doh.js';
@@ -27,19 +27,23 @@ function rows() {
 
 function editForm() {
   const repo = getRepo(); const pid = currentProject().id; const ctx = state.ctx;
-  const picker = pointsPicker({ typesOf: () => null });
+  // добавлять отметки — точкам, которым ещё есть что делать; убирать — только там, где отметки есть
+  const anyOpen = (pt) => [...ctx.catalog.values()].some((w) => w.active !== false && workApplicable(pt, ctx, w, infoOf));
+  const picker = pointsPicker({ fits: (pt, v) => (v.remove ? (ctx.journalByPoint.get(pt.id) || []).length > 0 : anyOpen(pt)) });
   let selected = new Set(); let box = null; let lastKey = '';
   const works = {
     el: (box = h('div', { class: 'picklist' }, h('div', { class: 'mut' }, 'Сначала выберите точки'))),
     get: () => [...selected],
     update: (v) => {
-      const types = new Set((v.pointIds || []).map((id) => ctx.points.get(id)?.typeId));
-      const list = [...ctx.catalog.values()].filter((w) => w.active !== false && (w.forTypes || []).some((t) => types.has(t)));
-      const key = list.map((w) => w.id).join(',');
+      const pts = (v.pointIds || []).map((id) => ctx.points.get(id)).filter(Boolean);
+      // добавление — работы, которые ждёт хотя бы одна из точек; удаление — работы, по которым у этих точек есть отметки
+      const marked = new Set(pts.flatMap((pt) => (ctx.journalByPoint.get(pt.id) || []).map((r) => r.workId)));
+      const list = [...ctx.catalog.values()].filter((w) => (v.remove ? marked.has(w.id) : (w.active !== false && pts.some((pt) => workApplicable(pt, ctx, w, infoOf)))));
+      const key = `${v.remove ? 'r' : 'a'}:${list.map((w) => w.id).join(',')}`;
       if (key === lastKey) return; lastKey = key;
       selected = new Set([...selected].filter((id) => list.some((w) => w.id === id)));
       box.replaceChildren();
-      if (!list.length) { box.append(h('div', { class: 'mut' }, 'Сначала выберите точки')); return; }
+      if (!list.length) { box.append(h('div', { class: 'mut' }, pts.length ? (v.remove ? 'У этих точек нет отметок' : 'Для этих точек нет работ, которых они ждут') : 'Сначала выберите точки')); return; }
       list.forEach((w) => {
         const cb = h('input', { type: 'checkbox', checked: selected.has(w.id), onchange: () => { cb.checked ? selected.add(w.id) : selected.delete(w.id); } });
         box.append(h('label', { class: 'pickrow' }, cb, h('span', {}, w.name), h('small', {}, w.workType)));
