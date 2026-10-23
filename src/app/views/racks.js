@@ -53,6 +53,9 @@ function savePanels(list) {  // [[pointId, panel[]]]
 }
 
 // ---------- список шкафов ----------
+/** Открыть план шкафа сразу на нужном шкафу (из карточки точки) */
+export function showCabinet(cab) { openCab = cab || ''; moving = null; blockMode = false; pickSel = null; }
+
 export function racksView(ui) {
   if (openCab !== null) return rackEditor(ui, openCab);
   const p = currentProject();

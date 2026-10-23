@@ -9,9 +9,9 @@ import { h, openModal, toast, confirmDialog, setShortcutsProvider } from './ui.j
 import { currentShortcuts } from './views/latinfix.js';
 setShortcutsProvider(() => currentShortcuts());
 setSnapProvider((id, data) => entryLine({ ...(state.ctx?.entries.get(id) || {}), ...data, id }, state.ctx, 'ru'));
-import { state, subscribe, currentProject, ready, getRepo, setCurrentProject, pendingCount } from './store.js';
+import { nav, state, subscribe, currentProject, ready, getRepo, setCurrentProject, pendingCount } from './store.js';
 import { projectsView, projectForm } from './views/projects.js';
-import { settingsView, refView, REFS } from './views/settings.js';
+import { settingsView, refView, REFS, auditModal, refreshApp } from './views/settings.js';
 import { membersView } from './views/members.js';
 import { PENDING } from './google.js';
 import { onPendingChange, onReadChange, readStatus, readsResetAt, setSnapProvider, rejectedList, onRejectedChange, dropRejected, onWriteWarn, DAILY_WRITE_LIMIT } from './repo.js';
@@ -32,7 +32,9 @@ import { importView } from './views/import.js';
 import { historyView } from './views/history.js';
 import { monthView } from './views/month.js';
 import { tablesView } from './views/tables.js';
-import { guideView, maybeWelcome } from './views/guide.js';
+import { guideView, guideTitle, openGuide, maybeWelcome } from './views/guide.js';
+import { exportExcel } from './excel.js';
+import { mainTable } from '../domain/index.js';
 
 const TABS = [
   ['project', 'Проект', '🏗'], ['meter', 'Точки', '📏'], ['todos', 'Дела', '✅'], ['journal', 'Журнал', '📒'], ['doh', 'Дохот', '📝'], ['settings', 'Настройки', '⚙️'],
@@ -42,21 +44,38 @@ const SCREEN_TITLES = { projects: 'Все проекты', month: 'Месяц', 
 export function createShell({ user, onLogout, diag }) {
   const root = document.getElementById('app');
   const ui = { tab: 'project', screen: null, go, open, back: () => { ui.screen = null; render(); }, render };
+  nav.ui = ui;
   function go(tab) { ui.tab = tab; ui.screen = null; render(); window.scrollTo(0, 0); }
   function open(screen) { ui.screen = screen; render(); window.scrollTo(0, 0); }
 
   function menu() {
     const p = currentProject();
     const item = (label, fn) => h('button', { class: 'menu-item', onclick: () => { close(); fn(); } }, label);
+    const head = (t) => h('div', { class: 'group', style: { position: 'static', paddingLeft: '4px' } }, t);
     const close = openModal('Меню', h('div', {},
+      head('Проект'),
       item('📁 Все проекты', () => open('projects')),
+      p ? item('✏️ Данные проекта', () => projectForm(p, ui)) : null,
+      p ? item('👥 Участники', () => open('members')) : null,
       item('➕ Новый проект', () => projectWizard(ui)),
-      item('📅 Месяц (отчёт начальнику)', () => open('month')),
-      item('🕘 История и откат', () => open('history')),
-      item('📖 Как пользоваться', () => open('guide')),
-      item(`🎨 Тема: ${themeLabel()} → ${themeLabel(nextTheme())}`, () => { setTheme(nextTheme()); render(); }),
-      item('⚙️ Настройки', () => go('settings')),
       item('🧾 Журнал событий', () => open('log')),
+      p ? item('🕘 История и откат', () => open('history')) : null,
+      p ? item('📅 Месяц (отчёт начальнику)', () => open('month')) : null,
+      head('Руководства'),
+      item('📖 Как пользоваться', () => openGuide(ui)),
+      item('📚 Инструкции', () => openGuide(ui, null, 'manuals')),
+      item('🔤 Словарик', () => openGuide(ui, null, 'dict')),
+      head('Настройки'),
+      item(`🎨 Тема: ${themeLabel()} → ${themeLabel(nextTheme())}`, () => { setTheme(nextTheme()); render(); }),
+      item(`🔄 Обновить приложение (сборка ${typeof __BUILD__ !== 'undefined' ? __BUILD__ : 'dev'})`, refreshApp),
+      p ? head('Данные') : null,
+      p ? item('🔄 Обновить таблицу для руководства', updateManagerTable) : null,
+      p && mainTable(p).link ? item('📊 Открыть таблицу руководства', () => window.open(mainTable(p).link, '_blank')) : null,
+      p ? item(p.backupAt ? `💾 Резервная копия на Диск (последняя: ${new Date(p.backupAt).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })})` : '💾 Резервная копия на Диск', backupNow) : null,
+      p ? item('📁 Разложить файлы на Диске по папкам', organizeDrive) : null,
+      p ? item('📊 Выгрузить всё в Excel', exportExcel) : null,
+      p ? item('🩺 Проверка справочников', auditModal) : null,
+      p ? item('📥 Импорт данных (замена всего проекта)', () => open('import')) : null,
       h('div', { class: 'mut', style: { padding: '10px 4px' } }, user.displayName || user.email),
       item('🚪 Выйти', onLogout)));
   }
@@ -174,7 +193,7 @@ export function createShell({ user, onLogout, diag }) {
 
   function render() {
     const p = currentProject();
-    const title = ui.screen === 'ref' ? REFS[state.settingsRef]?.title : ui.screen ? SCREEN_TITLES[ui.screen] : (p?.name || 'Полевой журнал');
+    const title = ui.screen === 'ref' ? REFS[state.settingsRef]?.title : ui.screen === 'guide' ? guideTitle() : ui.screen ? SCREEN_TITLES[ui.screen] : (p?.name || 'Полевой журнал');
     root.replaceChildren(
       h('div', { class: 'topbar' },
         ui.screen ? h('button', { class: 'sec', onclick: () => ui.back() }, '←') : h('button', { class: 'sec', onclick: menu }, '☰'),

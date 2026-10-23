@@ -300,17 +300,21 @@ function dictCard() {
     h('div', { style: { marginTop: '6px' } }, list));
 }
 
-export function openGuide(ui, id) {
+// какая часть руководства открыта: шаги (по умолчанию), 'manuals' — инструкции, 'dict' — словарик
+let guidePart = null;
+export const guideTitle = () => (guidePart === 'manuals' ? 'Инструкции' : guidePart === 'dict' ? 'Словарик' : 'Как пользоваться');
+export function openGuide(ui, id, part = null) {
+  guidePart = part;
   if (id) { open.add(id); focusId = id; }
   ui.open('guide');
 }
 
 export function guideView(ui) {
+  if (guidePart === 'manuals') return h('div', {}, manualsCard());
+  if (guidePart === 'dict') return h('div', {}, dictCard());
   const wrap = h('div', {},
     h('div', { class: 'mut', style: { margin: '0 2px 10px' } }, 'Коротко о том, как работать в приложении. Нажмите «Подробнее», чтобы увидеть детали.'),
-    ...SECTIONS.map((s) => sectionCard(s, ui)),
-    manualsCard(),
-    dictCard());
+    ...SECTIONS.map((s) => sectionCard(s, ui)));
   if (focusId) {
     const id = focusId; focusId = null;
     setTimeout(() => { document.getElementById(`guide-${id}`)?.scrollIntoView({ block: 'start' }); }, 30);

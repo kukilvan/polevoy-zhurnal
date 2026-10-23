@@ -277,42 +277,26 @@ export function refView() {
     h('div', { class: 'card', style: { padding: 0, marginTop: '12px' } }, rows.length ? rows : h('div', { class: 'empty' }, 'Список пуст.')));
 }
 
+// Обновить приложение: сбросить сервис-воркер и кэш (кроме mupdf) и перезагрузить
+export async function refreshApp() {
+  toast('Обновляю…');
+  try { const regs = await navigator.serviceWorker?.getRegistrations?.() || []; await Promise.all(regs.map((r) => r.update().catch(() => {}))); await Promise.all(regs.map((r) => r.unregister())); } catch { /* ok */ }
+  try { const keys = await caches.keys(); await Promise.all(keys.filter((k) => !/mupdf/.test(k)).map((k) => caches.delete(k))); } catch { /* ok */ }
+  location.reload();
+}
+
 export function settingsView(ui) {
   const p = currentProject();
   const row = (icon, title, sub, fn) => h('div', { class: 'item', onclick: fn }, h('div', { class: 'name' }, `${icon} ${title}`, sub ? h('div', { class: 'sub' }, sub) : null));
   const ref = (k) => row('📋', REFS[k].title, `${REFS[k].items().length} пунктов`, () => { state.settingsRef = k; ui.open('ref'); });
   return h('div', {},
     h('div', { class: 'card', style: { padding: 0 } },
-      row('📖', 'Как пользоваться', 'Шаги работы, что такое дох, инструкции, словарик', () => ui.open('guide')),
-      row('🔄', 'Обновить приложение', `Версия (сборка): ${typeof __BUILD__ !== 'undefined' ? __BUILD__ : 'dev'} UTC. Нажмите, если новые функции не появились`, async () => {
-        toast('Обновляю…');
-        try { const regs = await navigator.serviceWorker?.getRegistrations?.() || []; await Promise.all(regs.map((r) => r.update().catch(() => {}))); await Promise.all(regs.map((r) => r.unregister())); } catch { /* ok */ }
-        try { const keys = await caches.keys(); await Promise.all(keys.filter((k) => !/mupdf/.test(k)).map((k) => caches.delete(k))); } catch { /* ok */ }
-        location.reload();
-      }),
-      row('🎨', `Тема: ${themeLabel()}`, 'Нажмите, чтобы переключить: тёмная → светлая → как в телефоне (только на этом устройстве)', () => { setTheme(nextTheme()); ui.render(); })),
-    h('div', { class: 'card', style: { padding: 0 } },
       h('div', { class: 'group', style: { padding: '10px 14px 4px' } }, 'Выпадающие списки (справочники)'),
       ['types', 'devices', 'cables', 'catalog', 'configs', 'units', 'culprits', 'delayReasons'].map(ref),
-      row('🧩', 'Каталог подписей (разбор чертежей)', `Моих правил: ${(getRepo().prefs?.tohnitLearned?.labels || []).length + (getRepo().prefs?.tohnitLearned?.skip || []).length} · общий для всех проектов`, catalogModal),
-      row('🩺', 'Проверка справочников', 'Ссылки на удалённое, неиспользуемые устройства и работы', auditModal)),
+      row('⌨', 'Быстрый ввод латиницей', 'Слова вроде «тв», «кам» сами становятся TV, CAM при вводе названий', () => import('./latinfix.js').then((m) => m.shortcutsModal()))),
     h('div', { class: 'card', style: { padding: 0 } },
       h('div', { class: 'group', style: { padding: '10px 14px 4px' } }, `Проект «${p.name}»`),
       row('👔', 'Для руководства', `Папка со ссылкой · таблиц: ${tablesOf(p).length} · основная: ${mainTable(p).name}`, () => ui.open('tables')),
       row('🗄', 'Шкафы и шильют', `План шкафа: точки cat7 по панелям и портам${Object.keys(p.racks || {}).length ? ` · планов: ${Object.keys(p.racks).length}` : ''}`, () => ui.open('racks')),
-      row('📊', 'Таблицы', `Google Таблицы проекта «${p.name}»${(p.sheetLinks || []).length ? ` · добавлено: ${p.sheetLinks.length}` : ''}`, () => ui.open('sheets')),
-      row('👥', 'Участники', `${(p.memberEmails || []).length} в проекте`, () => ui.open('members')),
-      row('✏️', 'Данные проекта', 'Название, помощник, иврит, примечание', () => projectForm(p, ui)),
-      row('📁', 'Все проекты', null, () => ui.open('projects'))),
-    h('div', { class: 'card', style: { padding: 0 } },
-      h('div', { class: 'group', style: { padding: '10px 14px 4px' } }, 'Данные'),
-      row('🔄', 'Обновить таблицу для руководства', mainTable(p).syncedAt ? `Основная обновлена: ${new Date(mainTable(p).syncedAt).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}` : null, updateManagerTable),
-      mainTable(p).link ? row('📊', 'Открыть таблицу руководства', null, () => window.open(mainTable(p).link, '_blank')) : null,
-      row('💾', 'Резервная копия на Диск', p.backupAt ? `Последняя: ${new Date(p.backupAt).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })}` : null, backupNow),
-      row('📁', 'Разложить файлы на Диске по папкам', 'Полевой журнал → папка проекта → Чертежи, Резервные копии; таблицы — в папке проекта', organizeDrive),
-      row('📊', 'Выгрузить всё в Excel', 'Файл .xlsx: точки, журнал, дни, справочники', exportExcel),
-      row('⌨', 'Быстрый ввод латиницей', 'Слова вроде «тв», «кам» сами становятся TV, CAM при вводе названий', () => import('./latinfix.js').then((m) => m.shortcutsModal())),
-      row('📥', 'Импорт данных (замена всего проекта)', null, () => ui.open('import')),
-      row('🕘', 'История и откат', null, () => ui.open('history')),
-      row('🧾', 'Журнал событий', null, () => ui.open('log'))));
+      row('📊', 'Таблицы', `Google Таблицы проекта «${p.name}»${(p.sheetLinks || []).length ? ` · добавлено: ${p.sheetLinks.length}` : ''}`, () => ui.open('sheets'))));
 }

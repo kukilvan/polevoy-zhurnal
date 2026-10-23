@@ -565,6 +565,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
     const sel = list.length > 1 ? h('select', { onchange: (e) => show(list.find((x) => x.id === e.target.value)) }, list.map((x) => h('option', { value: x.id, selected: x.id === d?.id }, `${drawingTitle(x)}${x.floor ? ` (этаж ${x.floor})` : ''}`))) : null;
     box.replaceChildren(
       h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap' } }, sel, h('button', { class: list.length ? 'sec' : '', onclick: addPdf }, '➕ Чертёж (PDF)'),
+        h('button', { class: 'sec', onclick: () => import('./tohnitview.js').then((m) => m.drawingsHub()) }, '📐 Из чертежа'),
         list.length ? h('button', { class: 'sec', onclick: () => namesModal() }, '✏️ Названия и порядок') : null),
       list.length ? body : h('div', { class: 'empty', style: { marginTop: '10px' } }, 'Чертежей пока нет. Добавьте PDF тохнита — точки с местом на чертеже (после разбора «📐 Из чертежа» или из файла) появятся на нём. Чертёж хранится на вашем Google Диске и открыт участникам проекта.'));
     if (d) show(d);

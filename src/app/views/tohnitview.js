@@ -243,7 +243,8 @@ export function drawingsHub({ onNext = null, extra = [] } = {}) {
           h('div', { class: 'name', style: { flex: 1 } }, drawingTitle(d), h('div', { class: 'sub' }, `${d.floor ? `этаж ${d.floor} · ` : ''}${d.name}`)),
           h('span', { title: isScanned(d) ? 'Разобран' : 'Ещё не разобран', style: { fontSize: '22px', minWidth: '28px', textAlign: 'center', pointerEvents: 'none', color: '#30d158' } }, isScanned(d) ? '✅' : '◻️')))))
         : h('div', { class: 'empty' }, 'В проекте пока нет тохнитов'),
-      h('div', { class: 'btns' }, h('button', { class: ds.length ? 'sec' : '', onclick: other }, '➕ Другой тохнит (Google Диск / устройство)')),
+      h('div', { class: 'btns' }, h('button', { class: ds.length ? 'sec' : '', onclick: other }, '➕ Другой тохнит (Google Диск / устройство)'),
+        h('button', { class: 'sec', onclick: () => import('./catalogview.js').then((m) => m.catalogModal()) }, `🧩 Каталог подписей (моих правил: ${(getRepo().prefs?.tohnitLearned?.labels || []).length + (getRepo().prefs?.tohnitLearned?.skip || []).length})`)),
       onNext ? h('div', { class: 'btns' }, h('button', { onclick: () => { close(); onNext(); } }, 'Дальше')) : null].filter(Boolean));
   }
   close = openModal('📐 Точки из чертежа', box, { sticky: true, onClose: () => unsub() });

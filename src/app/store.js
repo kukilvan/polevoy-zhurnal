@@ -20,6 +20,7 @@ export const state = {
   ctx: null, online: navigator.onLine, pendingProjectId: null, invitations: [],
 };
 
+export const nav = { ui: null };   // навигация приложения (ставит оболочка) — для кнопок в окнах
 export const subscribe = (fn) => { listeners.add(fn); return () => listeners.delete(fn); };
 const emit = () => listeners.forEach((fn) => fn());
 const storeKey = () => `pz.currentProject.${repo?.user.uid}`;

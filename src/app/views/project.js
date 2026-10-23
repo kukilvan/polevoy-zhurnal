@@ -131,7 +131,7 @@ function summary(ui) {
     if (info.checked) r.checked += 1; if (info.status === 'Неисправна') r.bad += 1;
     rows.set(pt.typeId, r);
   });
-  if (!rows.size) return hint(ui, 'Точек пока нет. Сначала создайте все точки проекта по плану заказчика: кнопка «Добавить точки» ниже создаёт их пачкой (например, 1A-01 … 1A-24).', 'points', '📖 Как добавить точки');
+  if (!rows.size) return hint(ui, 'Точек пока нет. Сначала создайте все точки проекта по плану заказчика: вкладка «Точки» → «Точки пачкой» создаёт их (например, 1A-01 … 1A-24).', 'points', '📖 Как добавить точки');
   const sum = [...rows.values()].reduce((a, r) => ({ total: a.total + r.total, pulled: a.pulled + r.pulled, installed: a.installed + r.installed, checked: a.checked + r.checked, bad: a.bad + r.bad }), { total: 0, pulled: 0, installed: 0, checked: 0, bad: 0 });
   const line = (name, r, bold) => h('tr', {}, h('td', {}, bold ? h('b', {}, name) : name), ...['total', 'pulled', 'installed', 'checked'].map((k) => h('td', {}, bold ? h('b', {}, r[k]) : r[k])));
   return h('div', {},
@@ -169,8 +169,7 @@ function members(p, ui) {
   return h('div', { class: 'card' }, h('b', {}, 'Участники'),
     h('div', { style: { marginTop: '6px' } }, (p.memberEmails || []).map((e) =>
       h('div', { class: 'mut' }, `${memberLabel(p, e)}${e === me ? ' (вы)' : ''}`))),
-    invited.length ? h('div', { class: 'mut', style: { marginTop: '6px' } }, `Приглашены: ${invited.join(', ')}`) : null,
-    h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => ui.open('members') }, '👥 Управлять участниками')));
+    invited.length ? h('div', { class: 'mut', style: { marginTop: '6px' } }, `Приглашены: ${invited.join(', ')}`) : null);
 }
 
 export function projectView(ui) {
@@ -190,14 +189,11 @@ export function projectView(ui) {
       h('div', { class: 'mut', style: { marginTop: '6px' } }, (p.drawings || []).filter((d) => !d.deleted).length ? `Чертежей: ${(p.drawings || []).filter((d) => !d.deleted).map((d) => d.name).join(', ')}` : 'Чертежей пока нет — добавьте PDF тохнита, точки появятся на нём по статусу.'),
       h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => import('./planmodal.js').then((m) => m.planModal()) }, '🗺 Открыть план'))),
     h('div', { class: 'card' }, h('b', {}, 'Точки'), readiness(), h('div', { style: { marginTop: '8px' } }, summary(ui)),
-      h('div', { class: 'btns' },
-        h('button', { onclick: () => generatorForm() }, '➕ Добавить точки'),
-        h('button', { class: 'sec', onclick: () => pointForm(null) }, 'Новая точка'),
-        h('button', { class: 'sec', onclick: () => ui.go('meter') }, '📏 Точки'))),
+      h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => ui.open('racks') }, '🗄 Шкафы и шильют'))),
     h('div', { class: 'btns' },
       h('button', { class: 'wide', onclick: () => openToday(ui) }, '📝 Сегодня'),
       h('button', { class: 'wide', onclick: () => import('./pullview.js').then((m) => m.openPulls()) }, '🧵 Протяжки'),
-      h('button', { class: 'sec', onclick: () => ui.open('projects') }, 'Все проекты'),
+      h('button', { class: 'wide sec', onclick: () => import('./points.js').then((m) => m.remainingModal()) }, '🧾 Что осталось'),
       autoBackupLine(p),
       h('div', { class: 'mut', style: { width: '100%' } }, readsLine())));
 }

@@ -1,6 +1,6 @@
 // Точки: форма точки, генератор пачкой, карточка точки с историей, вкладка «Точки».
 import { h, formModal, openModal, confirmDialog, toast, qtyList, attachShortcuts } from '../ui.js';
-import { state, getRepo, pointsSorted, infoOf, currentProject } from '../store.js';
+import { nav, state, getRepo, pointsSorted, infoOf, currentProject } from '../store.js';
 import { generateLabels, generatedTotal, MAX_GENERATED, parseSuffixes, comparePoints, renameLabel, renameIssue, sameLabelClash, labelKey, inheritedFromCables, usesConfig, missingStages, hasDeviceId, normalizeMac, findDuplicate } from '../../domain/index.js';
 import { scanDevice } from '../scan.js';
 import { statusClass } from './project.js';
@@ -9,7 +9,7 @@ import { doorCfgOf, doorCfgShort, isDoorCfg } from '../../domain/index.js';
 import { dateText, cablesText, missingDetails, isComposedType, isSystemType, UNSORTED_TYPE, cableOverrideFor } from '../../domain/index.js';
 import { addWorkForPoint, addWorkForPoints } from './doh.js';
 import { whoIs } from './journal.js';
-import { drawingsHub, unsortedModal } from './tohnitview.js';
+import { unsortedModal } from './tohnitview.js';
 import { cablesField, cablesPicker } from './cablespick.js';
 import { doorField } from './doorcfgview.js';
 import { doorChips, doorShortChip } from './doorchips.js';
@@ -349,6 +349,7 @@ export function pointCard(startPoint, { fromPlan = false } = {}) {
         h('button', { onclick: () => { close(); setTimeout(() => addWorkForPoint(p.id), 60); } }, '➕ Добавить работу на эту точку')),
       h('div', { class: 'btns' },
         h('button', { class: 'sec', onclick: () => { close(); setTimeout(() => meterForm(p), 60); } }, '📏 Длина'),
+        p.cabinet && rackPortsOf(p, ctx) ? h('button', { class: 'sec', onclick: async () => { close(); const m = await import('./racks.js'); m.showCabinet(p.cabinet); nav.ui?.open('racks'); } }, '🗄 Шкаф') : null,
         h('button', { class: 'sec', onclick: () => { close(); setTimeout(() => pointForm(p), 60); } }, '✏️ Изменить'),
         !fromPlan && p.pos && drawingFor(p) ? h('button', { class: 'sec', onclick: () => { close(); setTimeout(() => planModal({ point: p }), 60); } }, '📍 На чертеже') : null,
         !fromPlan && !(p.pos && drawingFor(p)) && drawingsOf().length ? h('button', { class: 'sec', onclick: () => { close(); setTimeout(() => planModal({ placeFor: p }), 60); } }, '📍 Отметить на плане') : null,
@@ -391,7 +392,7 @@ function leftTasksOf(point) {
   }
   return [...out.values()];
 }
-function remainingModal() {
+export function remainingModal() {
   const ctx = state.ctx;
   let fWork = ''; let fCab = ''; let fType = ''; let fPull = ''; let fCfg = ''; const chosen = new Set();
   const all = pointsSorted().map((point) => ({ point, left: leftTasksOf(point), info: infoOf(point) })).filter((r) => r.left.length);
@@ -646,8 +647,8 @@ export function meterView(ui) {
     h('div', { class: 'btns', style: { marginTop: 0 } },
       h('button', { onclick: () => generatorForm() }, '➕ Точки пачкой'),
       h('button', { class: 'sec', onclick: () => pointForm(null) }, 'Новая точка'),
-      h('button', { class: 'sec', onclick: () => drawingsHub() }, '📐 Из чертежа'),
       h('button', { class: 'sec', onclick: () => planModal() }, '🗺 План'),
+      h('button', { class: 'sec', onclick: () => import('./pullview.js').then((m) => m.openPulls()) }, '🧵 Протяжки'),
       h('button', { class: 'wide sec', onclick: () => remainingModal() }, '🧾 Что осталось'),
       total.some((p) => p.typeId === UNSORTED_TYPE) ? h('button', { class: 'wide', onclick: () => unsortedModal(ui) }, `❓ Не разобрано: ${total.filter((p) => p.typeId === UNSORTED_TYPE).length} — разобрать`) : null),
     h('div', { style: { display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '10px 2px' } },

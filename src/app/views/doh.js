@@ -526,7 +526,8 @@ export function dohView(ui) {
   return h('div', {},
     h('div', { class: 'btns', style: { marginTop: 0 } },
       h('button', { onclick: () => openToday(ui) }, '📝 Сегодня'),
-      h('button', { class: 'sec', onclick: () => dayForm({ date: todayIso() }, ui) }, 'Другой день')),
+      h('button', { class: 'sec', onclick: () => dayForm({ date: todayIso() }, ui) }, 'Другой день'),
+      h('button', { class: 'sec', onclick: () => ui.open('month') }, '📅 Месяц')),
     days.length ? h('div', { class: 'card', style: { padding: 0, marginTop: '10px' } }, days.map((d) => {
       const n = dayEntries(d, ctx).length;
       return h('div', { class: 'item', onclick: () => { openDayId = d.id; ui.render(); } },
