@@ -1,9 +1,10 @@
 // «🔎 Значки без номеров»: план чертежа с увеличением; нажал на значок → нашлись такие же → убрать лишние (нажатием или рамкой),
 // добавить пропущенные вручную → тип, кабели, буквы номера → номера по областям (W01, W02…). Можно несколько видов значков подряд,
 // добавленный вид можно открыть снова (✏️) и поправить. В режиме правки чертежа группы — уже существующие точки (с id).
-import { h, openModal, toast } from '../ui.js';
+import { h, openModal, toast, confirmDialog } from '../ui.js';
 import { regionOrder, numberLabels } from '../../tohnit/icons.js';
 import { typePicker, cablesFor } from './tohnitview.js';
+import { state } from '../store.js';
 import { createViewer, mark } from './planview.js';
 
 const COLORS = ['#e0007a', '#0a84ff', '#ff9f0a', '#30d158', '#bf5af2', '#ff453a', '#64d2ff'];
@@ -60,8 +61,17 @@ export function iconsPicker({ wk, pages, floor = '', sheet = '', groups = [], on
   const cab = cablesFor(() => drawAll());
   const tp = typePicker({ onChange: (v) => { typeId = v; cab.set(v); } });
   const setType = (t) => { const sel = tp.querySelector('select'); if (![...sel.options].some((o) => o.value === t)) sel.append(h('option', { value: t }, t)); sel.value = t; typeId = t; cab.set(t); };
-  const prefIn = h('input', { type: 'text', placeholder: 'например W, C, 1D', style: { width: '110px' }, autocapitalize: 'characters', oninput: () => drawAll() });
-  const fromIn = h('input', { type: 'text', inputMode: 'numeric', value: '1', style: { width: '60px' }, oninput: () => drawAll() });
+  // следующий свободный номер для букв: после самого большого среди точек проекта и уже добавленных здесь групп
+  const nextFree = (prefix) => {
+    if (!prefix) return 1; const rx = new RegExp(`^${prefix.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(\\d+)(?:-(\\d+))?$`, 'i'); let max = 0;
+    const labels = [...(state.ctx?.points.values() || [])].map((p) => p.label).concat(done.flatMap((gr) => gr.points.map((p) => p.label)));
+    labels.forEach((l) => { const m = rx.exec(String(l)); if (m) max = Math.max(max, +(m[2] || m[1])); });
+    return max + 1;
+  };
+  let fromTouched = false;
+  const autoFrom = () => { if (!editing && !fromTouched) fromIn.value = String(nextFree(prefIn.value.trim())); };
+  const prefIn = h('input', { type: 'text', placeholder: 'например W, C, 1D', style: { width: '110px' }, autocapitalize: 'characters', oninput: () => { autoFrom(); drawAll(); } });
+  const fromIn = h('input', { type: 'text', inputMode: 'numeric', value: '1', style: { width: '60px' }, oninput: () => { fromTouched = true; drawAll(); } });
   const digIn = h('input', { type: 'text', inputMode: 'numeric', value: '2', style: { width: '50px' }, oninput: () => drawAll() });
   const addBtn = h('button', { disabled: true, onclick: () => addGroup() }, '✔ Добавить');
   const cancel = () => { if (editing) { done.splice(editing.index, 0, editing.group); editing = null; } found = null; off = new Set(); start = null; refresh(); };
@@ -104,14 +114,17 @@ export function iconsPicker({ wk, pages, floor = '', sheet = '', groups = [], on
     setType(gr.typeId); cab.p.setList(gr.points[0]?.cableOverride ?? null);
     setMode('off'); refresh();
   }
-  function addGroup() {
+  async function addGroup() {
     if (!typeId) { toast('Выберите тип точки'); return; }
     const o = ordered(); const labels = labelsNow(); const own = cab.own();
     const points = o.map((it, i) => ({ ...(it.id ? { id: it.id } : {}), label: labels[i], typeId, cabinet: '', floor, note: ICON_NOTE, pos: { page: it.page || 0, x: it.x, y: it.y, w: it.w, h: it.h }, cableOverride: own || null }));
     const clash = new Set(done.flatMap((gr) => gr.points.map((p) => p.label)));
     if (points.some((p) => clash.has(p.label))) { toast('Такие номера уже есть в другом виде значков — поменяйте буквы или «с номера»'); return; }
+    const ownIds = new Set(points.map((p) => p.id).filter(Boolean)); const exist = new Set([...(state.ctx?.points.values() || [])].filter((p) => !ownIds.has(p.id)).map((p) => p.label));
+    const dup = points.filter((p) => exist.has(p.label)).map((p) => p.label);
+    if (dup.length && !(await confirmDialog(`Такие номера уже есть среди точек проекта: ${dup.slice(0, 5).join(', ')}${dup.length > 5 ? '…' : ''} (${dup.length}). Если они в том же шкафу, эти значки не добавятся. Поменять «с номера»?`, { yes: 'Поменять номера', no: 'Всё равно добавить' }))) { /* оставляем как есть */ } else if (dup.length) return;
     done.splice(editing ? editing.index : done.length, 0, { what: found.what, typeId, points });
-    editing = null; found = null; off = new Set(); start = null; setMode('pick'); refresh();
+    editing = null; found = null; off = new Set(); start = null; fromTouched = false; setMode('pick'); refresh();
   }
 
   async function tap(x, y, page) {
@@ -138,7 +151,7 @@ export function iconsPicker({ wk, pages, floor = '', sheet = '', groups = [], on
       if (found && !editing) { // добавить к текущему виду (например, тот же тип другим значком)
         const add = r.items.filter((it) => !found.items.some((f) => Math.hypot(f.x - it.x, f.y - it.y) < 2)); found.items.push(...add);
       } else if (found && editing) { found.items.push(...r.items.filter((it) => !found.items.some((f) => Math.hypot(f.x - it.x, f.y - it.y) < 2))); }
-      else { found = r; off = new Set(); start = null; if (r.text && !prefIn.value) prefIn.value = /^[A-Za-z]{1,3}\d?$/.test(r.text) ? r.text : ''; }
+      else { found = r; off = new Set(); start = null; if (r.text && !prefIn.value) { prefIn.value = /^[A-Za-z]{1,3}\d?$/.test(r.text) ? r.text : ''; autoFrom(); } }
       let hid = 0; found.items.forEach((it, i) => { if (!off.has(i) && inKnown(it)) { off.add(i); hid++; } });  // рядом с уже найденными по подписям — сразу убраны
       refresh(); setMode('off');
       if (hid) toast(`Найдено: ${r.items.length}, из них ${hid} — у точек, уже найденных по подписям (убраны, вернуть можно «🚫»).`); else

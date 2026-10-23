@@ -233,7 +233,8 @@ export function createFirestoreBackend(db, uid) {
           const ref = w.coll === 'projects' ? doc(db, 'projects', w.id) : doc(db, 'projects', pid, w.coll, docKey(w.id));
           const data = { ...w.data, updatedAtServer: serverTimestamp() };
           // replace: словари в записи заменяются целиком (иначе merge оставляет удалённые ключи)
-          batch.set(ref, data, w.replace ? { mergeFields: Object.keys(data) } : { merge: true });
+          // точки — всегда целиком по полям (место на чертеже pos не склеивается со старым: иначе остаются прежние icon, text, w, h)
+          batch.set(ref, data, w.replace || w.coll === 'points' ? { mergeFields: Object.keys(data) } : { merge: true });
         });
         chunks.push(batch);
       }

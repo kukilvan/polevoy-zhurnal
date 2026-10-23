@@ -16,6 +16,10 @@ import { installView } from './views/install.js';
 import { PENDING } from './google.js';
 import { onPendingChange, onReadChange, readStatus, readsResetAt, setSnapProvider } from './repo.js';
 import { entryLine } from '../domain/index.js';
+import { makeWorker } from './views/tohnitview.js';
+import { assignOnPlan } from './views/planassign.js';
+// для проверок в браузере (как window.__pz)
+if (typeof window !== 'undefined') window.__pzPlanTools = { assignOnPlan, makeWorker };
 import { themeLabel, setTheme, nextTheme } from './theme.js';
 import { projectView, updateManagerTable, updateTable, backupNow, organizeDrive } from './views/project.js';
 import { meterView } from './views/points.js';

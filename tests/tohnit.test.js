@@ -195,3 +195,14 @@ test('сервер: копия тохнита для руководства — 
   assert.deepEqual(up, ['MGR']); assert.ok(r.mgrPatches.D1.hash);
   assert.equal(applyManagerPatches(project, r.mgrPatches).drawings.D1.name, 'קומה 0');
 });
+
+test('план: подпись без шкафа при одинаковом номере в двух шкафах — не привязывается сама, а идёт на распределение', async () => {
+  const { matchLabels } = await import('../src/tohnit/linking.js');
+  const P = (id, label, cabinet) => ({ id, label, cabinet });
+  const f = (label, cabinet, x) => ({ label, cabinet, pos: { page: 0, x, y: 1, w: 10, h: 5 } });
+  const r = matchLabels([P('a', 'C5', '1A'), P('b', 'C5', '2B'), P('c', 'C7', '1A')], [f('C5', '', 1), f('C5', '', 50), f('C7', '', 9)]);
+  assert.deepEqual(r.ambiguous.map((x) => `${x.f.label}:${x.cands.length}`), ['C5:2', 'C5:2']);
+  assert.deepEqual(r.exact.map((x) => x.p.id), ['c']);   // C7 есть только в одном шкафу — привязана сразу
+  const known = matchLabels([P('a', 'C5', '1A'), P('b', 'C5', '2B')], [f('C5', '2B', 1)]);   // шкаф на подписи известен — всё ясно
+  assert.deepEqual(known.exact.map((x) => x.p.id), ['b']); assert.equal(known.ambiguous.length, 0);
+});

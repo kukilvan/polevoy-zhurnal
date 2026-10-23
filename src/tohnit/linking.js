@@ -10,10 +10,12 @@ const cabOk = (p, f) => !(p.cabinet && f.cabinet && p.cabinet !== f.cabinet);
 /** Пары «точка проекта ↔ подпись на чертеже»: точные (сразу) и похожие (спросить). Чистая функция — для тестов. */
 export function matchLabels(points, found) {
   const byExact = new Map(); points.forEach((p) => { [p.label, p.planName].filter(Boolean).forEach((l) => { const k = exactKey(l); if (!byExact.has(k)) byExact.set(k, []); byExact.get(k).push(p); }); });
-  const used = new Set(); const exact = []; const rest = [];
+  const used = new Set(); const exact = []; const rest = []; const ambiguous = [];
   for (const f of found) {
     const cand = (byExact.get(exactKey(f.label)) || []).filter((p) => !used.has(p.id) && cabOk(p, f));
     if (!cand.length) { rest.push(f); continue; }
+    // подпись без шкафа, а точки с таким номером есть в разных шкафах — чья она, автоматически не решаем (человек распределит на плане)
+    if (!f.cabinet && new Set(cand.map((p) => p.cabinet || '')).size > 1) { ambiguous.push({ f, cands: cand }); continue; }
     const p = cand.find((x) => x.label === f.label && x.cabinet === f.cabinet) || cand.find((x) => x.label === f.label) || cand[0]; used.add(p.id); exact.push({ p, f });
   }
   // похожие: те же части (другие разделители) или одна — «хвост» другой (лишнее начало, например название шкафа); только если пара единственная
@@ -27,6 +29,6 @@ export function matchLabels(points, found) {
     if (cs.length === 1 && count.get(cs[0].id) === 1) similar.push({ p: cs[0], f, kind: [cs[0].label, cs[0].planName].filter(Boolean).some((l) => simKey(l, f.label) === 'same') ? 'same' : 'tail' });
     else unlinked.push(f);
   });
-  return { exact, similar, unlinked };
+  return { exact, similar, unlinked, ambiguous };
 }
 
