@@ -1,6 +1,7 @@
 name: Server backup
 
-# Каждые 2 дня в 08:30 UTC (сразу после суточного сброса лимита Firebase ~10:00 по Израилю) копия всех проектов уходит в закрытый репозиторий kukilvan/polevoy-backups.
+# Каждые 2 дня в 08:30 UTC (сразу после суточного сброса лимита Firebase ~10:00 по Израилю) копия всех проектов уходит в закрытый репозиторий kukilvan/polevoy-backups
+# и на Google Диск владельца (файл «Автокопия данных (обновляется каждые 2 дня).zip» в папке «Полевой журнал»).
 on:
   schedule:
     - cron: '30 8 */2 * *'
@@ -21,7 +22,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm i --no-save firebase-admin@13
+      - run: npm i --no-save firebase-admin@13 google-auth-library@9
       - uses: actions/checkout@v4
         with:
           repository: kukilvan/polevoy-backups
@@ -43,7 +44,12 @@ jobs:
         run: node scripts/server-cleanup.mjs
         env:
           FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+      - name: Копия на Google Диск (вне GitHub)
+        run: node scripts/server-drive-backup.mjs backups
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
       - name: Продлить расписание
+        if: always()
         run: gh api -X PUT "repos/${{ github.repository }}/actions/workflows/server-backup.yml/enable"
         env:
           GH_TOKEN: ${{ github.token }}
