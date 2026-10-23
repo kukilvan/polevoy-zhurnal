@@ -10,7 +10,20 @@ import { cablesPicker } from './cablespick.js';
 const FORMAT = 'polevoy-tohnit-catalog-1';
 let cache = null;  // своё сохранённое — сразу (без сети запись дойдёт позже)
 const mine = () => { const m = cache || getRepo().prefs?.tohnitLearned || {}; return { labels: [...(m.labels || [])], skip: [...(m.skip || [])], symbols: [...(m.symbols || [])] }; };
-const saveMine = async (m) => { cache = m; getRepo().saveUserPrefs({ tohnitLearned: { labels: m.labels, skip: m.skip, symbols: m.symbols } }).catch(() => toast('Не удалось сохранить каталог')); };
+// с другого телефона могли добавить правила, пока окно было открыто: чужие новые (которых не было при открытии) добавляем к сохраняемому
+const sig = (m) => JSON.stringify([m.labels, m.skip, m.symbols]);
+let baseSig = null; let baseKeys = new Set();
+const keyOf = (kind, e) => `${kind}|${e.re || e.symbol || JSON.stringify(e)}|${e.project || ''}`;
+const allKeys = (m) => new Set(['labels', 'skip', 'symbols'].flatMap((k) => (m[k] || []).map((e) => keyOf(k, e))));
+const saveMine = async (m0) => {
+  const remote = getRepo().prefs?.tohnitLearned;
+  let m = m0;
+  if (remote && baseSig !== null && sig({ labels: remote.labels || [], skip: remote.skip || [], symbols: remote.symbols || [] }) !== baseSig) {
+    const have = allKeys(m); m = { labels: [...m.labels], skip: [...m.skip], symbols: [...m.symbols] };
+    for (const k of ['labels', 'skip', 'symbols']) for (const e of (remote[k] || [])) { const key = keyOf(k, e); if (!baseKeys.has(key) && !have.has(key)) m[k].push(e); }
+  }
+  baseSig = sig(m); allKeys(m).forEach((k) => baseKeys.add(k));  // уже виденные ключи не забываем (удалённые не воскресают)
+  cache = m; getRepo().saveUserPrefs({ tohnitLearned: { labels: m.labels, skip: m.skip, symbols: m.symbols } }).catch(() => toast('Не удалось сохранить каталог')); };
 const validRe = (re) => { try { new RegExp(re); return true; } catch { return false; } };
 const same = (a) => (b) => b.re === a.re && (b.project || '') === (a.project || '');
 // правило по-человечески: по частям (если настроено по примерам), иначе — из шаблона
@@ -18,7 +31,7 @@ const ruleText = (e) => { if (e.parts && e.samples) { const sg = segment(e.sampl
 const what = (kind, e) => (kind === 'skip' ? '🚫 не точки' : `→ ${e.type}`);
 
 export function catalogModal() {
-  const box = h('div', {}); cache = null;
+  const box = h('div', {}); cache = null; { const m0 = mine(); baseSig = sig(m0); baseKeys = allKeys(m0); }
   const close = openModal('🧩 Каталог подписей', box, { sticky: true, onClose: () => { cache = null; } });
   void close;
 

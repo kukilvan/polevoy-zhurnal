@@ -71,12 +71,15 @@ export function applyDoorRules(ctx, sel, changedId, count) {
   out.set(changedId, count);
   const dev = devOf(changedId); const part = doorPartOf(dev); const role = doorRole(dev);
   const total = (k) => [...out].filter(([id]) => doorPartOf(devOf(id)) === k).reduce((n, [, c]) => n + c, 0);
+  const wasLock = part === 'lock' && (sel.get(changedId) || 0) > 0;   // замок уже стоял — недостающее заново не добавляем
   if (part === 'lock' && count > 0) {
     [...out.keys()].forEach((id) => { if (id !== changedId && doorPartOf(devOf(id)) === 'lock') out.set(id, 0); });
+    if (wasLock) { /* только смена количества */ } else {
     if (!total('sensor')) { const d = byRole('magnit'); if (d) out.set(d.id, 1); }   // магнит индикация — по умолчанию 1
     if (role === 'em') {
       ['ptiha', 'niputz'].forEach((r) => { const d = byRole(r); if (d && !out.get(d.id)) out.set(d.id, 1); });
       if (!total('reader')) { const d = byRole('kore'); if (d) out.set(d.id, 1); }
+    }
     }
   }
   if (part === 'reader' && total('reader') >= 2) { const d = byRole('ptiha'); if (d && out.get(d.id)) out.set(d.id, 0); }
@@ -86,14 +89,14 @@ export function applyDoorRules(ctx, sel, changedId, count) {
 
 /** Кабели двери по составу (подставляются сами, можно поменять): ЭМ — 6005×2, МХ — 6005×3; биометри и интерком — +cat7; цофар — +6005 */
 export function autoDoorCables(ctx, devices) {
-  let c6005 = 0; let cat7 = 0; let lock = '';
+  let c6005 = 0; let cat7 = 0; let lock = ''; let lockN = 0;
   clean(devices, 'deviceId').forEach(({ deviceId, count }) => {
     const r = doorRole(ctx.devices.get(deviceId));
-    if (r === 'em' || r === 'mh') lock = lock || r;
+    if (r === 'em' || r === 'mh') { lock = lock || r; lockN += count; }
     if (r === 'bio' || r === 'intercom') cat7 += count;
     if (r === 'tsofar') c6005 += count;
   });
-  c6005 += lock === 'mh' ? 3 : 2;
+  if (lock) c6005 += (lock === 'mh' ? 3 : 2) * Math.max(1, lockN); else c6005 += 2;
   return [{ cable: '6005', count: c6005 }, { cable: 'cat7', count: cat7 }].filter((x) => x.count > 0);
 }
 

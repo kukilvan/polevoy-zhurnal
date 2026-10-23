@@ -1,5 +1,5 @@
 // Вкладка «Настройки»: все справочники (выпадающие списки), привязка установки и служебные действия проекта в одном месте.
-import { POOL_KINDS, DOOR_PARTS, doorPartOf, DOOR_PART_NAMES, doorColorOf } from '../../domain/index.js';
+import { POOL_KINDS, usesOf, usesText, DOOR_PARTS, doorPartOf, DOOR_PART_NAMES, doorColorOf } from '../../domain/index.js';
 import { poolButton } from './poolview.js';
 import { allGroups } from '../typegroups.js';
 import { h, formModal, confirmDialog, toast, qtyList, openModal } from '../ui.js';
@@ -93,7 +93,7 @@ export const REFS = {
     defaults: { multiplier: 1, active: true },
     prepare: (v) => ({ name: v.name, nameHe: v.nameHe, workType: v.workType, unit: v.unit, multiplier: v.multiplier ?? 1, forTypes: v.forTypes || [],
       isDoorComponent: !!v.isDoorComponent && v.workType === 'Установка', active: v.active !== false }),
-    usage: (x) => [...ctx().entries.values()].filter((e) => e.workId === x.id).length,
+    usage: (x) => usesOf(ctx(), 'catalog', x.id).reduce((n, u) => n + u.n, 0), uses: (x) => usesOf(ctx(), 'catalog', x.id),
   },
   types: {
     title: 'Типы точек', coll: 'types', hint: 'Камера, дверь, вайфай… Тип — это одна строка в таблице руководства. Состав типа — устройства (с их кабелями и работами) плюс работы на всю точку.',
@@ -149,7 +149,7 @@ export const REFS = {
     ],
     defaults: {},
     prepare: (v) => ({ nameHe: v.nameHe, accounting: v.accounting, workIds: v.workIds || [] }),
-    usage: (x) => [...ctx().types.values()].filter((t) => t.defaultCable === x.id).length + [...ctx().devices.values()].filter((d) => (d.cables || []).some((c) => c.cable === x.id)).length,
+    usage: (x) => usesOf(ctx(), 'cables', x.id).reduce((n, u) => n + u.n, 0), uses: (x) => usesOf(ctx(), 'cables', x.id),
   },
   devices: {
     title: 'Устройства', coll: 'devices', hint: 'Составляющие точек: авизар и его кабели. Например: Магнит индикация = 6005×1 + установка магнита; Лахцан нипуц — без кабеля.',
@@ -169,8 +169,7 @@ export const REFS = {
     ],
     defaults: {},
     prepare: (v) => ({ name: v.name, nameHe: v.nameHe, cables: v.cables || [], workIds: v.workIds || [], doorPart: v.doorPart || null, short: String(v.short || '').trim() || null, color: v.color || null }),
-    usage: (x) => [...ctx().types.values()].filter((t) => (t.devices || []).some((d) => d.deviceId === x.id)).length
-      + [...ctx().points.values()].filter((p) => (p.devices || []).some((d) => d.deviceId === x.id)).length,
+    usage: (x) => usesOf(ctx(), 'devices', x.id).reduce((n, u) => n + u.n, 0), uses: (x) => usesOf(ctx(), 'devices', x.id),
   },
   configs: {
     title: 'Конфигурации дверей', coll: 'configs', hint: 'Наборы установки для двери: из каких работ она состоит. Дверь «установлена», когда сделаны все компоненты.',
@@ -210,7 +209,7 @@ export function itemForm(key, existing, { onSaved } = {}) {  // onSaved(id) — 
     fields, values: existing ? (def.toForm ? def.toForm(existing) : existing) : { ...def.defaults },
     extra: existing && !tgt ? [{ label: 'Удалить', kind: 'danger', onClick: async () => {
       const n = def.usage?.(existing) || 0;
-      const msg = n ? `«${existing.name || existing.id}» используется (${n}). Удалить из списка? Старые записи сохранятся, но выбрать пункт будет нельзя.` : `Удалить «${existing.name || existing.id}»?`;
+      const msg = n ? `«${existing.name || existing.id}» используется (${def.uses ? usesText(def.uses(existing)) : n}). Если удалить, там пропадут связанные работы/кабели/устройства. Удалить из списка? Старые записи сохранятся, но выбрать пункт будет нельзя.` : `Удалить «${existing.name || existing.id}»?`;
       if (!(await confirmDialog(msg, { yes: 'Удалить', danger: true }))) return false;
       repo.remove(pid, def.coll, existing.id); toast('Удалено (можно вернуть через «История и откат»)'); return true;
     } }] : [],

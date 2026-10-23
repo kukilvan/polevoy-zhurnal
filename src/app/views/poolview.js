@@ -3,7 +3,7 @@
 // Администратор пула (почта Ивана): правит и удаляет в пуле, разбирает «новое из проектов» — смотрит, правит перед добавлением, добавляет или «больше не показывать».
 import { h, openModal, toast, confirmDialog } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
-import { POOL_TITLES, POOL_KINDS, poolMaps, takeFromPoolOps, buildContext, isSystemType, candidateChanges, changedParts, poolHash } from '../../domain/index.js';
+import { POOL_TITLES, POOL_KINDS, poolMaps, takeFromPoolOps, buildContext, isSystemType, usesOf, candidateChanges, changedParts, poolHash } from '../../domain/index.js';
 import { bare } from '../../domain/typelib.js';
 import { pool, onPool, isPoolAdmin, inboxOf, inboxCount, poolSentReset, inbox } from '../pool.js';
 import { itemForm, setFormTarget } from './settings.js';
@@ -57,9 +57,7 @@ export function poolModal(kind) {
   const usage = (id) => {
     const c = state.ctx; const pts = [...c.points.values()];
     if (kind === 'types') return pts.filter((p) => p.typeId === id).length;
-    if (kind === 'devices') return [...c.types.values()].filter((t) => (t.devices || []).some((d) => d.deviceId === id)).length + pts.filter((p) => (p.devices || []).some((d) => d.deviceId === id)).length;
-    if (kind === 'cables') return [...c.devices.values()].filter((d) => (d.cables || []).some((x) => x.cable === id)).length + [...c.types.values()].filter((t) => (t.cables || []).some((x) => x.cable === id)).length;
-    return [...c.types.values(), ...c.devices.values(), ...c.cables.values()].filter((x) => (x.workIds || []).includes(id)).length + (state.data.entries || []).filter((e) => e.workId === id && !e.deleted).length;
+    return usesOf(c, kind, id).reduce((n, u) => n + u.n, 0);
   };
   const toggle = (id, on) => {
     const pid = currentProject().id;

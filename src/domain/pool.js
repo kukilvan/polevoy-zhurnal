@@ -131,3 +131,32 @@ export function coveredBy(cand, others) {
   return others.find((o) => o !== cand && o.owner?.uid === cand.owner?.uid && LEVEL[o.kind] > LEVEL[cand.kind]
     && (o.deps?.[cand.kind] || []).some((x) => x.id === cand.itemId && poolHash(x) === poolHash(cand.item))) || null;
 }
+
+/** Где используется элемент справочника проекта: [{ label, n }] (устройство, кабель, работа) */
+export function usesOf(ctx, coll, id) {
+  const out = [];
+  const add = (label, n) => { if (n) out.push({ label, n }); };
+  const names = (list, f) => list.filter(f).map((x) => x.id || x.label);
+  const types = [...ctx.types.values()]; const devs = [...ctx.devices.values()]; const cabs = [...ctx.cables.values()];
+  const pts = [...ctx.points.values()]; const cfgs = [...(ctx.configs?.values() || [])].filter((c) => !c.deleted);
+  const nm = (list) => list.map((x) => x.name || x.id);
+  if (coll === 'devices') {
+    add('Типы', names(types, (t) => (t.devices || []).some((d) => d.deviceId === id)).length);
+    add('Точки со своим составом', pts.filter((p) => (p.devices || []).some((d) => d.deviceId === id)).length);
+    add('Конфигурации дверей', cfgs.filter((c) => (c.devices || []).some((d) => d.deviceId === id)).length);
+  } else if (coll === 'cables') {
+    add('Типы', types.filter((t) => t.defaultCable === id || (t.cables || []).some((c) => c.cable === id)).length);
+    add('Устройства', devs.filter((d) => (d.cables || []).some((c) => c.cable === id)).length);
+    add('Точки со своими кабелями', pts.filter((p) => [p.cables, p.cableOverride].some((l) => (l || []).some((c) => c.cable === id)) || (p.devices || []).some((d) => (d.cables || []).some((c) => c.cable === id))).length);
+    add('Конфигурации дверей', cfgs.filter((c) => (c.cables || []).some((k) => k.cable === id)).length);
+  } else if (coll === 'catalog') {
+    const has = (x) => (x.workIds || []).includes(id) || (x.installWorkIds || []).includes(id);
+    add('Типы', types.filter(has).length); add('Устройства', devs.filter(has).length); add('Кабели', cabs.filter(has).length);
+    add('Точки со своими работами', pts.filter((p) => (p.devices || []).some((d) => (d.workIds || []).includes(id))).length);
+    add('Конфигурации дверей (старые)', cfgs.filter((c) => (c.components || []).includes(id)).length);
+    add('Записи в дохе', [...ctx.entries.values()].filter((e) => e.workId === id).length);
+  }
+  void nm;
+  return out;
+}
+export const usesText = (list) => list.map((u) => `${u.label}: ${u.n}`).join(', ');

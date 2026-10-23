@@ -88,3 +88,20 @@ test('протяжки: удалённая точка не мешает «Зав
   assert.deepEqual(m.meters.map((x) => `${x.id}:${x.v}`).sort(), ['b:3', 'c:7']);
   assert.deepEqual(m.finished, ['c']);
 });
+
+test('двери: правила замка, кабели по количеству, где используется', async () => {
+  const { applyDoorRules, autoDoorCables, usesOf } = await import('../src/domain/index.js');
+  const dev = (id, doorRole) => [id, { id, name: id, doorRole }];
+  const ctx = { devices: new Map([dev('em', 'em'), dev('pt', 'ptiha'), dev('nip', 'niputz'), dev('kore', 'kore'), dev('mg', 'magnit')]),
+    cables: new Map([['6005', { id: '6005', workIds: [] }]]), types: new Map(), points: new Map(), entries: new Map(), catalog: new Map(),
+    configs: new Map([['c1', { id: 'c1', devices: [{ deviceId: 'em', count: 1 }], cables: [{ cable: '6005', count: 2 }] }]]) };
+  const first = applyDoorRules(ctx, new Map(), 'em', 1);
+  assert.ok(first.get('pt') && first.get('kore'));
+  const trimmed = new Map(first); trimmed.delete('pt');
+  const again = applyDoorRules(ctx, trimmed, 'em', 2);
+  assert.equal(again.get('pt'), undefined);   // убранное заново не добавляется
+  assert.equal(autoDoorCables(ctx, [{ deviceId: 'em', count: 2 }])[0].count, 4);
+  assert.equal(autoDoorCables(ctx, [{ deviceId: 'em', count: 1 }])[0].count, 2);
+  assert.deepEqual(usesOf(ctx, 'devices', 'em'), [{ label: 'Конфигурации дверей', n: 1 }]);
+  assert.deepEqual(usesOf(ctx, 'cables', '6005'), [{ label: 'Конфигурации дверей', n: 1 }]);
+});

@@ -27,7 +27,7 @@ export function doorPicker({ current = null, title = '🚪 Конфигурац�
   let autoCab = !start || JSON.stringify(autoDoorCables(ctx, start.devices)) === JSON.stringify(start.cables);
   let q = '';
   const body = h('div', {}); let close = () => {};
-  const choose = (cfg) => { const id = useDoorCfg(cfg); close(); onPick?.(id); };
+  const choose = (cfg) => { const id = useDoorCfg(cfg); if (!id) return; close(); onPick?.(id); };
   const devList = () => [...sel].map(([deviceId, count]) => ({ deviceId, count }));
   const cur = () => makeDoorCfg(ctx, devList(), [...cables].map(([cable, count]) => ({ cable, count })));
   const recalc = () => { if (autoCab) cables = new Map(autoDoorCables(ctx, devList()).map((c) => [c.cable, c.count])); };
@@ -128,6 +128,7 @@ export function doorField(key, label, { bulk = false, visible, hint } = {}) {
 export function doorConfigsView() {
   const box = h('div', {});
   const delBtn = (c) => !c.standard ? h('button', { class: 'sec', style: { padding: '2px 10px' }, title: 'Удалить конфигурацию', onclick: async () => {
+            if (currentProject()?.defaultConfigId === c.id) { toast('Нельзя: она назначена по умолчанию для проекта. Смените её в настройках проекта.'); return; }
             if (usageOf(c.id)) { toast(`Нельзя: она стоит на дверях проекта (${usageOf(c.id)}). Сначала смените им конфигурацию.`); return; }
             if (!(await confirmDialog(`Удалить конфигурацию «${c.name}»? Она пропадёт из проекта и (у администратора) из общего пула.`, { yes: 'Удалить', danger: true }))) return;
             const r = deleteDoorCfg(c.id); toast(r.ok ? (r.stays ? 'Убрана из проекта. Из общего пула удаляет только администратор' : 'Удалена') : `Нельзя: ${r.reason}`);
