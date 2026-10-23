@@ -3,7 +3,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import admin from 'firebase-admin';
-import { isDeleted, readProject, readProjectDelta, previousBackups, writeProjectBackup, pruneOld, stamp } from './server-backup-lib.mjs';
+import { isDeleted, readProject, readProjectDelta, previousBackups, writeProjectBackup, pruneOld, stamp, readCommon, COMMON_FILE } from './server-backup-lib.mjs';
 
 const KEEP = 15;
 const root = process.argv[2];
@@ -37,6 +37,12 @@ try {
     // отметка в проекте, чтобы приложение показывало дату последней автокопии
     await ref.set({ serverBackupAt: now.toISOString() }, { merge: true });
   }
+  // общий пул, список разрешённых почт и личные настройки (словарик, выученное по тохнитам) — без них новую базу не восстановить
+  const common = await readCommon(db);
+  const commonCount = Object.values(common.collections).reduce((n, v) => n + v.length, 0) + common.prefs.length;
+  reads += commonCount;
+  fs.writeFileSync(path.join(dir, COMMON_FILE), JSON.stringify({ ...common, createdAt: now.toISOString() }));
+  console.log(`::notice::Общее: ${Object.entries(common.collections).map(([k, v]) => `${k} ${v.length}`).join(', ')}, настройки ${common.prefs.length}`);
   fs.writeFileSync(path.join(dir, 'ИТОГ.json'), JSON.stringify({ at: now.toISOString(), projects: done }, null, 2));
   const dropped = pruneOld(root, KEEP);
   console.log(`::notice::Скопировано проектов: ${done.length}. Прочитано документов из базы: ${reads}. Удалено старых копий: ${dropped.length}.`);

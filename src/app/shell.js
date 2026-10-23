@@ -76,7 +76,7 @@ export function createShell({ user, onLogout, diag }) {
       item('🔤 Словарик', () => openGuide(ui, null, 'dict'))]),
       section('Настройки', [
       item(`🎨 Тема: ${themeLabel()} → ${themeLabel(nextTheme())}`, () => { setTheme(nextTheme()); render(); }),
-      item(`🔄 Обновить приложение (сборка ${typeof __BUILD__ !== 'undefined' ? __BUILD__ : 'dev'})`, refreshApp)]),
+      item(`🔄 Обновить приложение (версия ${typeof __VERSION__ !== 'undefined' ? __VERSION__ : 'dev'}, сборка ${typeof __BUILD__ !== 'undefined' ? __BUILD__ : 'dev'})`, refreshApp)]),
       section('Данные', [
       item('🧾 Журнал событий', () => open('log')),
       p ? item('🔄 Обновить таблицу для руководства', updateManagerTable) : null,

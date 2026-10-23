@@ -21,7 +21,7 @@ function deviceId() {
 }
 const platform = (() => { const ua = navigator.userAgent; return /iPhone|iPad|iPod/.test(ua) ? 'iPhone' : /Windows/.test(ua) ? 'Windows' : /Android/.test(ua) ? 'Android' : /Mac/.test(ua) ? 'Mac' : 'Другое'; })();
 const DEVICE = `${platform}-${deviceId()}${standalone ? ' (на экране Домой)' : ''}`;
-info(`Запуск, сборка ${BUILD}`); info(`Устройство: ${DEVICE}`); info(`standalone=${standalone}, online=${navigator.onLine}${memoryMode ? ', ТЕСТОВЫЙ РЕЖИМ (память)' : ''}`);
+info(`Запуск, версия ${typeof __VERSION__ !== 'undefined' ? __VERSION__ : 'dev'}, сборка ${BUILD}`); info(`Устройство: ${DEVICE}`); info(`standalone=${standalone}, online=${navigator.onLine}${memoryMode ? ', ТЕСТОВЫЙ РЕЖИМ (память)' : ''}`);
 
 if ('serviceWorker' in navigator) navigator.serviceWorker.ready.then(() => info('Service worker активен')).catch(() => {});
 // Вышла новая версия, а приложение было открыто со старой: подгружаемые части (Протяжки, Точки, мастер…) прежних имён больше нет

@@ -41,3 +41,29 @@ test('удалённый проект распознаётся и в копию 
   assert.equal(isDeleted({ name: 'x' }), false);
   assert.equal(isDeleted(undefined), false);
 });
+
+test('восстановление: план записей из полной копии и общего файла, метки времени оживают', async () => {
+  const { restorePlan, revive, COMMON_FILE } = await import('../scripts/server-backup-lib.mjs');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'rest-'));
+  fs.writeFileSync(path.join(dir, 'X (полная).json'), JSON.stringify({ format: 'polevoy-full-1', project: { id: 'p1', name: 'X', updatedAtServer: { _seconds: 5, _nanoseconds: 0 } }, data: { points: [{ id: 'a', label: '1A-01' }], history: [{ id: 'h', at: 1 }] } }));
+  fs.writeFileSync(path.join(dir, 'X (импорт).json'), '{}');
+  fs.writeFileSync(path.join(dir, COMMON_FILE), JSON.stringify({ format: 'polevoy-common-1', collections: { pool_types: [{ id: 'Камера', nameHe: 'מצלמה' }], allowed: [{ id: 'a@x.com' }] }, prefs: [{ uid: 'u1', id: 'main', data: { dictWords: [] } }] }));
+  const plan = restorePlan(dir);
+  assert.deepEqual(plan.map((w) => w.path).sort(), ['allowed/a@x.com', 'pool_types/Камера', 'projects/p1', 'projects/p1/history/h', 'projects/p1/points/a', 'users/u1/prefs/main']);
+  assert.equal(plan.find((w) => w.path === 'projects/p1/points/a').data.id, undefined);
+  class TS { constructor(s, n) { this.s = s; this.n = n; } }
+  const r = revive(plan.find((w) => w.path === 'projects/p1').data, TS);
+  assert.ok(r.updatedAtServer instanceof TS); assert.equal(r.updatedAtServer.s, 5);
+});
+
+test('общее: читает корневые коллекции кроме projects и личные настройки', async () => {
+  const { readCommon } = await import('../scripts/server-backup-lib.mjs');
+  const col = (id, docs) => ({ id, get: async () => ({ docs: docs.map((d) => ({ id: d.id, data: () => ({ v: d.v }) })) }) });
+  const db = {
+    listCollections: async () => [col('projects', [{ id: 'p' }]), col('pool_types', [{ id: 'Камера', v: 1 }]), col('users', [])],
+    collectionGroup: () => ({ get: async () => ({ docs: [{ id: 'main', data: () => ({ dictWords: [1] }), ref: { parent: { parent: { id: 'u1', parent: { id: 'users' } } } } }] }) }),
+  };
+  const c = await readCommon(db);
+  assert.deepEqual(Object.keys(c.collections), ['pool_types']);
+  assert.deepEqual(c.prefs, [{ uid: 'u1', id: 'main', data: { dictWords: [1] } }]);
+});

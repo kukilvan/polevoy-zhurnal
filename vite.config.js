@@ -1,12 +1,15 @@
 import { defineConfig } from 'vite';
 import { VitePWA } from 'vite-plugin-pwa';
+import { readFileSync } from 'node:fs';
+
+const VERSION = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version;
 
 // Приложение публикуется на GitHub Pages по адресу /polevoy-zhurnal/
 const BASE = '/polevoy-zhurnal/';
 
 export default defineConfig({
   base: BASE,
-  define: { __BUILD__: JSON.stringify(new Date().toISOString().slice(0, 16).replace('T', ' ')) },
+  define: { __VERSION__: JSON.stringify(VERSION), __BUILD__: JSON.stringify(new Date().toISOString().slice(0, 16).replace('T', ' ')) },
   build: { target: 'es2022', sourcemap: false },
   worker: { format: 'es' },  // разбор чертежа (mupdf) — в фоновом потоке
   plugins: [

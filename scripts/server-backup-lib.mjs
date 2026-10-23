@@ -76,3 +76,51 @@ export function pruneOld(root, keep) {
   drop.forEach((n) => fs.rmSync(path.join(root, n), { recursive: true, force: true }));
   return drop;
 }
+
+// ---------- общее (не проекты): общий пул, список разрешённых почт, личные настройки пользователей ----------
+// Читает все корневые коллекции, кроме projects, и документы users/{uid}/prefs/{id}
+export async function readCommon(db) {
+  const out = { format: 'polevoy-common-1', collections: {}, prefs: [] };
+  for (const col of await db.listCollections()) {
+    if (col.id === 'projects' || col.id === 'users') continue;
+    const docs = await col.get();
+    out.collections[col.id] = docs.docs.map((d) => ({ id: d.id, ...d.data() }));
+  }
+  const prefs = await db.collectionGroup('prefs').get();
+  out.prefs = prefs.docs.filter((d) => d.ref.parent.parent?.parent?.id === 'users').map((d) => ({ uid: d.ref.parent.parent.id, id: d.id, data: d.data() }));
+  return out;
+}
+
+// ---------- восстановление в пустую базу (новый проект Firebase) ----------
+// В JSON копии метки времени Firestore записаны как { _seconds, _nanoseconds } — превращаем обратно в Timestamp
+export function revive(v, Timestamp) {
+  if (Array.isArray(v)) return v.map((x) => revive(x, Timestamp));
+  if (v && typeof v === 'object') {
+    const k = Object.keys(v);
+    if (k.length === 2 && '_seconds' in v && '_nanoseconds' in v) return new Timestamp(v._seconds, v._nanoseconds);
+    return Object.fromEntries(Object.entries(v).map(([a, b]) => [a, revive(b, Timestamp)]));
+  }
+  return v;
+}
+
+// Список записей для восстановления из папки копии: [{ path: 'projects/ID/points/X', data }]
+export function restorePlan(dir) {
+  const writes = [];
+  for (const f of fs.readdirSync(dir).filter((x) => x.endsWith('(полная).json'))) {
+    const j = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8'));
+    if (j.format !== 'polevoy-full-1' || !j.project?.id) continue;
+    const { id, ...project } = j.project;
+    writes.push({ path: `projects/${id}`, data: project });
+    for (const [coll, docs] of Object.entries(j.data || {})) {
+      for (const d of docs) { const { id: did, ...rest } = d; writes.push({ path: `projects/${id}/${coll}/${did}`, data: rest }); }
+    }
+  }
+  const common = path.join(dir, COMMON_FILE);
+  if (fs.existsSync(common)) {
+    const c = JSON.parse(fs.readFileSync(common, 'utf8'));
+    for (const [coll, docs] of Object.entries(c.collections || {})) for (const d of docs) { const { id, ...rest } = d; writes.push({ path: `${coll}/${id}`, data: rest }); }
+    for (const p of c.prefs || []) writes.push({ path: `users/${p.uid}/prefs/${p.id}`, data: p.data });
+  }
+  return writes;
+}
+export const COMMON_FILE = 'ОБЩЕЕ (пул, разрешённые почты, настройки).json';
