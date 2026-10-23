@@ -46,7 +46,7 @@ export function tr(s, depth = 0) {
   if (!core) return s;
   const hit = exact.get(core) ?? extra.get(core);
   if (hit !== undefined) return lead + hit + trail;
-  if (depth > 3) return s;
+  if (depth > 8) return s;
   for (const p of patterns) {
     if (p.head && !core.startsWith(p.head)) continue;
     const m = core.match(p.re); if (!m) continue;
