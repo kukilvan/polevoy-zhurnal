@@ -2,6 +2,8 @@
 // Запускается вручную (Actions → «Export starter pool»), результат коммитится в src/data/starter-pool.json.
 import fs from 'node:fs';
 import admin from 'firebase-admin';
+process.on('uncaughtException', (e) => { console.log(`::error::${String(e?.stack || e).replace(/\n/g, ' | ').slice(0, 900)}`); process.exit(1); });
+process.on('unhandledRejection', (e) => { console.log(`::error::${String(e?.stack || e).replace(/\n/g, ' | ').slice(0, 900)}`); process.exit(1); });
 
 const key = process.env.FIREBASE_SERVICE_ACCOUNT;
 if (!key) { console.error('Нет FIREBASE_SERVICE_ACCOUNT'); process.exit(1); }
