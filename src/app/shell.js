@@ -80,6 +80,7 @@ export function createShell({ user, onLogout, diag }) {
       item(`🎨 Тема: ${themeLabel()} → ${themeLabel(nextTheme())}`, () => { setTheme(nextTheme()); render(); }),
       item(`🔄 Обновить приложение (версия ${typeof __VERSION__ !== 'undefined' ? __VERSION__ : 'dev'}, сборка ${typeof __BUILD__ !== 'undefined' ? __BUILD__ : 'dev'})`, refreshApp)]),
       section('Данные', [
+      isLocal() ? item('☁️ Своя база: работа с коллегами', () => import('./setup.js').then((m) => m.openWizardScreen())) : null,
       connection() ? item('🔌 Подключение к базе', () => import('./setup.js').then((m) => m.connectionModal(onLogout))) : null,
       item('🧾 Журнал событий', () => open('log')),
       p ? item('🔄 Обновить таблицу для руководства', updateManagerTable) : null,

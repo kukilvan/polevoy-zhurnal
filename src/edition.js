@@ -11,6 +11,8 @@ export function saveConnection(c) { localStorage.setItem(KEY, JSON.stringify(c))
 export function clearConnection() { try { localStorage.removeItem(KEY); } catch { /* ok */ } }
 export const firebaseConfig = () => connection()?.firebase || null;
 export const clientId = () => connection()?.clientId || '';
+// Общий OAuth-клиент приложения (публичный): доступ к Диску без Firebase и для баз без своего клиента
+export const DEFAULT_CLIENT_ID = '473054171494-sin5sm8i45hi24oi23udnk13iduqtbrs.apps.googleusercontent.com';
 
 // Режим работы: 'firebase' (своя или чужая база, есть подключение) или 'local' (всё на этом устройстве)
 const MODE = 'pm.mode';

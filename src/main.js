@@ -11,7 +11,7 @@ import { createShell } from './app/shell.js';
 import { captureTokenFromUrl } from './app/google.js';
 import { APP_NAME, connection, saveConnection, parseConnect, setAdminEmail, mode, setLocalMode, localUser, isStandalone } from './edition.js';
 document.title = APP_NAME;
-captureTokenFromUrl();
+const popupReturn = captureTokenFromUrl() === 'popup';   // окно входа Google: токен сохранён, само приложение здесь не запускаем
 const BUILD = typeof __BUILD__ !== 'undefined' ? __BUILD__ : 'dev';
 const app = document.getElementById('app');
 const standalone = !!(window.navigator.standalone || window.matchMedia('(display-mode: standalone)').matches);
@@ -73,6 +73,7 @@ async function startSession(user) {
     onLogout: async () => { if (memoryMode) location.reload(); else await fb.logout(); },
     diag: { build: BUILD, device: DEVICE, standalone, backend: memoryMode ? 'память (тест)' : 'Firestore', cacheMode: fb?.cacheMode ?? '—', userEmail: user.email },
   });
+  if (!memoryMode) setTimeout(() => import('./app/migrate.js').then((m) => m.offerMigration(repo, user)).catch((e) => error('Перенос проектов', e)), 2500);
 }
 
 // Что показать при запуске: ссылка-приглашение (?connect=…) → база Firebase; ?setup=1 → мастер своей базы;
@@ -155,4 +156,5 @@ async function boot() {
     if (user) { if (!shell && !starting) { starting = true; startSession(user).finally(() => { starting = false; }); } } else { store.stop(); showLogin(); }
   });
 }
-boot().catch((e) => { error('Запуск', e); showMessage(`Ошибка запуска: ${e.message || e}`); });
+if (popupReturn) app.replaceChildren(h('div', { class: 'wrap' }, h('div', { class: 'card' }, '✅ Доступ к Google Диску получен. Это окно можно закрыть.')));
+else boot().catch((e) => { error('Запуск', e); showMessage(`Ошибка запуска: ${e.message || e}`); });

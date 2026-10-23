@@ -4,6 +4,7 @@
 import { getRepo, currentProject } from './store.js';
 import { getToken, clearToken, useRedirect, storedTokenValid } from './google.js';
 import { newId } from './repo.js';
+import { isLocal } from '../edition.js';
 import { projectFolder, moveInto } from './drivefolders.js';
 
 export const DRAWINGS_FOLDER = // старая папка (до папок проектов), только для поиска прежних файлов
@@ -94,7 +95,8 @@ export async function addDrawing(buf, { name, floor = '', pages = [], push = tru
   const list = [...(p.drawings || []).filter((d) => d.id !== id), entry];
   repo.saveProject(p.id, { drawings: list });
   // на iPhone вход в Google уводит со страницы — отправим на Диск позже (кнопка «⬆ На Диск» в плане), если доступа ещё нет
-  if (!entry.fileId && push && (!useRedirect() || storedTokenValid())) return pushDrawing(entry, buf);
+  // на устройстве (без базы) чертёж хранится в телефоне, на Диск — только кнопкой «⬆ На Диск»
+  if (!entry.fileId && push && !isLocal() && (!useRedirect() || storedTokenValid())) return pushDrawing(entry, buf);
   return entry;
 }
 /** Отправить на Диск чертёж, который пока только на этом устройстве */

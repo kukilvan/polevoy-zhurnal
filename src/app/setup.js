@@ -206,3 +206,10 @@ export async function connectionModal(onLogout) {
       close(); clearConnection(); try { await onLogout?.(); } catch { /* ok */ } location.reload();
     } }, '🔌 Отключиться от базы'))));
 }
+
+/** Мастер своей базы поверх приложения (из режима «на устройстве»): после входа проекты с устройства предложат перенести */
+export function openWizardScreen() {
+  const app = document.getElementById('app');
+  app.replaceChildren(setupView({ onDone: () => location.replace(location.pathname), onBack: () => location.reload() }));
+  window.scrollTo(0, 0);
+}

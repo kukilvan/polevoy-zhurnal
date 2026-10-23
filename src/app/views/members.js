@@ -52,7 +52,8 @@ export function membersView(ui) {
     return h('div', { class: 'card' },
       h('b', {}, '👥 Участники'),
       h('div', { style: { margin: '6px 0', lineHeight: 1.45 } }, 'Сейчас приложение работает только на этом устройстве, поэтому приглашать коллег нельзя.'),
-      h('div', { class: 'mut' }, 'Чтобы работать вместе, нужна своя база в облаке (Firebase, около 10 минут настройки, лучше с компьютера). Ваши проекты перенесутся в неё.'));
+      h('div', { class: 'mut' }, 'Чтобы работать вместе, нужна своя база в облаке (Firebase, около 10 минут настройки, лучше с компьютера). Ваши проекты перенесутся в неё.'),
+      h('div', { class: 'btns' }, h('button', { onclick: () => import('../setup.js').then((m) => m.openWizardScreen()) }, '☁️ Настроить свою базу')));
   }
   const p = currentProject(); const repo = getRepo();
   const me = String(repo.user.email || '').toLowerCase();

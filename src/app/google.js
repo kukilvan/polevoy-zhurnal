@@ -3,21 +3,34 @@ import { GoogleAuthProvider, reauthenticateWithPopup } from 'firebase/auth';
 import * as fbm from '../firebase.js';
 const auth = { get currentUser() { return fbm.auth?.currentUser || null; } };
 
-import { clientId } from '../edition.js';
-const SCOPES = ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets'];
+import { clientId, connection, DEFAULT_CLIENT_ID } from '../edition.js';
+// Два способа получить доступ к Диску:
+//  - база со своим OAuth-клиентом (в подключении есть clientId, например база Ивана): вход Firebase + полный доступ к Диску и Таблицам;
+//  - всё остальное (режим «на устройстве», новые базы): общий клиент приложения и узкое разрешение drive.file —
+//    только файлы, созданные приложением. Для него Google не требует проверки приложения и не показывает предупреждений.
+const FULL = ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets'];
+const NARROW = ['https://www.googleapis.com/auth/drive.file'];
+const viaFirebase = () => !!connection()?.clientId && !!auth.currentUser;
+const scopes = () => (connection()?.clientId ? FULL : NARROW);
+const oauthClient = () => clientId() || DEFAULT_CLIENT_ID;
 let cached = { token: '', exp: 0 };
 
 export const useRedirect = () => /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
   || window.navigator.standalone === true || window.matchMedia?.('(display-mode: standalone)').matches;
-// Вызывается при запуске: если вернулись с Google с токеном в адресе — сохраняем его и чистим адрес
+// Вызывается при запуске: если вернулись с Google с токеном в адресе — сохраняем его и чистим адрес.
+// Окно входа (popup) после этого закрывается само: токен уже лежит в общем хранилище, основное окно его подхватит.
 export function captureTokenFromUrl() {
   try {
     const p = new URLSearchParams(location.hash.replace(/^#/, ''));
-    if (p.get('state') !== 'pz_gsync') return;
+    const state = p.get('state');
+    if (state !== 'pz_gsync' && state !== 'pz_gpopup') return;
     const token = p.get('access_token');
     if (token) localStorage.setItem('pz_gtoken', JSON.stringify({ token, exp: Date.now() + (Number(p.get('expires_in')) || 3000) * 920 }));
+    else if (p.get('error')) localStorage.setItem('pz_gtoken_err', p.get('error'));
     history.replaceState(null, '', location.pathname + location.search);
+    if (state === 'pz_gpopup') { try { window.close(); } catch { /* ok */ } return 'popup'; }
   } catch { /* ok */ }
+  return null;
 }
 export const PENDING = 'pz_gsync_pending';
 
@@ -25,28 +38,51 @@ function stored() {
   try { const t = JSON.parse(localStorage.getItem('pz_gtoken') || 'null'); return t && Date.now() < t.exp ? t : null; } catch { return null; }
 }
 
+function authUrl(state) {
+  const q = new URLSearchParams({
+    client_id: oauthClient(), redirect_uri: location.origin + location.pathname, response_type: 'token', scope: scopes().join(' '),
+    include_granted_scopes: 'true', state, ...(auth.currentUser?.email ? { login_hint: auth.currentUser.email } : {}),
+  });
+  return `https://accounts.google.com/o/oauth2/v2/auth?${q}`;
+}
+
 export async function getToken(action = 'managers') {
   if (cached.token && Date.now() < cached.exp) return cached.token;
   const st = stored(); if (st) { cached = st; return st.token; }
-  const provider = new GoogleAuthProvider();
-  SCOPES.forEach((s) => provider.addScope(s));
-  // без prompt: 'consent' — если доступ уже дан, Google не показывает экран согласия, окно закрывается само
-  provider.setCustomParameters({ login_hint: auth.currentUser?.email || '' });
-  if (useRedirect()) { // iPhone: окна Google закрываются, а результат Firebase-перехода Safari теряет — идём напрямую в Google и читаем токен из адреса
+  if (useRedirect()) { // iPhone и приложение со значка: окна Google закрываются — уходим на Google и читаем токен из адреса при возврате
     try { localStorage.setItem(PENDING, action); } catch { /* ok */ }
-    const q = new URLSearchParams({
-      client_id: clientId(), redirect_uri: location.origin + location.pathname, response_type: 'token', scope: SCOPES.join(' '),
-      include_granted_scopes: 'true', state: 'pz_gsync', login_hint: auth.currentUser?.email || '',
-    });
-    location.href = `https://accounts.google.com/o/oauth2/v2/auth?${q}`;
+    location.href = authUrl('pz_gsync');
     return new Promise(() => {}); // страница уходит на Google; продолжение после возврата
   }
+  if (!viaFirebase()) return popupToken();
+  const provider = new GoogleAuthProvider();
+  FULL.forEach((s) => provider.addScope(s));
+  // без prompt: 'consent' — если доступ уже дан, Google не показывает экран согласия, окно закрывается само
+  provider.setCustomParameters({ login_hint: auth.currentUser?.email || '' });
   const res = await reauthenticateWithPopup(auth.currentUser, provider);
   const token = GoogleAuthProvider.credentialFromResult(res)?.accessToken;
   if (!token) throw new Error('Google не выдал разрешение на Диск и Таблицы');
   cached = { token, exp: Date.now() + 55 * 60 * 1000 };  // токен Google живёт час
   try { localStorage.setItem('pz_gtoken', JSON.stringify(cached)); } catch { /* ok */ }  // и после перезагрузки страницы не спрашивать снова
   return token;
+}
+
+// Окно входа Google без Firebase: возвращается на сайт с токеном в адресе, captureTokenFromUrl кладёт его в хранилище
+function popupToken() {
+  try { localStorage.removeItem('pz_gtoken_err'); } catch { /* ok */ }
+  const w = window.open(authUrl('pz_gpopup'), 'pz_google', 'width=520,height=640');
+  if (!w) { location.href = authUrl('pz_gsync'); return new Promise(() => {}); }  // всплывающие окна запрещены — переходом
+  return new Promise((resolve, reject) => {
+    const started = Date.now();
+    const t = setInterval(() => {
+      const st = stored();
+      if (st) { clearInterval(t); cached = st; resolve(st.token); return; }
+      let err = null; try { err = localStorage.getItem('pz_gtoken_err'); } catch { /* ok */ }
+      if (err) { clearInterval(t); reject(new Error(err === 'access_denied' ? 'Доступ к Google Диску не дан' : `Google: ${err}`)); return; }
+      // w.closed после страниц Google ненадёжен (окно «отвязывается»), поэтому просто ждём до 3 минут
+      if (Date.now() - started > 180000) { clearInterval(t); reject(new Error('Разрешение Google не получено — попробуйте ещё раз')); }
+    }, 400);
+  });
 }
 
 async function call(token, method, url, body) {
