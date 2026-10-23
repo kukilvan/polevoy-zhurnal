@@ -21,7 +21,7 @@ import { latinKey } from '../../domain/index.js';
 import { cfgMatch, cfgFilterOptions, cfgFilterValid } from '../cfgfilter.js';
 import { planModal } from './planmodal.js';
 import { choosePoint } from './pointchooser.js';
-import { panelText, panelOf, parsePanelPorts, panelOccupancy, rackPortsOf, matchesPanelQuery, fmtPanelPort, slotKey, subsOf, subNameOf, blockedOf } from '../../domain/rack.js';
+import { printedPortsOf, panelText, panelOf, parsePanelPorts, panelOccupancy, rackPortsOf, matchesPanelQuery, fmtPanelPort, slotKey, subsOf, subNameOf, blockedOf } from '../../domain/rack.js';
 
 const typeOptions = () => [...state.ctx.types.values()].filter((t) => !isSystemType(t)).map((t) => ({ value: t.id, label: t.id }));
 const hasIdType = (id) => hasDeviceId(state.ctx.types.get(id));
@@ -162,7 +162,7 @@ export function pointForm(point, { onDone } = {}) {
       if (!(await confirmDialog(`Удалить точку «${point.label}»? Её можно будет вернуть из истории.`, { yes: 'Удалить', danger: true }))) return false;
       repo.remove(pid, 'points', point.id); toast('Точка удалена'); onDone?.(); return true;
     } }] : [],
-    onSubmit: (v) => {
+    onSubmit: async (v) => {
       const label = v.label;
       if (!point && !v.cabinet) { toast('Укажите шкаф — новая точка добавляется только с шкафом'); return false; }
       const dup = [...state.ctx.points.values()].find((p) => p.id !== point?.id && sameLabelClash(p, { label, cabinet: v.cabinet }));
@@ -184,9 +184,14 @@ export function pointForm(point, { onDone } = {}) {
       if (bx) { toast(`Порт ${fmtPanelPort(bx, subNameOf(currentProject(), v.cabinet || '', bx.s))} закрыт крестиком`); return false; }
       const taken = slots.map((x) => ({ x, by: busy.get(`${v.cabinet || ''}|${slotKey(x)}`)?.[0]?.point })).find((t) => t.by);
       if (taken) { toast(`Порт ${fmtPanelPort(taken.x, subNameOf(currentProject(), v.cabinet || '', taken.x.s))} в шкафу ${v.cabinet || '(без шкафа)'} уже занят точкой ${taken.by.label}`); return false; }
+      let clearHave = false;
+      if (point && label !== point.label && printedPortsOf(point, state.ctx).length) {
+        if (!(await confirmDialog(`У «${point.label}» шилют уже напечатан или поклеен со старой подписью. После переименования его надо перепечатать. Снять отметку «есть шилют» и продолжить?`, { yes: 'Снять и сохранить' }))) return false;
+        clearHave = true;
+      }
       const oldPanel = panelOf(point);
       const panel = slots.map((x) => { const o = oldPanel.find((y) => slotKey(y) === slotKey(x)); return o?.label ? { ...x, label: o.label } : x; });
-      repo.save(pid, [{ coll: 'points', id: point?.id, data: { panel,
+      repo.save(pid, [{ coll: 'points', id: point?.id, data: { panel, ...(clearHave ? { shHave: [] } : {}),
         label, planName: v.planName, cabinet: v.cabinet, floor: v.floor, typeId: v.typeId, length: v.length,
         configId: isDoorType(v.typeId) ? (ensureDoorCfg(v.configId) || null) : undefined, port: v.port, serial, mac, delayReasonId: v.delayReasonId, note: v.note,
         ...(doorCfgSet(v) ? { devices: null, cables: null, cableOverride: null } : { ...compData(v.typeId, v.comp), cableOverride: v.cableOverride ?? null }),
@@ -455,7 +460,10 @@ export function renameForm(ids, done) {
     const changed = plan.filter((x) => x.to !== x.p.label);
     const zeros = changed.filter((x) => x.issue === 'zero');
     if (!(await confirmDialog(`Переименовать точек: ${changed.length}? История работ у точек останется.${zeros.length ? `\n\n⚠ У ${zeros.length} точек номер станет 0 (${zeros.slice(0, 3).map((x) => x.to).join(', ')}${zeros.length > 3 ? '…' : ''}).` : ''}`, { yes: 'Переименовать' }))) return;
-    getRepo().save(currentProject().id, changed.map((x) => ({ coll: 'points', id: x.p.id, data: { label: x.to, ...(keep.checked && !x.p.planName && x.p.pos ? { planName: x.p.label } : {}) } })));
+    const printed = changed.filter((x) => printedPortsOf(x.p, state.ctx).length);
+    if (printed.length && !(await confirmDialog(`У ${printed.length} точек (${printed.slice(0, 4).map((x) => x.p.label).join(', ')}${printed.length > 4 ? '…' : ''}) шилют уже напечатан или поклеен со старой подписью — его надо перепечатать. Снять у них отметку «есть шилют» и переименовать?`, { yes: 'Снять и переименовать' }))) return;
+    const printedIds = new Set(printed.map((x) => x.p.id));
+    getRepo().save(currentProject().id, changed.map((x) => ({ coll: 'points', id: x.p.id, data: { label: x.to, ...(printedIds.has(x.p.id) ? { shHave: [] } : {}), ...(keep.checked && !x.p.planName && x.p.pos ? { planName: x.p.label } : {}) } })));
     toast(`Переименовано: ${changed.length}`); c(); done?.();
   };
   const row = (label, ...els) => h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', margin: '6px 0' } }, h('span', { style: { minWidth: '150px' } }, label), ...els);

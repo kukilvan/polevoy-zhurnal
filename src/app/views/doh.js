@@ -1,6 +1,7 @@
 // Вкладка «Дохот»: дни работ, записи дня, текст доха RU/HE, копирование и ссылка на команду «Doh».
 import { typeMatch, typeFilterOptions } from '../typegroups.js';
 import { latinKey } from '../../domain/index.js';
+import { rackPortsOf, stuckPortsOf } from '../../domain/rack.js';
 import { cfgMatch, cfgFilterOptions, cfgFilterValid } from '../cfgfilter.js';
 import { h, formModal, openModal, confirmDialog, toast } from '../ui.js';
 import { hint } from './guide.js';
@@ -328,27 +329,40 @@ export function addWorkForPoints(pointIds, preset = {}) {
 // «Шилют поклеен» одним нажатием (из панели шкафа): запись работы «Шилют» в сегодняшний день, без формы.
 // Работа подбирается как в «Несколько работ»: у точки из устройств — открытая задача «Шилют», у старых точек — работа типа «Шилют» для её типа.
 // → { made: записей, done: [метки: уже поклеены], none: [метки: у типа нет работы «Шилют»] }
-export function markShilutForPoints(pointIds) {
+export function markShilutForPoints(pointIds, portsByPoint = null) {
   const ctx = state.ctx; const repo = getRepo(); const p = currentProject(); const today = todayIso();
   const pts = [...new Set(pointIds)].map((id) => ctx.points.get(id)).filter(Boolean);
   const works = [...ctx.catalog.values()].filter((w) => w.active !== false && w.workType === 'Шилют');
   const byWork = new Map(); const done = []; const none = [];
+  const fresh = new Map();   // id точки → номера портов, поклеенных этим нажатием
   const put = (w, pt) => { if (!byWork.has(w.id)) byWork.set(w.id, []); byWork.get(w.id).push(pt.id); };
   pts.forEach((pt) => {
+    // порты, которые ещё не поклеены (если порты не указаны — все)
+    const total = rackPortsOf(pt, ctx); const stuck = portsByPoint ? stuckPortsOf(pt, ctx) : new Set();
+    const want = portsByPoint ? [...(portsByPoint.get(pt.id) || [])] : Array.from({ length: total }, (_, i) => i);
+    const newPorts = want.filter((i) => !stuck.has(i));
+    if (portsByPoint && total && !newPorts.length) { done.push(pt.label); return; }
     if (compositionOf(pt, ctx)) {
       const fit = works.filter((w) => workFits(pt, ctx, w));
       const open = fit.filter((w) => (openTasksFor(pt, ctx, w) || []).length > 0);
-      if (open.length) open.forEach((w) => put(w, pt)); else if (fit.length) done.push(pt.label); else none.push(pt.label);
+      if (open.length) { open.forEach((w) => put(w, pt)); fresh.set(pt.id, newPorts); } else if (fit.length) done.push(pt.label); else none.push(pt.label);
     } else {
       const w = works.find((x) => (x.forTypes || []).includes(pt.typeId));
-      if (!w) none.push(pt.label); else if (infoOf(pt).shilut) done.push(pt.label); else put(w, pt);
+      if (!w) none.push(pt.label); else if (infoOf(pt).shilut) done.push(pt.label); else { put(w, pt); fresh.set(pt.id, newPorts); }
     }
   });
   if (!byWork.size) return { made: 0, done, none };
   const day = daysSorted().find((d) => d.date === today); const dayId = day?.id || newId();
   const ops = day ? [] : [{ coll: 'days', id: dayId, data: { date: today, helper: p.helper || 'сам', helperHe: p.helperHe || 'сам' } }];
   const made = [];
-  byWork.forEach((ids, workId) => { const id = newId(); ops.push({ coll: 'entries', id, data: { dayId, workType: 'Шилют', workId, pointIds: ids } }); made.push([id, ids]); });
+  byWork.forEach((ids, workId) => {
+    const id = newId(); const data = { dayId, workType: 'Шилют', workId, pointIds: ids };
+    // часть портов точки: в дох идёт число поклеенных портов, точка закроется, когда наберутся все
+    const portQty = ids.map((pid) => ({ id: pid, v: (fresh.get(pid) || []).length })).filter((q) => portsByPoint && q.v > 0 && q.v < rackPortsOf(ctx.points.get(q.id), ctx));
+    if (portQty.length) data.portQty = portQty;
+    ops.push({ coll: 'entries', id, data }); made.push([id, ids]);
+  });
+  if (portsByPoint) fresh.forEach((list, pid) => { const pt = ctx.points.get(pid); const all = new Set([...stuckPortsOf(pt, ctx), ...list]); ops.push({ coll: 'points', id: pid, data: { shStuck: [...all].sort((a, b) => a - b) } }); });
   repo.save(p.id, ops); made.forEach(([id, ids]) => syncJournal(id, ids)); bumpLastWork(today);
   return { made: made.length, done, none };
 }

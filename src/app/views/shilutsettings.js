@@ -99,7 +99,17 @@ export function shilutSettings(ui) {
 
   const draw = () => box.replaceChildren(modelsCard(), colorsCard(), cabsCard(), tplCard());
   draw();
-  const c = openModal('🎨 Настройки шильюта', h('div', {}, box, h('div', { class: 'btns' }, h('button', { onclick: () => {
-    repo.saveProject(p.id, { shilut: sh }); c(); toast('Настройки шильюта сохранены'); setTimeout(() => ui.render(), 250);
+  const c = openModal('🎨 Настройки шильюта', h('div', {}, box, h('div', { class: 'btns' }, h('button', { onclick: async () => {
+    // подписи, которые поменяются у портов с уже напечатанным шилютом
+    const before = p; const after = { ...p, shilut: sh }; const stale = [];
+    rackPts.forEach((pt) => (pt.shHave || []).forEach((i) => { if (shilutLabel(pt, i, before, state.ctx) !== shilutLabel(pt, i, after, state.ctx)) stale.push([pt, i]); }));
+    if (stale.length && !(await confirmDialog(`У ${stale.length} портов шилют уже отмечен как «есть», а подпись изменится (например, ${stale.slice(0, 3).map(([pt]) => pt.label).join(', ')}). Снять у них отметку «есть шилют», чтобы он попал в заказ заново?`, { yes: 'Снять отметки', no: 'Оставить отметки' }))) {
+      repo.saveProject(p.id, { shilut: sh }); c(); toast('Настройки шильюта сохранены (отметки «есть шилют» остались)'); setTimeout(() => ui.render(), 250); return;
+    }
+    if (stale.length) {
+      const by = new Map(); stale.forEach(([pt, i]) => { if (!by.has(pt.id)) by.set(pt.id, new Set(pt.shHave || [])); by.get(pt.id).delete(i); });
+      repo.save(p.id, [...by.entries()].map(([id, set]) => ({ coll: 'points', id, data: { shHave: [...set].sort((a, b) => a - b) } })));
+    }
+    repo.saveProject(p.id, { shilut: sh }); c(); toast(stale.length ? `Настройки сохранены, отметки «есть шилют» сняты: ${stale.length}` : 'Настройки шильюта сохранены'); setTimeout(() => ui.render(), 250);
   } }, 'Сохранить'))), { sticky: true });
 }

@@ -1,6 +1,6 @@
 // Шкафы и шильют: «Порт в панели» (U панели + порт 1–24) у точек с кабелями cat7.
 // У точки поле panel: [{ u, p, label? }] — по одному на каждый кабель cat7 (label — своя подпись порта в шильюте).
-import { effectiveCablesOf } from './status.js';
+import { effectiveCablesOf, pointInfo } from './status.js';
 
 export const PANEL_PORTS = 24;
 // «cat7» — условное имя кабелей, которые идут в патч-панели (каким бы ни был кабель на самом деле)
@@ -8,6 +8,18 @@ export const isRackCable = (cableId) => /cat\s*-?\s*7/i.test(String(cableId || '
 // Сколько портов панели занимает точка (= кабелей cat7)
 export const rackPortsOf = (point, ctx) => effectiveCablesOf(point, ctx).filter((c) => isRackCable(c.cable)).reduce((n, c) => n + c.count, 0);
 
+/** Какие порты точки (номера по порядку) уже поклеены: всё — если шилют по точке отмечен целиком; иначе — только отмеченные кнопкой «Поклеил» */
+export function stuckPortsOf(point, ctx) {
+  const n = rackPortsOf(point, ctx);
+  if (pointInfo(point, ctx).shilut) return new Set(Array.from({ length: n }, (_, i) => i));
+  const any = (ctx.journalByPoint.get(point.id) || []).some((r) => r.action === 'Шилют');
+  return any ? new Set((point.shStuck || []).filter((i) => i < n)) : new Set();
+}
+/** Порты точки, у которых шилют уже напечатан («есть») или поклеен: после смены подписи он устаревает */
+export function printedPortsOf(point, ctx) {
+  const have = (point.shHave || []).filter((i) => i >= 0);
+  return [...new Set([...have, ...stuckPortsOf(point, ctx)])];
+}
 const pad2 = (n) => String(n).padStart(2, '0');
 // Порт точки: { u, p, s?, label? } — s: секция (один «шкаф» точек может состоять из нескольких физических шкафов), '' — первая
 export const slotKey = (x) => `${x.s || ''}|${x.u}|${x.p}`;

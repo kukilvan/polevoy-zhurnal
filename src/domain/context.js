@@ -31,7 +31,7 @@ export function buildContext(data) {
       const entry = ctx.entries.get(row.entryId);
       const day = entry && ctx.days.get(entry.dayId);
       if (!entry || !day) return; // запись/день удалены — строка не считается
-      resolved = { date: day.date, action: entry.workType, workId: entry.workId, cableId: entry.cableId, deviceIds: entry.deviceIds, result: entry.result, projectId: day.projectId, by: entry.updatedBy || entry.createdBy };
+      resolved = { date: day.date, action: entry.workType, workId: entry.workId, cableId: entry.cableId, deviceIds: entry.deviceIds, result: entry.result, ports: Array.isArray(entry.portQty) ? (entry.portQty.find((q) => q && q.id === row.pointId)?.v ?? undefined) : undefined, projectId: day.projectId, by: entry.updatedBy || entry.createdBy };
     } else {
       resolved = {
         date: row.editDate, workId: row.editWorkId, cableId: row.editCableId, deviceIds: row.editDeviceIds, action: ctx.catalog.get(row.editWorkId)?.workType,

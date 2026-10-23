@@ -105,3 +105,19 @@ test('двери: правила замка, кабели по количест�
   assert.deepEqual(usesOf(ctx, 'devices', 'em'), [{ label: 'Конфигурации дверей', n: 1 }]);
   assert.deepEqual(usesOf(ctx, 'cables', '6005'), [{ label: 'Конфигурации дверей', n: 1 }]);
 });
+
+test('шилют по портам: точка закрывается, когда набрались все порты; в дох идёт число портов', async () => {
+  const { pointInfo, itogShtuk, stuckPortsOf } = await import('../src/domain/index.js');
+  const pt = { id: 'c1', projectId: 'P1', label: 'C1', cabinet: '1A', typeId: 'Камера', cableOverride: [{ cable: 'cat7', count: 2 }], shStuck: [0] };
+  const mk = (entries) => buildContext({ projects: [{ id: 'P1' }], points: [pt], days: [{ id: 'D1', projectId: 'P1', date: '2026-10-05' }],
+    entries: entries.map((e, i) => ({ id: `e${i}`, dayId: 'D1', workType: 'Шилют', workId: 'SHL', pointIds: ['c1'], ...e })),
+    journal: entries.map((_, i) => ({ id: `j${i}`, entryId: `e${i}`, pointId: 'c1' })), cabinetSettings: [], catalog: CATALOG, types: POINT_TYPES, cables: CABLES, configs: CONFIGS, units: UNITS, culprits: CULPRITS, delayReasons: DELAY_REASONS });
+  const half = mk([{ portQty: [{ id: 'c1', v: 1 }] }]);
+  assert.ok(!pointInfo(pt, half).shilut);
+  assert.deepEqual([...stuckPortsOf(pt, half)], [0]);
+  assert.ok(pointInfo(pt, mk([{ portQty: [{ id: 'c1', v: 1 }] }, { portQty: [{ id: 'c1', v: 1 }] }])).shilut);
+  const whole = mk([{}]);
+  assert.ok(pointInfo(pt, whole).shilut);
+  assert.equal([...stuckPortsOf(pt, whole)].length, 2);
+  assert.equal(itogShtuk({ workId: 'CHK_FLUKE', workType: 'Проверка', pointIds: ['c1'], portQty: [{ id: 'c1', v: 1 }] }, half), 1);
+});

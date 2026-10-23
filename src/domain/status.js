@@ -1,7 +1,7 @@
 // Статусы точек, установка, комплектность (разделы 3.1–3.3, Приложение А).
 import { cableOf, cablesCountOf, metrageOf, cableListOf } from './points.js';
 import { defaultInstallBinding } from './seed.js';
-import { compositionOf, composedInfo, composedCables as composedCablesOf } from './compose.js';
+import { compositionOf, composedInfo, composedCables as composedCablesOf, doneByPorts } from './compose.js';
 
 // Привязка установки типа точек: поля типа (installMode/installWorkIds), для старых данных — стандартная привязка по названию типа
 export function installBinding(type) {
@@ -43,7 +43,8 @@ export function pointInfo(point, ctx) {
   }
   const hived = dateOf('Хивут');
   const checked = dateOf('Проверка');
-  const shilut = dateOf('Шилют');
+  const shRows = rows.filter((r) => r.action === 'Шилют');
+  const shilut = shRows.length && doneByPorts({ stage: 'Шилют' }, shRows, cableList) ? maxDate(shRows) : '';
 
   // Результат самой свежей проверки (при равной дате — более поздняя строка)
   const checks = rows.filter((r) => r.action === 'Проверка')

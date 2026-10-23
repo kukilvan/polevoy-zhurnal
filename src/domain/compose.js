@@ -94,6 +94,15 @@ export function rowsForTask(task, rows, kinds) {
   return rows.filter((r) => r.workId === task.workId && forDevice(r, task.deviceId));
 }
 
+// Шилют по портам: строки с числом портов (кнопка «Поклеил» на части портов) закрывают задачу, только когда набралось по числу портов cat7
+export const isPortCable = (id) => /cat\s*-?\s*7/i.test(String(id || ''));
+export function doneByPorts(task, hit, cableList) {
+  if (task.stage !== 'Шилют') return true;
+  const part = hit.filter((r) => r.ports != null);
+  if (!part.length || hit.some((r) => r.ports == null)) return true;
+  const total = (cableList || []).filter((c) => isPortCable(c.cable)).reduce((n, c) => n + c.count, 0);
+  return !total || part.reduce((n, r) => n + Number(r.ports || 0), 0) >= total;
+}
 // Сводка составной точки в том же виде, что pointInfo старой схемы (+ tasks, stages)
 export function composedInfo(point, ctx, comp) {
   const rows = ctx.journalByPoint.get(point.id) || [];
@@ -101,7 +110,7 @@ export function composedInfo(point, ctx, comp) {
   const kinds = cableList.map((c) => c.cable);
   const tasks = tasksOf(point, ctx, comp).map((t) => {
     const hit = rowsForTask(t, rows, kinds);
-    return { ...t, done: hit.length > 0, date: maxDate(hit) };
+    return { ...t, done: hit.length > 0 && doneByPorts(t, hit, cableList), date: maxDate(hit) };
   });
   const stage = (s) => {
     const list = tasks.filter((t) => t.stage === s);

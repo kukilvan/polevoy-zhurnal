@@ -23,7 +23,8 @@ export function itogShtuk(entry, ctx) {
   if (isTime(entry, work)) return 0;
   const pts = entryPoints(entry, ctx);
   // точка из устройств: столько единиц, сколько задач этой работы (две двери с двумя коре — 4); иначе 1 на точку
-  const base = pts.length ? pts.reduce((n, p) => n + (taskQty(p, ctx, entry) ?? 1), 0) : num(entry.quantity);
+  const portsOf = (p) => (Array.isArray(entry.portQty) ? entry.portQty.find((q) => q && q.id === p.id)?.v : undefined);   // шилют части портов точки
+  const base = pts.length ? pts.reduce((n, p) => n + (portsOf(p) ?? taskQty(p, ctx, entry) ?? 1), 0) : num(entry.quantity);
   return round2(base * (blank(work?.multiplier) ? 1 : Number(work.multiplier)));
 }
 

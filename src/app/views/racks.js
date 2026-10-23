@@ -4,7 +4,7 @@ import { h, openModal, toast, confirmDialog, formModal } from '../ui.js';
 import { state, getRepo, currentProject, infoOf } from '../store.js';
 import { comparePoints } from '../../domain/index.js';
 import {
-  PANEL_PORTS, rackPortsOf, panelOf, fmtPanelPort, defaultPortLabels, rackOf, panelsInOrder, rackPointsOf,
+  stuckPortsOf, PANEL_PORTS, rackPortsOf, panelOf, fmtPanelPort, defaultPortLabels, rackOf, panelsInOrder, rackPointsOf,
   cabinetFloor, autoFill, rackProblems, typeColorOf, slotKey, subsOf, blockedOf, blockPort, unblockPort, shilutLabel, shilutOf,
 } from '../../domain/rack.js';
 import { pointCard, bulkEditForm, renameForm } from './points.js';
@@ -73,6 +73,16 @@ export function racksView(ui) {
     }) : h('div', { class: 'empty' }, 'Нет точек с кабелями cat7 и шкафом')));
 }
 
+// окно с несколькими вариантами: → индекс выбранного или null (отмена)
+function choose3(text, options) {
+  return new Promise((resolve) => {
+    let ans = null;
+    const close = openModal('Как поступить?', h('div', {}, h('div', { style: { margin: '4px 0 10px' } }, text),
+      ...options.map(([t, hint], i) => h('div', { style: { margin: '6px 0' } }, h('button', { class: 'wide', onclick: () => { ans = i; close(); } }, t), h('div', { class: 'mut', style: { fontSize: '13px', marginTop: '3px' } }, hint))),
+      h('button', { class: 'sec wide', onclick: () => close() }, 'Отмена')), { onClose: () => resolve(ans) });
+  });
+}
+
 // ---------- размер и нумерация шкафа (и секции: несколько физических шкафов под одним именем) ----------
 function rackForm(cab, done) {
   const r = rackOf(currentProject(), cab) || { height: 42, bottomUp: true, panels: [] };
@@ -100,7 +110,7 @@ function rackForm(cab, done) {
   const draw = () => box.replaceChildren(...subs.map(row),
     many ? h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => { subs.push({ id: `s${Date.now().toString(36)}`, name: `${cab}-${String.fromCharCode(65 + subs.length)}`, height: subs[0].height, bottomUp: subs[0].bottomUp }); draw(); } }, '➕ Ещё шкаф')) : null);
   draw();
-  const save = h('button', { onclick: () => {
+  const save = h('button', { onclick: async () => {
     for (const x of subs) {
       x.height = Math.round(Number(x.height));
       if (!(x.height >= 1 && x.height <= 60)) { toast('Высота — от 1 до 60 U'); return; }
@@ -111,7 +121,23 @@ function rackForm(cab, done) {
     const names = subs.map((x) => String(x.name).trim().toLowerCase());
     if (many && new Set(names).size !== names.length) { toast('Названия шкафов не должны повторяться'); return; }
     const s0 = subs[0];
-    saveRack(cab, { ...r, height: s0.height, bottomUp: s0.bottomUp !== false, subs: many ? subs.map((x) => ({ id: x.id || '', name: String(x.name).trim(), height: x.height, bottomUp: x.bottomUp !== false })) : null });
+    // направление нумерации поменяли у секции с панелями: перевернуть как есть или зеркально (панели остаются на тех же физических местах)
+    const flipped = subs.filter((x) => { const was = subsOf(r, cab).find((q) => q.id === (x.id || '')); return was && (was.bottomUp !== false) !== (x.bottomUp !== false) && (r.panels || []).some((q) => (q.s || '') === (x.id || '')); });
+    let mirror = [];
+    if (flipped.length) {
+      const pick = await choose3(`Вы меняете нумерацию U у шкафа с панелями (${flipped.map((x) => x.name || cab).join(', ')}).`, [
+        ['Зеркально (рекомендуется)', 'Панели остаются на тех же физических местах, номера U пересчитаются (было U38 → станет U5 и т. п.).'],
+        ['Перевернуть как есть', 'Номера U остаются прежними, а физически панели поменяются местами (будет перевёрнуто).'],
+      ]);
+      if (pick === null) return;
+      if (pick === 0) mirror = flipped;
+    }
+    const mir = new Set(mirror.map((x) => x.id || ''));
+    const hOf = (sid) => Number(subs.find((x) => (x.id || '') === sid)?.height) || 0;
+    const mu = (x) => (mir.has(x.s || '') ? { ...x, u: hOf(x.s || '') + 1 - x.u } : x);
+    const rr = mir.size ? { ...r, panels: (r.panels || []).map(mu), blocked: (r.blocked || []).map(mu) } : r;
+    if (mir.size) savePanels(cabPoints(cab).filter((pt) => panelOf(pt).some((x) => mir.has(x.s || ''))).map((pt) => [pt.id, panelOf(pt).map(mu)]));
+    saveRack(cab, { ...rr, height: s0.height, bottomUp: s0.bottomUp !== false, subs: many ? subs.map((x) => ({ id: x.id || '', name: String(x.name).trim(), height: x.height, bottomUp: x.bottomUp !== false })) : null });
     c(); done?.();
   } }, 'Сохранить');
   const c = openModal(`Шкаф ${cab}: размер и нумерация`, h('div', {},
@@ -275,11 +301,15 @@ function rackEditor(ui, cab) {
       h('div', { class: 'btns', style: { marginTop: '6px' } },
         h('button', { class: 'sec', onclick: () => { if (allOn) shMode.sel.clear(); else all.forEach((k) => shMode.sel.add(k)); ui.render(); } }, allOn ? 'Снять выделение' : 'Выделить панель целиком'),
         h('button', { disabled: none, onclick: () => { const l = shPorts(); setHave(l, true); shDone(`Есть шилют: ${l.length}`); } }, '📦 Есть шилют'),
-        h('button', { disabled: none, onclick: () => {
+        h('button', { disabled: none, onclick: async () => {
           const l = shPorts(); const pts = [...new Map(l.map(([pt]) => [pt.id, pt])).values()];
-          const r = markShilutForPoints(pts.map((x) => x.id));   // «есть шилют» не ставится: это отдельная отметка
-          const multi = pts.filter((pt) => rackPortsOf(pt, state.ctx) > l.filter(([q]) => q.id === pt.id).length);
-          shDone(`Поклеено: ${l.length} портов, в дох записано точек: ${pts.length - r.done.length - r.none.length}${r.done.length ? `; уже были поклеены: ${r.done.length}` : ''}${r.none.length ? `; у типа нет работы «Шилют» (только «есть шилют»): ${r.none.slice(0, 5).join(', ')}` : ''}${multi.length ? `. У ${multi.slice(0, 4).map((x) => x.label).join(', ')} несколько портов — отметилась вся точка` : ''}`);
+          const by = new Map(); l.forEach(([pt, i]) => { if (!by.has(pt.id)) by.set(pt.id, new Set()); by.get(pt.id).add(i); });
+          const fresh = l.filter(([pt, i]) => !stuckPortsOf(pt, state.ctx).has(i));
+          if (!fresh.length) { toast('Выбранные порты уже поклеены'); return; }
+          const part = pts.filter((pt) => { const st = stuckPortsOf(pt, state.ctx); const total = rackPortsOf(pt, state.ctx); return total > 1 && [...new Set([...st, ...by.get(pt.id)])].length < total; });
+          if (!(await confirmDialog(`Записать в сегодняшний дох «Шилют»: портов ${fresh.length}, точек ${new Set(fresh.map(([pt]) => pt.id)).size}?${part.length ? `\n\nУ ${part.slice(0, 4).map((x) => x.label).join(', ')}${part.length > 4 ? '…' : ''} поклеены не все порты: в дох пойдут только эти порты, остальные останутся неотмеченными.` : ''}`, { yes: 'Записать' }))) return;
+          const r = markShilutForPoints(pts.map((x) => x.id), by);   // «есть шилют» не ставится: это отдельная отметка
+          shDone(`Поклеено портов: ${fresh.length}, в дох записано точек: ${pts.length - r.done.length - r.none.length}${r.done.length ? `; уже были поклеены: ${r.done.length}` : ''}${r.none.length ? `; у типа нет работы «Шилют» (только отметка): ${r.none.length}` : ''}`);
         } }, '✅ Поклеил'),
         h('button', { class: 'sec', disabled: none, onclick: () => { const l = shPorts(); setHave(l, false); shDone('Отметка «есть шилют» снята'); } }, '↩ Нет шилюта'),
         h('button', { class: 'sec', onclick: () => { shMode = null; ui.render(); } }, 'Готово')));
@@ -358,7 +388,7 @@ function rackEditor(ui, cab) {
       const hue = at ? hueOf(at.pt.typeId) : 0;
       const col = at ? typeColorOf(currentProject(), at.pt.typeId, getRepo().prefs?.shilutColors || []) : null;
       const mark = at ? checkMark(at.pt) : null;
-      const stuck = at ? !!infoOf(at.pt)?.shilut : false; const have = at ? (at.pt.shHave || []).includes(at.i) : false;
+      const stuck = at ? stuckPortsOf(at.pt, state.ctx).has(at.i) : false; const have = at ? (at.pt.shHave || []).includes(at.i) : false;
       const picked = !!(shMode && at && shMode.key === shKey(pnl) && shMode.sel.has(`${at.pt.id}:${at.i}`)) || !!(pickSel && at && pickSel.has(at.pt.id));
       return h('div', { title: at ? `${slotLabel(at.pt, at.i)} (${at.pt.typeId})${mark ? (mark.bad ? ' — проверка: не работает' : ' — проверена') : ''}${have ? ' — шилют есть' : ''}${stuck ? ' — шилют поклеен' : ''}` : 'свободно', onclick: () => cellTap(pnl, k + 1),
         style: { position: 'relative', cursor: 'pointer', border: `1px solid ${mv ? '#e0007a' : 'var(--line)'}`, borderWidth: mv ? '2px' : '1px', borderRadius: '6px', outline: mv ? '3px solid #e0007a' : picked ? '3px solid #0a84ff' : 'none', outlineOffset: '1px', padding: '2px 4px', minHeight: '38px',
@@ -387,6 +417,7 @@ function rackEditor(ui, cab) {
             if (!(await confirmDialog(`Панель ${pName(cab, pnl)}: поставить её точки (${here.length}) подряд по порядку номеров с 1-го порта? Пропуски (запас) исчезнут.`, { yes: 'Упорядочить' }))) return;
             const ids = new Set(here.map((x) => x.id)); const occ = new Set(); slots.forEach((v, k) => { if (!ids.has(v.pt.id)) occ.add(k); });
             const res = autoFill(here, state.ctx, [withS({ u: pnl.u }, sid)], occ, { blocked: blockedOf(r) });
+            if (res.left.length && !(await confirmDialog(`Не поместятся (закрытые порты): ${res.left.slice(0, 8).map((x) => x.label).join(', ')}${res.left.length > 8 ? '…' : ''} — ${res.left.length} точек станут нерасставленными. Продолжить?`, { yes: 'Продолжить', danger: true }))) return;
             savePanels(here.map((x) => [x.id, res.assign.get(x.id) || []])); ui.render();
           } }, '🔢'),
           h('button', { class: 'sec', style: { padding: '4px 10px' }, title: 'U и модель панели', onclick: () => formModal({ title: `Панель ${pName(cab, pnl)}: U и модель`, values: { u: pnl.u, m: pnl.m || '' },
