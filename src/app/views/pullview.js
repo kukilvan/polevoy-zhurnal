@@ -354,7 +354,8 @@ export async function openPull(id) {
     if (nom.length && !(await confirmDialog(`У точек без метража: ${nom.length} (${nom.slice(0, 5).map((p) => p.label).join(', ')}${nom.length > 5 ? '…' : ''}). Протяжка запишется без длины. Завершить всё равно?`, { yes: 'Завершить' }))) return;
     const c = state.ctx; const works = [...c.catalog.values()].filter((w) => w.active !== false && w.workType === 'Протяжка');
     const w = works.find((x) => list.every((p) => workFits(p, c, x))) || works.find((x) => workFits(list[0], c, x)) || works[0];
-    addWorkForPoints(list.map((p) => p.id), { workType: 'Протяжка', workId: w?.id, onSaved: (ids) => {
+    if (!w) { toast('В каталоге нет работы типа «Протяжка»'); return; }
+    addWorkForPoints(list.map((p) => p.id), { workType: 'Протяжка', workId: w.id, lockPull: true, onSaved: (ids) => {
       const fin = new Set([...(P.finished || []), ...ids]);
       const fx = pairsToMap(P.fixed); ids.forEach((id) => { const t = pullTotal(P, id); if (t != null) fx[id] = t; });
       set({ finished: [...fin], fixed: mapToPairs(fx), finishedAt: Date.now() });

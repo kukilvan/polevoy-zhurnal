@@ -5,8 +5,7 @@ import { allGroups } from '../typegroups.js';
 import { h, formModal, confirmDialog, toast, qtyList, openModal } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { newId } from '../repo.js';
-import { inheritedOfType, inheritedFromCables, duplicateWorks, installBinding, tablesOf, mainTable, hasDeviceId, libraryOps, migrateProject, auditRefs, buildContext, typePool, bundleFrom, libWith, addBundleOps, isSystemType } from '../../domain/index.js';
-import { installFields, describeBinding } from './install.js';
+import { inheritedOfType, inheritedFromCables, duplicateWorks, tablesOf, mainTable, hasDeviceId, libraryOps, migrateProject, auditRefs, buildContext, typePool, bundleFrom, libWith, addBundleOps, isSystemType } from '../../domain/index.js';
 import { projectForm } from './projects.js';
 import { themeLabel, setTheme, nextTheme } from '../theme.js';
 import { updateManagerTable, backupNow, organizeDrive } from './project.js';
@@ -101,7 +100,7 @@ export const REFS = {
     items: () => [...ctx().types.values()].filter((t) => !isSystemType(t)),
     line: (x) => [x.id, Array.isArray(x.devices) && x.devices.length
       || x.cables?.length ? `состав: ${[compText(x.devices), x.cables?.length ? `кабели точки ${x.cables.map((c) => `${c.cable}×${c.count}`).join(' + ')}` : ''].filter(Boolean).join(' + ')}${x.workIds?.length ? ` · на точку: ${x.workIds.map((w) => nameOf('catalog', w)).join(', ')}` : ''} · ${x.nameHe || '—'}`
-      : `${x.nameHe || '—'} · ${x.defaultCable || 'без кабеля'} ×${x.defaultCables ?? '?'} · установка: ${describeBinding(installBinding(x), ctx())} · старая схема`],
+      : `${x.nameHe || '—'} · ${x.defaultCable || 'без кабеля'} ×${x.defaultCables ?? '?'} · старая схема`],
     fields: ({ existing, created } = {}) => {
       // поля старой схемы (кабель по умолчанию, установка) — только у старых типов без состава; новый тип можно сохранить пустым
       const legacyType = !!existing && !Array.isArray(existing.devices) && !(existing.cables?.length);
@@ -123,18 +122,12 @@ export const REFS = {
         old({ key: 'defaultCables', label: 'Кабелей на точку', type: 'number', required: true }),
         { key: 'scanId', label: 'Серийный номер и MAC (со сканером)', type: 'checkbox', hint: 'Поля появятся в карточке точки этого типа. У камер и вайфая включено по умолчанию.' },
         old(custom('stages', 'Этапы точки (видны в таблице руководства)', STAGES.map((s) => ({ value: s, label: s })))),
-        ...installFields(ctx()).map(old),
-        old({ key: 'asDefault', label: 'Привязку установки сделать умолчанием для новых проектов', type: 'checkbox' }),
       ];
     },
-    defaults: { defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Проверка'], mode: 'none' },
-    toForm: (x) => ({ ...x, scanId: hasDeviceId(x), mode: installBinding(x).mode, workIds: installBinding(x).workIds, pointWorks: x.workIds || [], devices: Array.isArray(x.devices) ? x.devices : [], cables: Array.isArray(x.cables) ? x.cables : [] }),
+    defaults: { defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Проверка'] },
+    toForm: (x) => ({ ...x, scanId: hasDeviceId(x), pointWorks: x.workIds || [], devices: Array.isArray(x.devices) ? x.devices : [], cables: Array.isArray(x.cables) ? x.cables : [] }),
     prepare: (v, { existing } = {}) => (v.devices?.length || v.cables?.length || !(existing && !Array.isArray(existing.devices)) ? { scanId: !!v.scanId, nameHe: v.nameHe, group: String(v.group || '').trim(), devices: v.devices || [], cables: v.cables || [], workIds: v.pointWorks || [] } : {
-      scanId: !!v.scanId, nameHe: v.nameHe, group: String(v.group || '').trim(), defaultCable: v.defaultCable, defaultCables: v.defaultCables, stages: v.stages || [], devices: null, cables: [], workIds: [],
-      installMode: v.mode, installWorkIds: v.mode === 'works' ? (v.workIds || []) : [], isDoor: v.mode === 'config' }),
-    after: (v, id) => {
-      if (v.asDefault) getRepo().saveUserPrefs({ installDefaults: { ...(getRepo().prefs.installDefaults || {}), [id]: { mode: v.mode, workIds: v.mode === 'works' ? (v.workIds || []) : [] } } });
-    },
+      scanId: !!v.scanId, nameHe: v.nameHe, group: String(v.group || '').trim(), defaultCable: v.defaultCable, defaultCables: v.defaultCables, stages: v.stages || [], devices: null, cables: [], workIds: [], }),
     usage: (x) => [...ctx().points.values()].filter((p) => p.typeId === x.id).length,
   },
   cables: {
@@ -360,7 +353,6 @@ export function settingsView(ui) {
       row('🩺', 'Проверка справочников', 'Ссылки на удалённое, неиспользуемые устройства и работы', auditModal)),
     h('div', { class: 'card', style: { padding: 0 } },
       h('div', { class: 'group', style: { padding: '10px 14px 4px' } }, `Проект «${p.name}»`),
-      row('🔧', 'Привязка установки', 'Что считается установкой для каждого типа точек', () => ui.open('install')),
       row('👔', 'Для руководства', `Папка со ссылкой · таблиц: ${tablesOf(p).length} · основная: ${mainTable(p).name}`, () => ui.open('tables')),
       row('🗄', 'Шкафы и шильют', `План шкафа: точки cat7 по панелям и портам${Object.keys(p.racks || {}).length ? ` · планов: ${Object.keys(p.racks).length}` : ''}`, () => ui.open('racks')),
       row('📊', 'Таблицы', `Google Таблицы проекта «${p.name}»${(p.sheetLinks || []).length ? ` · добавлено: ${p.sheetLinks.length}` : ''}`, () => ui.open('sheets')),

@@ -13,7 +13,6 @@ import { state, subscribe, currentProject, ready, getRepo, setCurrentProject, pe
 import { projectsView, projectForm } from './views/projects.js';
 import { settingsView, refView, REFS } from './views/settings.js';
 import { membersView } from './views/members.js';
-import { installView } from './views/install.js';
 import { PENDING } from './google.js';
 import { onPendingChange, onReadChange, readStatus, readsResetAt, setSnapProvider, rejectedList, onRejectedChange, dropRejected, onWriteWarn, DAILY_WRITE_LIMIT } from './repo.js';
 import { asText } from '../log.js';
@@ -39,7 +38,7 @@ import { soonView } from './views/soon.js';
 const TABS = [
   ['project', 'Проект', '🏗'], ['meter', 'Точки', '📏'], ['todos', 'Дела', '✅'], ['journal', 'Журнал', '📒'], ['doh', 'Дохот', '📝'], ['settings', 'Настройки', '⚙️'],
 ];
-const SCREEN_TITLES = { projects: 'Все проекты', month: 'Месяц', history: 'История', import: 'Импорт', install: 'Привязка установки', ref: 'Справочник', members: 'Участники', tables: 'Для руководства', racks: 'Шкафы и шильют', sheets: 'Таблицы', guide: 'Как пользоваться', log: 'Журнал событий' };
+const SCREEN_TITLES = { projects: 'Все проекты', month: 'Месяц', history: 'История', import: 'Импорт', ref: 'Справочник', members: 'Участники', tables: 'Для руководства', racks: 'Шкафы и шильют', sheets: 'Таблицы', guide: 'Как пользоваться', log: 'Журнал событий' };
 
 export function createShell({ user, onLogout, diag }) {
   const root = document.getElementById('app');
@@ -80,7 +79,6 @@ export function createShell({ user, onLogout, diag }) {
     if (!currentProject()) return projectView(ui); // «Создать проект»
     if (!ready()) return h('div', { class: 'empty' }, 'Загрузка данных проекта…');
     if (ui.screen === 'sheets') return sheetsView(ui);
-    if (ui.screen === 'install') return installView();
     if (ui.screen === 'ref') return refView();
     if (ui.screen === 'members') return membersView(ui);
     if (ui.screen === 'tables') return tablesView(ui);

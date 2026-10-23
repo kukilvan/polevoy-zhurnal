@@ -146,6 +146,7 @@ function entryForm(day, entry, preset) {
   const repo = getRepo(); const pid = currentProject().id; const ctx = state.ctx;
   const catalog = [...ctx.catalog.values()].filter((w) => w.active !== false);
   const workOf = (v) => ctx.catalog.get(v.workId);
+  const lock = !entry && !!preset?.lockPull;   // «Завершить протяжку»: тип и работа не выбираются — только протяжка
   // что ждёт точка: работа подходит ей и ещё не сделана (правка записи: её собственные работа и точки остаются)
   const appl = (pt, w) => workApplicable(pt, ctx, w, infoOf);
   const ownPts = new Set(entry?.pointIds || []);
@@ -186,7 +187,7 @@ function entryForm(day, entry, preset) {
   })();
   let modal = null;
   const picker = pointsPicker({
-    fits: (pt, v) => !workOf(v) || okFor(pt, workOf(v)),
+    fits: (pt, v) => lock || !workOf(v) || okFor(pt, workOf(v)),
     onPick: (ids) => { // для протяжки подставляем кабель первой точки, если ещё не выбран
       const first = ctx.points.get(ids[0]);
       if (first && modal) modal.set?.('cableId', infoOf(first).cable);
@@ -221,12 +222,12 @@ function entryForm(day, entry, preset) {
   modal = formModal({
     title: entry ? 'Запись' : 'Добавить работу', submitLabel: 'Сохранить',
     fields: [
-      { key: 'workType', label: 'Тип работы', type: 'select', required: true, emptyLabel: 'Выберите…',
+      { key: 'workType', label: 'Тип работы', type: 'select', required: true, emptyLabel: 'Выберите…', visible: () => !lock,
         // только те типы, где есть работа, которую ждёт хотя бы одна из выбранных точек (если точки уже выбраны)
         optionsFn: (v) => WORK_TYPES.filter((t) => t === 'Текст' || t === entry?.workType || catalog.some((w) => w.workType === t && workOk(w, v)))
           .map((t) => ({ value: t, label: t === 'Текст' ? 'Своя строка (текст)' : t })) },
       { key: 'workId', label: 'Работа', type: 'select', emptyLabel: (v) => (chosenPts(v).length && catalog.some((w) => w.workType === v.workType) && !catalog.some((w) => w.workType === v.workType && workOk(w, v)) ? 'Нет работ, которые ждут эти точки' : 'Выберите…'),
-        visible: (v) => !!v.workType && !isText(v),
+        visible: (v) => !lock && !!v.workType && !isText(v),
         optionsFn: (v) => catalog.filter((w) => w.workType === v.workType && workOk(w, v)).map((w) => ({ value: w.id, label: w.name })) },
       { key: 'pointIds', label: 'Точки', type: 'custom', visible: (v) => !isText(v) && hasPointsWork(v),
         build: (api) => { picker.bind(api.values, api.changed); return picker; } },
@@ -263,6 +264,7 @@ function entryForm(day, entry, preset) {
       result: entry?.result ?? 'Работает', note: entry?.note,
     },
     onSubmit: (v) => {
+      if (lock) { v.workType = 'Протяжка'; v.workId = preset.workId; }
       let pointIds = (isText(v) || !hasPointsWork(v)) ? [] : (v.pointIds || []);
       if (isText(v)) { if (blank(v.note)) { toast('Введите текст строки'); return false; } }
       else {
@@ -273,7 +275,7 @@ function entryForm(day, entry, preset) {
         if (bad) { toast(`${bad[1]}: нужно число больше нуля`); return false; }
         // точки, которым выбранная работа не подходит, не записываем
         const work = workOf(v);
-        if (work && pointIds.length) {
+        if (work && pointIds.length && !lock) {
           const misfit = pointIds.filter((id) => { const pt = ctx.points.get(id); return pt && !workFits(pt, ctx, work) && !(entry?.pointIds || []).includes(id) && !(entry && entry.workId === v.workId); });
           if (misfit.length) { toast(`Работа «${work.name}» не подходит точкам: ${misfit.slice(0, 4).map((id) => ctx.points.get(id).label).join(', ')}${misfit.length > 4 ? '…' : ''}`); return false; }
         }
