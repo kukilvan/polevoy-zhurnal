@@ -6,23 +6,30 @@ service cloud.firestore {
 
     // Общий пул (типы точек, устройства, кабели, работы): видят все, меняет только администратор пула
     function poolAdmin() { return signedIn() && request.auth.token.email == 'erudit199867@gmail.com'; }
+    // Список разрешённых почт (участники ваших проектов): пишет только администратор, свою запись может прочитать сам человек.
+    // Только им разрешено создавать проекты и писать в общие коллекции — посторонний с любым Google-аккаунтом ничего не засорит.
+    match /allowed/{email} {
+      allow read: if signedIn() && (poolAdmin() || request.auth.token.email.lower() == email);
+      allow write: if poolAdmin();
+    }
+    function allowed() { return poolAdmin() || (signedIn() && exists(/databases/$(database)/documents/allowed/$(request.auth.token.email.lower()))); }
     match /pool_types/{id} { allow read: if signedIn(); allow write: if poolAdmin(); }
     match /pool_devices/{id} { allow read: if signedIn(); allow write: if poolAdmin(); }
     match /pool_cables/{id} { allow read: if signedIn(); allow write: if poolAdmin(); }
     match /pool_catalog/{id} { allow read: if signedIn(); allow write: if poolAdmin(); }
     // Инструкции (схемы, фото, PDF): запись о файле — общая, читают и добавляют все; сам файл лежит на Диске автора
-    match /pool_manuals/{id} { allow read, write: if signedIn(); }
+    match /pool_manuals/{id} { allow read: if signedIn(); allow write: if allowed(); }
     // Конфигурации дверей: новую разновидность записывает любой участник, удаляет (помечает deleted) только администратор пула
     match /pool_doorcfg/{id} {
       allow read: if signedIn();
-      allow create, update: if poolAdmin() || (signedIn() && request.resource.data.get('deleted', false) == false);
+      allow create, update: if poolAdmin() || (allowed() && request.resource.data.get('deleted', false) == false);
       allow delete: if poolAdmin();
     }
     // Входящие пула: приложение каждого пользователя присылает новое и изменённое; читает и решает только администратор
     match /pool_inbox/{id} {
       allow read, delete: if poolAdmin();
-      allow create: if signedIn();
-      allow update: if poolAdmin() || (signedIn()
+      allow create: if allowed();
+      allow update: if poolAdmin() || (allowed()
         && !request.resource.data.diff(resource.data).affectedKeys().hasAny(['status', 'seenHash', 'seenItem', 'seenAt']));
     }
 
@@ -34,7 +41,7 @@ service cloud.firestore {
     // Проекты: видят и меняют только участники (список memberUids в документе проекта).
     // Точки, дни, записи и т.д. лежат внутри проекта как подколлекции.
     match /projects/{projectId} {
-      allow create: if signedIn() && request.auth.uid in request.resource.data.memberUids;
+      allow create: if allowed() && request.auth.uid in request.resource.data.memberUids;
       // Приглашённый (по почте Google) видит проект и сам вступает или отказывается
       allow read: if signedIn() && (request.auth.uid in resource.data.memberUids
         || request.auth.token.email in resource.data.get('invitedEmails', []));
@@ -42,7 +49,7 @@ service cloud.firestore {
         // участник меняет проект; состав участников и приглашения — только создатель проекта
         (request.auth.uid in resource.data.memberUids
           && (request.auth.uid == resource.data.get('createdBy', request.auth.uid)
-              || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['memberUids', 'memberEmails', 'invitedEmails', 'removedMembers'])))
+              || !request.resource.data.diff(resource.data).affectedKeys().hasAny(['memberUids', 'memberEmails', 'invitedEmails', 'removedMembers', 'createdBy'])))
         || (request.auth.token.email in resource.data.get('invitedEmails', [])
             && request.resource.data.diff(resource.data).affectedKeys().hasOnly(
                  ['memberUids', 'memberEmails', 'invitedEmails', 'updatedAt', 'updatedBy', 'updatedByName', 'updatedAtServer'])

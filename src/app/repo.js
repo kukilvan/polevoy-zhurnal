@@ -279,6 +279,12 @@ export function createFirestoreBackend(db, uid) {
       writes.forEach((w) => { const ref = doc(db, `pool_${w.coll}`, docKey(w.id)); if (w.remove) batch.set(ref, { deleted: true, updatedAtServer: serverTimestamp() }, { merge: true }); else batch.set(ref, { ...w.data, updatedAtServer: serverTimestamp() }, { merge: true }); });
       return batch.commit();
     },
+    // Разрешённые почты (пишет только администратор пула): кому можно создавать проекты и писать в общие коллекции
+    allowEmails(list) {
+      const batch = writeBatch(db); addWrites(list.length);
+      list.forEach((e) => batch.set(doc(db, 'allowed', e), { email: e, at: Date.now() }, { merge: true }));
+      return batch.commit();
+    },
     // Входящие администратора пула: новое и изменённое из проектов (пишут все, читает только администратор)
     listenInbox(cb) {
       return deltaListen(collection(db, 'pool_inbox'), `pz.sync.${uid}.pool.inbox`, (d) => ({ ...d.data(), key: d.id }), 'Чтение входящих пула', cb);
@@ -438,6 +444,7 @@ export function createRepo(backend, user) {
       const e = String(email).trim().toLowerCase();
       if (!/^\S+@\S+\.\S+$/.test(e)) throw new Error('Некорректная почта');
       api.saveProject(project.id, {}, { arrayOps: { invitedEmails: { union: [e] } } });
+      api.allowEmails([e]);
     },
     // Подпись участника (видна всем в проекте). Ключ — почта без точек, т.к. точка в ключе Firestore неудобна
     renameMember(project, email, name) {
@@ -466,6 +473,14 @@ export function createRepo(backend, user) {
     },
     declineInvite(project) {
       api.saveProject(project.id, {}, { arrayOps: { invitedEmails: { remove: [emailOf(user)] } } });
+    },
+    // Администратор пула вносит в список разрешённых почты всех участников и приглашённых своих проектов (один раз на почту)
+    allowEmails(list) {
+      if (emailOf(user) !== 'erudit199867@gmail.com' || !backend.allowEmails) return;
+      const key = `pz.allowed.${user.uid}`; let done = []; try { done = JSON.parse(localStorage.getItem(key) || '[]'); } catch { /* пусто */ }
+      const fresh = [...new Set(list.map((e) => String(e || '').trim().toLowerCase()).filter((e) => /^\S+@\S+\.\S+$/.test(e) && !done.includes(e)))];
+      if (!fresh.length) return;
+      Promise.resolve(backend.allowEmails(fresh)).then(() => { try { localStorage.setItem(key, JSON.stringify([...done, ...fresh])); } catch { /* нет доступа */ } }).catch((e) => error('Список разрешённых почт', `${e.code || ''} ${e.message || e}`));
     },
     loadSettings: () => backend.loadSettings(),
     saveSettings: (p) => backend.saveSettings(p),

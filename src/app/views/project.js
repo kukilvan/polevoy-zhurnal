@@ -160,7 +160,7 @@ function autoBackupLine(p) {
   if (!p.serverBackupAt) return h('div', { class: 'mut', style: { width: '100%' } }, 'Автокопия на сервере ещё не запускалась');
   const t = new Date(p.serverBackupAt); const days = (Date.now() - t.getTime()) / 86400000;
   const when = t.toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' });
-  return h('div', { class: days > 4 ? 'pill st-bad' : 'mut', style: { width: '100%' } }, days > 4 ? `⚠️ Автокопия давно не делалась (последняя: ${when})` : `🛡 Автокопия на сервере: ${when}`);
+  return h('div', { class: days > 4 ? 'pill st-bad' : 'mut', style: { width: '100%' } }, days > 4 ? `⚠️ Автокопия не делалась ${Math.floor(days)} дн. (последняя: ${when})` : `🛡 Автокопия на сервере: ${when}`);
 }
 
 function members(p, ui) {

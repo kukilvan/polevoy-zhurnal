@@ -42,7 +42,22 @@ let failed = 0;
 // ошибки выводим как аннотации GitHub (видны в сводке запуска и через API)
 const fail = (m, e) => { console.log(`::error::${m}: ${String(e?.stack || e).replace(/\n/g, ' | ')}`); failed += 1; };
 try {
+// Нужно ли вообще читать проект: если с прошлого успешного обновления ничего не менялось и ошибок нет — пропускаем
+// (один запрос «есть ли изменения» на коллекцию вместо чтения всех документов). Раз в 3 дня — полное обновление для надёжности.
+async function changedSince(ref, p) {
+  const since = p.serverTablesAt ? Date.parse(p.serverTablesAt) : 0;
+  if (process.env.FULL === '1' || !since || now - since > 3 * 864e5) return true;
+  if (Number(p.updatedAt) > since - 60e3) return true;
+  if ((p.tables || []).some((t) => t.serverError) || p.rackTable?.serverError || (p.drawings || []).some((d) => d.numberedError)) return true;
+  if (Object.values(p.managers?.drawings || {}).some((m) => m?.error)) return true;
+  const ts = admin.firestore.Timestamp.fromMillis(since - 30 * 60e3);
+  for (const col of NEED) { if (!(await ref.collection(col).where('updatedAtServer', '>', ts).limit(1).get()).empty) return true; }
+  return false;
+}
 for (const ref of await db.collection('projects').listDocuments()) {
+  const head = (await ref.get()).data() || {};
+  if (isDeleted(head) || head.archived) continue;
+  if (!(await changedSince(ref, head))) { console.log(`  - ${head.name}: без изменений с прошлого раза — пропущен`); continue; }
   const { project, data } = await readProject(ref, NEED);
   if (isDeleted(project) || project.archived) continue; // архивные проекты не обновляем
   // адрес сервера записываем в проект: приложение откроет ему доступ к файлам таблиц
@@ -60,12 +75,13 @@ for (const ref of await db.collection('projects').listDocuments()) {
     if (patch) await db.runTransaction(async (tx) => { const fresh = { id: ref.id, ...(await tx.get(ref)).data() }; tx.set(ref, { rackTable: { ...(fresh.rackTable || {}), ...patch } }, { merge: true }); });
     report.forEach((l) => console.log(l.includes('ОШИБКА') ? `::warning::${project.name}: ${l}` : `  - ${l}`));
   }
-  if (!autoTables(project).length) { console.log(`${project.name}: нет таблиц для автообновления`); continue; }
+  if (!autoTables(project).length) { await ref.set({ serverTablesAt: now.toISOString() }, { merge: true }); console.log(`${project.name}: нет таблиц для автообновления`); continue; }
   const { patches, report } = await updateProjectTables(api, project, data, now);
   await db.runTransaction(async (tx) => {
     const fresh = { id: ref.id, ...(await tx.get(ref)).data() };
     tx.set(ref, { tables: applyPatches(fresh, patches) }, { merge: true });
   });
+  await ref.set({ serverTablesAt: now.toISOString() }, { merge: true });
   console.log(`${project.name}:`);
   report.forEach((l) => console.log(l.includes('ОШИБКА') ? `::warning::${project.name}: ${l}` : `  - ${l}`));
 }

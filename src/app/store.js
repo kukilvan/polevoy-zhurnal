@@ -76,6 +76,7 @@ export function start(r) {
   unsubProjects = repo.listenProjects((docs) => {
     state.projects = docs; state.projectsLoaded = true;
     const live = liveProjects();
+    try { repo.allowEmails(live.flatMap((p) => [...(p.memberEmails || []), ...(p.invitedEmails || [])])); } catch { /* не критично */ }
     syncAllDays(live);
     // только что созданный проект может ещё не прийти в список — не уходим с него
     if (state.pendingProjectId && state.pendingProjectId === state.currentProjectId) {
