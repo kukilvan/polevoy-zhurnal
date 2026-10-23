@@ -16,12 +16,13 @@ const val = (pull, key, id) => { const v = pairsToMap(pull?.[key])[id]; return v
 export const isMeasured = (pull, id) => val(pull, 'kept', id) != null || val(pull, 'meters', id) != null;
 /** Итоговый метраж точки в протяжке (до шкафа + свой; или оставленный из карточки), иначе null */
 export function pullTotal(pull, id) {
+  const fx = val(pull, 'fixed', id); if (fx != null) return Number(fx); // протянутая точка — итог зафиксирован
   const k = val(pull, 'kept', id); if (k != null) return Number(k);
   const m = val(pull, 'meters', id); if (m == null) return null;
   return (Number(pull.base) || 0) + Number(m);
 }
-export function pullStatus(pull) {
-  const all = ids(pull); const fin = new Set(pull?.finished || []);
+export function pullStatus(pull, exists) {
+  const all = exists ? ids(pull).filter((id) => exists(id) || (pull?.finished || []).includes(id)) : ids(pull); const fin = new Set(pull?.finished || []);
   if (fin.size) return all.every((id) => fin.has(id)) ? 'Завершена' : 'Завершена частично';
   if (!all.length) return 'Заготовка';
   const m = all.filter((id) => isMeasured(pull, id)).length;
@@ -44,4 +45,20 @@ export function pullTitle(pull) {
   const d = new Date(pull?.createdAt || 0);
   const t = d.toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' }).replace(',', '');
   return `${pull?.name || 'Протяжка'} — ${t}`;
+}
+
+/** Копия протяжки, которую другой телефон сохранил позже: берём у неё то, чего у меня нет (чужой метраж, «протянуто») */
+export function mergeRemote(mine, remote) {
+  if (!remote) return mine;
+  const out = { ...mine };
+  out.finished = [...new Set([...(mine.finished || []), ...(remote.finished || [])])];
+  for (const key of ['meters', 'kept', 'fixed']) {
+    const a = pairsToMap(mine[key]); const b = pairsToMap(remote[key]);
+    const other = key === 'meters' ? pairsToMap(mine.kept) : key === 'kept' ? pairsToMap(mine.meters) : {};
+    for (const [id, v] of Object.entries(b)) if (a[id] == null && other[id] == null && (key === 'fixed' || (mine.pointIds || []).includes(id))) a[id] = v;
+    out[key] = mapToPairs(a);
+  }
+  out.checked = [...new Set([...(mine.checked || []), ...(remote.checked || []).filter((id) => out.finished.includes(id))])];
+  out.pointIds = [...new Set([...(mine.pointIds || []), ...out.finished.filter((id) => !(mine.pointIds || []).includes(id) && (remote.pointIds || []).includes(id))])];
+  return out;
 }

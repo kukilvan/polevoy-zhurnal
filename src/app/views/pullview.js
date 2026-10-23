@@ -5,7 +5,7 @@ import { state, getRepo, currentProject, infoOf, subscribe } from '../store.js';
 import { newId } from '../repo.js';
 import { drawingsOf, drawingTitle, drawingFor, loadDrawing, posKey } from '../drawings.js';
 import { comparePoints, statusColor, workFits } from '../../domain/index.js';
-import { pullStatus, pullColor, pullTotal, isMeasured, nearestPoint, pullTitle, canDeletePull, pairsToMap, mapToPairs } from '../../domain/pull.js';
+import { pullStatus, pullColor, pullTotal, isMeasured, nearestPoint, pullTitle, canDeletePull, mergeRemote, pairsToMap, mapToPairs } from '../../domain/pull.js';
 import { createViewer } from './planview.js';
 import { makeWorker } from './tohnitview.js';
 import { outline, placeTags, tagOf, shOf, isText } from './planmodal.js';
@@ -24,7 +24,7 @@ function localAll(pid) {
   try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (k && k.startsWith(`pz.pull.${pid}.`)) { const v = JSON.parse(localStorage.getItem(k) || 'null'); if (v?.id) out.push(v); } } } catch { /* ok */ }
   return out;
 }
-const FIELDS = ['name', 'createdAt', 'drawingId', 'screen', 'curId', 'pad', 'pointIds', 'base', 'meters', 'kept', 'checked', 'finished', 'finishedAt', 'savedAt'];
+const FIELDS = ['name', 'createdAt', 'drawingId', 'screen', 'curId', 'pad', 'pointIds', 'base', 'meters', 'kept', 'checked', 'finished', 'fixed', 'finishedAt', 'savedAt'];
 const pick = (p) => Object.fromEntries(FIELDS.map((k) => [k, p[k] === undefined ? null : p[k]]));
 /** Все протяжки проекта: сервер + телефон (берётся более свежая копия) */
 export function allPulls() {
@@ -54,7 +54,7 @@ export function openPulls() {
       return { p, hits };
     }).filter((r) => !q || r.hits.length);
     list.replaceChildren(...(rows.length ? rows.map(({ p, hits }) => {
-      const st = pullStatus(p); const n = (p.pointIds || []).length; const m = (p.pointIds || []).filter((id) => isMeasured(p, id)).length; const f = (p.finished || []).length;
+      const st = pullStatus(p, (id) => state.ctx.points.has(id)); const n = (p.pointIds || []).length; const m = (p.pointIds || []).filter((id) => isMeasured(p, id)).length; const f = (p.finished || []).length;
       const fin = new Set(p.finished || []);
       return h('div', { class: 'card', style: { margin: '6px 0', padding: '10px', cursor: 'pointer', borderLeft: `6px solid ${pullColor(st)}` }, onclick: () => openPull(p.id) },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'flex-start' } },
@@ -109,10 +109,15 @@ export async function openPull(id) {
   let wk = null; let padClose = null;
   const close = openModal(`🧵 ${pullTitle(P)}`, body, { sticky: true, wide: true, onClose: () => { padClose?.(); wk?.stop(); } });
   if (!d) { body.replaceChildren(h('div', { class: 'empty' }, 'Чертёж этой протяжки убран из проекта.')); return; }
-  const set = (patch) => { P = savePull({ ...P, ...patch }); };
+  const set = (patch) => {
+    const remote = getPull(P.id); let base = P;
+    if (remote && (remote.savedAt || 0) > (P.savedAt || 0)) base = mergeRemote(P, remote); // другой телефон успел сохранить раньше
+    P = savePull({ ...base, ...patch });
+  };
   const ctx = () => state.ctx;
   const sheetPts = () => [...ctx().points.values()].filter((p) => p.pos && drawingFor(p)?.id === d.id);
   const chosen = () => (P.pointIds || []).map((x) => ctx().points.get(x)).filter(Boolean);
+  const meas = (id) => isMeasured(P, id) || (P.finished || []).includes(id);
   const meters = () => pairsToMap(P.meters); const kept = () => pairsToMap(P.kept);
   const pulledBefore = (p) => { const i = infoOf(p); return !!(i.pulled) && !(P.finished || []).includes(p.id); };
 
@@ -142,7 +147,7 @@ export async function openPull(id) {
       for (const p of list) {
         if ((p.pos.page || 0) !== api.page) continue;
         let col; let width = big ? 1.5 : 2;
-        if (P.screen === 'measure') { col = isMeasured(P, p.id) ? '#34c759' : '#ff9500'; width = 3; }
+        if (P.screen === 'measure') { col = meas(p.id) ? '#34c759' : '#ff9500'; width = 3; }
         else col = infoOf(p).pulled ? '#b0b0b0' : statusColor(infoOf(p).status);
         outline(g, api, p.pos, col, { width });
         if (P.screen === 'select' && s.has(p.id)) outline(g, api, p.pos, '#00b7ff', { width: 3, pad: 1.5 + 3 / api.view.s });
@@ -197,7 +202,7 @@ export async function openPull(id) {
   // ---- шаг 2: «Выбрано N» + «До шкафа» ----
   let showList = false;
   function baseScreen() {
-    const pts = chosen().sort(comparePoints);
+    const pts = chosen().sort(comparePoints); const cabs = [...new Set(pts.map((p) => p.cabinet || '').filter(Boolean))];
     const inp = h('input', { type: 'text', inputmode: 'numeric', pattern: '[0-9]*', value: P.base ?? '', placeholder: '0', style: { fontSize: '22px', width: '120px', textAlign: 'center' } });
     const go = () => {
       const v = inp.value.trim() === '' ? 0 : Math.round(Number(inp.value.replace(',', '.')));
@@ -206,7 +211,7 @@ export async function openPull(id) {
       set({ base: v, screen: 'measure' });
       if (changed) rewriteLengths();
       screen();
-      const next = nearestPoint(null, chosen().filter((p) => !isMeasured(P, p.id)));
+      const next = nearestPoint(null, chosen().filter((p) => !meas(p.id)));
       if (next) setTimeout(() => viewer.focus(next.pos.x, next.pos.y, next.pos.page || 0, Math.max(viewer.view.s, 1)), 50);
     };
     inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
@@ -215,6 +220,7 @@ export async function openPull(id) {
       h('button', { class: 'sec wide', style: { margin: '6px 0' }, onclick: () => { showList = !showList; screen(); } }, `Выбрано: ${pts.length} ${showList ? '▴' : '▾'}`),
       showList ? h('div', { class: 'card', style: { padding: 0 } }, ...pts.map((p) => h('div', { class: 'item' }, h('div', { class: 'name' }, p.label, pulledBefore(p) ? h('div', { class: 'sub' }, 'уже протянута') : null),
         h('button', { class: 'sec', style: { padding: '4px 10px' }, onclick: () => { toggle([p], false); screen(); } }, '✕')))) : null,
+      cabs.length > 1 ? h('div', { class: 'card', style: { background: '#fff4e0', margin: '6px 0' } }, `⚠ Выбраны точки из разных шкафов (${cabs.join(', ')}). «До шкафа» одно на всю протяжку — у части точек длина выйдет неверной. Лучше делать отдельные протяжки по шкафам.`) : null,
       h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => { set({ screen: 'select' }); screen(); } }, '➕ Добавить точки')),
       h('div', { class: 'card', style: { marginTop: '10px' } },
         h('div', {}, h('b', {}, 'До шкафа, м')),
@@ -225,14 +231,14 @@ export async function openPull(id) {
   }
   // «До шкафа» поменяли — метражи в карточках пересчитать
   function rewriteLengths() {
-    const ops = chosen().filter((p) => meters()[p.id] != null).map((p) => ({ coll: 'points', id: p.id, data: { length: pullTotal(P, p.id) } }));
+    const ops = chosen().filter((p) => meters()[p.id] != null && !(P.finished || []).includes(p.id)).map((p) => ({ coll: 'points', id: p.id, data: { length: pullTotal(P, p.id) } }));
     if (ops.length) { getRepo().save(currentProject().id, ops); toast(`Метраж пересчитан у точек: ${ops.length}`); }
   }
 
   // ---- шаг 3: метраж по точкам ----
   function measureScreen() {
-    const all = chosen(); const done = all.filter((p) => isMeasured(P, p.id)).length;
-    const next = () => { const left = all.filter((p) => !isMeasured(P, p.id)); const cur = ctx().points.get(P.curId); return nearestPoint(cur, left); };
+    const all = chosen(); const done = all.filter((p) => meas(p.id)).length;
+    const next = () => { const left = all.filter((p) => !meas(p.id)); const cur = ctx().points.get(P.curId); return nearestPoint(cur, left); };
     return [
       h('div', { class: 'mut', style: { fontSize: '13px' } }, h('b', {}, 'Шаг 3. Метраж'), ' — нажмите выделенную точку. Зелёные — с метражом, оранжевые — без.'),
       h('div', { style: { display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', margin: '6px 0' } },
@@ -248,6 +254,7 @@ export async function openPull(id) {
   // окно ввода метража: название, кусок чертежа вокруг точки, своя цифровая панель (системная клавиатура не выезжает)
   function numpad(pointId, skip = new Set()) {
     padClose?.(); const p = ctx().points.get(pointId); if (!p) return;
+    if ((P.finished || []).includes(p.id)) { toast(`${p.label}: уже протянута, метраж не меняется`); return; }
     focusId = p.id; set({ curId: p.id, pad: true }); viewer.draw();
     const own = meters()[p.id]; const kv = kept()[p.id];
     let val = own != null ? String(own) : '';
@@ -262,11 +269,11 @@ export async function openPull(id) {
       ...['1', '2', '3', '4', '5', '6', '7', '8', '9'].map((k) => btn(k, () => key(k))), btn('⌫', () => key('⌫')), btn('0', () => key('0')),
       h('button', { type: 'button', style: { fontSize: '20px', padding: '10px 0' }, onclick: () => enter() }, '✓ Ввод'));
     const goNext = (from, sk = skip) => {
-      const left = chosen().filter((x) => !isMeasured(P, x.id) && !sk.has(x.id) && x.id !== from.id);
+      const left = chosen().filter((x) => !meas(x.id) && !sk.has(x.id) && x.id !== from.id);
       const nx = nearestPoint(from, left);
       if (nx) { numpad(nx.id, sk); return; }
       padClose?.(); padClose = null;
-      if (chosen().every((x) => isMeasured(P, x.id))) { set({ screen: 'check', pad: false }); toast('Метраж у всех точек ✅'); screen(); }
+      if (chosen().every((x) => meas(x.id))) { set({ screen: 'check', pad: false }); toast('Метраж у всех точек ✅'); screen(); }
       else { set({ pad: false }); toast('Остались пропущенные — нажмите их на плане'); }
     };
     function enter() {
@@ -305,7 +312,7 @@ export async function openPull(id) {
         const g = cv.getContext('2d'); const sc = cv.width / (clip[2] - clip[0]);
         g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height); g.drawImage(img, 0, 0, (clip[2] - clip[0]) * sc, (clip[3] - clip[1]) * sc);
         const api = { view: { s: sc }, toScr: (x, y) => [(x - clip[0]) * sc, (y - clip[1]) * sc] };
-        chosen().filter((x) => (x.pos.page || 0) === (p.pos.page || 0) && x.id !== p.id).forEach((x) => outline(g, api, x.pos, isMeasured(P, x.id) ? '#34c759' : '#ff9500', { width: 2 * dpr }));
+        chosen().filter((x) => (x.pos.page || 0) === (p.pos.page || 0) && x.id !== p.id).forEach((x) => outline(g, api, x.pos, meas(x.id) ? '#34c759' : '#ff9500', { width: 2 * dpr }));
         outline(g, api, p.pos, '#e0007a', { width: 4 * dpr, pad: 3 });
       } catch { /* без картинки */ }
     });
@@ -317,8 +324,10 @@ export async function openPull(id) {
     const toDo = pts.filter((p) => chk.has(p.id) && !fin.has(p.id));
     const row = (p) => {
       const t = pullTotal(P, p.id); const f = fin.has(p.id);
-      const cb = h('input', { type: 'checkbox', checked: f || chk.has(p.id), disabled: f, style: { width: '26px', height: '26px', flex: 'none' }, onchange: (e) => {
-        const s = new Set(P.checked || []); if (e.target.checked) s.add(p.id); else s.delete(p.id); set({ checked: [...s] }); screen(); } });
+      const cb = h('input', { type: 'checkbox', checked: f || chk.has(p.id), disabled: f, style: { width: '26px', height: '26px', flex: 'none' }, onchange: async (e) => {
+        const on = e.target.checked;
+        if (on && t === 0 && !(await confirmDialog(`${p.label}: «до шкафа» 0 и метраж точки 0 — длина будет 0 м. Всё равно отметить?`, { yes: 'Отметить' }))) { screen(); return; }
+        const s = new Set(P.checked || []); if (on) s.add(p.id); else s.delete(p.id); set({ checked: [...s] }); screen(); } });
       return h('label', { class: 'item', style: { display: 'flex', alignItems: 'center', gap: '10px', background: f ? '#e8f8ec' : '' } },
         h('div', { class: 'name', style: { flex: 1 } }, p.label,
           h('div', { class: 'sub' }, f ? `✅ протянута${P.finishedAt ? ` ${new Date(P.finishedAt).toLocaleDateString('ru-RU')}` : ''}` : pulledBefore(p) ? '⚠ уже протянута раньше' : (t == null ? 'без метража' : kept()[p.id] != null ? 'метраж из карточки' : `${P.base ?? 0} + ${meters()[p.id]}`))),
@@ -335,12 +344,16 @@ export async function openPull(id) {
         fin.size ? h('div', { class: 'mut', style: { fontSize: '13px', marginTop: '4px' } }, `Уже протянуто в этой протяжке: ${fin.size} из ${pts.length}`) : null),
     ];
   }
-  function finish(list) {
+  async function finish(list) {
+    const nom = list.filter((p) => pullTotal(P, p.id) == null);
+    if (nom.length && !(await confirmDialog(`У точек без метража: ${nom.length} (${nom.slice(0, 5).map((p) => p.label).join(', ')}${nom.length > 5 ? '…' : ''}). Протяжка запишется без длины. Завершить всё равно?`, { yes: 'Завершить' }))) return;
     const c = state.ctx; const works = [...c.catalog.values()].filter((w) => w.active !== false && w.workType === 'Протяжка');
     const w = works.find((x) => list.every((p) => workFits(p, c, x))) || works.find((x) => workFits(list[0], c, x)) || works[0];
     addWorkForPoints(list.map((p) => p.id), { workType: 'Протяжка', workId: w?.id, onSaved: (ids) => {
-      const fin = new Set([...(P.finished || []), ...ids]); set({ finished: [...fin], finishedAt: Date.now() });
-      toast(pullStatus(P) === 'Завершена' ? 'Протяжка завершена ✅' : 'Протяжка завершена частично'); screen();
+      const fin = new Set([...(P.finished || []), ...ids]);
+      const fx = pairsToMap(P.fixed); ids.forEach((id) => { const t = pullTotal(P, id); if (t != null) fx[id] = t; });
+      set({ finished: [...fin], fixed: mapToPairs(fx), finishedAt: Date.now() });
+      toast(pullStatus(P, (id) => ctx().points.has(id)) === 'Завершена' ? 'Протяжка завершена ✅' : 'Протяжка завершена частично'); screen();
     } });
   }
 

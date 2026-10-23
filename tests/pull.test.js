@@ -75,3 +75,16 @@ test('что осталось: неисправная точка требует 
     journal: [{ id: 'j', entryId: 'e1', pointId: 'c1' }], cabinetSettings: [], catalog: CATALOG, types: POINT_TYPES, cables: CABLES, configs: CONFIGS, units: UNITS, culprits: CULPRITS, delayReasons: DELAY_REASONS });
   assert.ok(missingStages(pt, mk('Не работает')).includes('Проверка')); assert.ok(!missingStages(pt, mk('Работает')).includes('Проверка'));
 });
+
+test('протяжки: удалённая точка не мешает «Завершена», итог зафиксирован, слияние с чужой копией', async () => {
+  const { pullStatus, pullTotal, mergeRemote } = await import('../src/domain/pull.js');
+  const p = { pointIds: ['a', 'b'], finished: ['a'], base: 10, meters: [{ id: 'a', v: 5 }], fixed: [{ id: 'a', v: 15 }] };
+  assert.equal(pullStatus(p), 'Завершена частично');
+  assert.equal(pullStatus(p, (id) => id === 'a'), 'Завершена');
+  assert.equal(pullTotal({ ...p, base: 99 }, 'a'), 15);
+  const mine = { pointIds: ['a', 'b', 'c'], base: 0, meters: [{ id: 'b', v: 3 }], kept: [], finished: [], checked: [] };
+  const remote = { pointIds: ['a', 'b', 'c'], base: 0, meters: [{ id: 'c', v: 7 }, { id: 'b', v: 9 }], kept: [], finished: ['c'], checked: ['c'] };
+  const m = mergeRemote(mine, remote);
+  assert.deepEqual(m.meters.map((x) => `${x.id}:${x.v}`).sort(), ['b:3', 'c:7']);
+  assert.deepEqual(m.finished, ['c']);
+});
