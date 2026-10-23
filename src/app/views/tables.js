@@ -63,7 +63,7 @@ export function tableForm(table) {
       { key: 'layout', label: 'Раскладка', type: 'select', options: [{ value: 'one', label: 'Все точки одним листом' }, { value: 'perCabinet', label: 'Каждый шкаф на отдельном листе' }] },
       { key: 'summary', label: 'Итоги сверху (всего, протянуто, захивучено…)', type: 'checkbox' },
       { key: 'auto', label: 'Обновлять автоматически каждую ночь (в 2–3 часа)', type: 'checkbox', hint: 'Работает после первого «Обновить» в приложении и если проект открыт серверу (см. ниже на карточке)' },
-      { key: 'main', label: 'Основная таблица для руководства', type: 'checkbox', hint: 'Её обновляет кнопка на вкладке «Проект»', visible: () => !table?.main },
+      { key: 'main', label: 'Основная таблица для руководства', type: 'checkbox', hint: 'Её обновляет кнопка в ☰ → Данные → «Обновить таблицу для руководства»', visible: () => !table?.main },
     ],
     preview: (v) => {
       try { const r = buildReport(p, ctx, { ...base, ...v, lang: v.lang || 'he', layout: v.layout || 'one' }); return `Будет точек: ${r.pointCount}, столбцов: ${r.colCount}, листов: ${r.sheets.length}`; } catch (e) { return e.message; }
@@ -104,7 +104,7 @@ export function tablesView(ui) {
       t.link ? h('button', { class: 'sec', onclick: () => window.open(t.link, '_blank') }, '📊 Открыть') : null,
       h('button', { class: 'sec', onclick: () => tableForm(t) }, '✏️ Изменить')));
   return h('div', {}, managersFolderCard(ui),
-    h('div', { class: 'mut', style: { margin: '0 2px 10px' } }, 'Таблицу создаёт и заполняет приложение (значениями, без формул). Здесь выбирается, что в неё попадёт. Основная обновляется кнопкой на вкладке «Проект».'),
+    h('div', { class: 'mut', style: { margin: '0 2px 10px' } }, 'Таблицу создаёт и заполняет приложение (значениями, без формул). Здесь выбирается, что в неё попадёт. Основная обновляется в ☰ → Данные → «Обновить таблицу для руководства».'),
     h('div', { class: 'btns', style: { marginTop: 0, marginBottom: '10px' } }, h('button', { onclick: () => tableForm(null) }, '➕ Новая таблица')),
     list.map(card));
 }
