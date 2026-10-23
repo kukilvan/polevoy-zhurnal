@@ -2,6 +2,7 @@
 // на этом устройстве (без настройки) или своя база Firebase (мастер), либо подключение по ссылке-приглашению.
 import { h, toast } from './ui.js';
 import { APP_NAME, isMobile, isIOS, isStandalone, saveConnection, parseConnect, setLocalMode } from '../edition.js';
+import { LANGS, lang, setLang } from '../i18n/index.js';
 
 // Android/Chrome: системное окно «Установить приложение» (событие приходит до показа экрана — ловим сразу при загрузке)
 let installEvent = null;
@@ -16,6 +17,7 @@ export function startView({ onLocal, onFirebase, onConnected }) {
 
   function welcome() {
     show(
+      h('div', { style: { display: 'flex', gap: '6px', justifyContent: 'flex-end', marginTop: '6px' }, 'data-notr': '' }, ...LANGS.map(([k, name]) => h('button', { class: k === lang() ? '' : 'sec', style: { padding: '6px 10px' }, onclick: () => k !== lang() && setLang(k) }, name))),
       h('h1', {}, APP_NAME),
       card(p('Приложение для монтажников слаботочных систем: точки проекта, чертежи, протяжки, метраж, шкафы и шильют, ежедневные отчёты на русском и иврите. Работает без интернета.')),
       h('div', { class: 'btns' }, h('button', { onclick: () => (isMobile() && !isStandalone() ? installGate() : how()) }, '▶ Начать')),

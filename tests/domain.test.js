@@ -798,3 +798,14 @@ test('мастер своей базы: проверки по ответам Goo
   f = await m.checkFirestore(cfg, async () => { throw new Error('offline'); });
   assert.equal(f.db.ok, false);
 });
+
+test('словари переводов: шаблоны {} совпадают по числу подстановок', async () => {
+  const fs = await import('node:fs');
+  for (const f of fs.readdirSync(new URL('../src/i18n/src/', import.meta.url))) {
+    const j = JSON.parse(fs.readFileSync(new URL(`../src/i18n/src/${f}`, import.meta.url), 'utf8'));
+    for (const [ru, [en, he]] of Object.entries(j)) {
+      const n = (ru.match(/\{\}/g) || []).length;
+      for (const x of [en, he]) if (x) assert.equal((x.match(/\{\d*\}/g) || []).length, n, `${f}: «${ru}» → «${x}»`);
+    }
+  }
+});

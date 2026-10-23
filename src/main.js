@@ -1,5 +1,7 @@
 import './style.css';
 import './app/theme.js';
+import { startI18n } from './i18n/index.js';
+startI18n();
 import { initKeyboard } from './app/keyboard.js';
 initKeyboard();
 import { info, warn, error } from './log.js';

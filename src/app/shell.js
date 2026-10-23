@@ -5,6 +5,7 @@ import { projectWizard } from './views/wizard.js';
 import { startPool } from './pool.js';
 import { seedStarterPool } from './starter.js';
 import { APP_NAME, connection, isLocal } from '../edition.js';
+import { LANGS, lang, setLang } from '../i18n/index.js';
 import { startManuals } from './manuals.js';
 import { startDoorPool } from './doorpool.js';
 import { h, openModal, toast, confirmDialog, setShortcutsProvider } from './ui.js';
@@ -78,6 +79,7 @@ export function createShell({ user, onLogout, diag }) {
       item('🔤 Словарик', () => openGuide(ui, null, 'dict'))]),
       section('Настройки', [
       item(`🎨 Тема: ${themeLabel()} → ${themeLabel(nextTheme())}`, () => { setTheme(nextTheme()); render(); }),
+      item(`🌐 Язык: ${LANGS.find(([k]) => k === lang())[1]}`, langModal),
       item(`🔄 Обновить приложение (версия ${typeof __VERSION__ !== 'undefined' ? __VERSION__ : 'dev'}, сборка ${typeof __BUILD__ !== 'undefined' ? __BUILD__ : 'dev'})`, refreshApp)]),
       section('Данные', [
       isLocal() ? item('☁️ Своя база: работа с коллегами', () => import('./setup.js').then((m) => m.openWizardScreen())) : null,
@@ -92,6 +94,10 @@ export function createShell({ user, onLogout, diag }) {
       p ? item('📥 Импорт данных (замена всего проекта)', () => open('import')) : null]),
       h('div', { class: 'mut', style: { padding: '10px 4px' } }, user.displayName || user.email),
       item(isLocal() ? '🔄 Сменить режим работы' : '🚪 Выйти', onLogout)));
+  }
+
+  function langModal() {
+    const close = openModal('Язык', h('div', {}, ...LANGS.map(([k, name]) => h('button', { class: k === lang() ? '' : 'sec', style: { display: 'block', width: '100%', marginBottom: '8px' }, onclick: () => { close(); if (k !== lang()) setLang(k); } }, name))));
   }
 
   function invitesBanner() {
