@@ -155,6 +155,8 @@ export const REFS = {
     prepare: (v) => ({ name: v.name, nameHe: v.nameHe, cables: v.cables || [], workIds: v.workIds || [], doorPart: v.doorPart || null, short: String(v.short || '').trim() || null, color: v.color || null }),
     usage: (x) => usesOf(ctx(), 'devices', x.id).reduce((n, u) => n + u.n, 0), uses: (x) => usesOf(ctx(), 'devices', x.id),
   },
+  // вход во вкладку «Конфигурации дверей» (сама вкладка рисуется в doorcfgview.js)
+  configs: { title: 'Конфигурации дверей', coll: 'configs', items: () => [...ctx().configs.values()].filter((c) => Array.isArray(c.devices) && !c.deleted) },
   units: { title: 'Единицы измерения', coll: 'units', hint: 'Шт, м, мин… Показываются в доху.', idMode: 'name', nameLabel: 'Единица (русский)', heKey: 'he', heLabel: 'Единица (иврит)',
     items: () => [...ctx().units.values()], line: (x) => [x.id, x.he || '—'], usage: (x) => [...ctx().catalog.values()].filter((w) => w.unit === x.id).length },
   culprits: { title: 'Виновники простоя', coll: 'culprits', hint: 'Кто виноват в простое или задержке — выбирается в доху.', idMode: 'name', nameLabel: 'Виновник (русский)', heKey: 'he', heLabel: 'Виновник (иврит)',
@@ -253,8 +255,6 @@ function groupModal() {
 }
 
 
-// Перевод типов старой схемы на устройства: подробный предпросмотр и проверка «как будет после»
-
 export function refView() {
   const key = state.settingsRef; const def = REFS[key];
   if (key === 'configs') return doorConfigsView();
@@ -293,7 +293,7 @@ export function settingsView(ui) {
       row('🎨', `Тема: ${themeLabel()}`, 'Нажмите, чтобы переключить: тёмная → светлая → как в телефоне (только на этом устройстве)', () => { setTheme(nextTheme()); ui.render(); })),
     h('div', { class: 'card', style: { padding: 0 } },
       h('div', { class: 'group', style: { padding: '10px 14px 4px' } }, 'Выпадающие списки (справочники)'),
-      ['types', 'devices', 'cables', 'catalog', 'units', 'culprits', 'delayReasons'].map(ref),
+      ['types', 'devices', 'cables', 'catalog', 'configs', 'units', 'culprits', 'delayReasons'].map(ref),
       row('🧩', 'Каталог подписей (разбор чертежей)', `Моих правил: ${(getRepo().prefs?.tohnitLearned?.labels || []).length + (getRepo().prefs?.tohnitLearned?.skip || []).length} · общий для всех проектов`, catalogModal),
       row('🩺', 'Проверка справочников', 'Ссылки на удалённое, неиспользуемые устройства и работы', auditModal)),
     h('div', { class: 'card', style: { padding: 0 } },
