@@ -81,6 +81,7 @@ function dayForm(day, ui) {
     },
     extra: isNew ? [] : [{ label: 'Удалить день', kind: 'danger', closes: false, onClick: async (v, { close }) => {
       if (!(await confirmDialog('Удалить день вместе с записями? Его можно будет вернуть из истории.', { yes: 'Удалить', danger: true }))) return;
+      releasePorts(state.data.entries.filter((e) => e.dayId === day.id && !e.deleted));
       repo.remove(p.id, 'days', day.id); openDayId = null; close(); ui?.render();
     } }],
   });
@@ -313,7 +314,7 @@ function entryForm(day, entry, preset) {
     },
     extra: entry ? [{ label: 'Удалить', kind: 'danger', closes: false, onClick: async (v, { close }) => {
       if (!(await confirmDialog('Удалить запись? Её можно будет вернуть из истории.', { yes: 'Удалить', danger: true }))) return;
-      repo.remove(pid, 'entries', entry.id); close();
+      releasePorts(entry); repo.remove(pid, 'entries', entry.id); close();
     } }] : [],
   });
 }
@@ -360,6 +361,7 @@ export function markShilutForPoints(pointIds, portsByPoint = null) {
     // часть портов точки: в дох идёт число поклеенных портов, точка закроется, когда наберутся все
     const portQty = ids.map((pid) => ({ id: pid, v: (fresh.get(pid) || []).length })).filter((q) => portsByPoint && q.v > 0 && q.v < rackPortsOf(ctx.points.get(q.id), ctx));
     if (portQty.length) data.portQty = portQty;
+    if (portsByPoint) data.portIdx = ids.map((pid) => ({ id: pid, i: [...(fresh.get(pid) || [])] })).filter((q) => q.i.length);   // какие именно порты поклеены этой записью (чтобы при удалении записи снять их)
     ops.push({ coll: 'entries', id, data }); made.push([id, ids]);
   });
   if (portsByPoint) fresh.forEach((list, pid) => { const pt = ctx.points.get(pid); const all = new Set([...stuckPortsOf(pt, ctx), ...list]); ops.push({ coll: 'points', id: pid, data: { shStuck: [...all].sort((a, b) => a - b) } }); });
@@ -373,6 +375,22 @@ export function addWorkForPoint(pointId) {
   entryForm(day, null, { pointIds: [pointId] });
 }
 
+// запись «Шилют» по портам удаляется (или точка из неё убирается): её порты снова считаются не поклеенными
+function releasePorts(entries, onlyPoints = null) {
+  const drop = new Map();   // pointId -> порты, которые надо снять
+  [].concat(entries || []).forEach((entry) => {
+    if (!entry || entry.workType !== 'Шилют' || !Array.isArray(entry.portIdx)) return;
+    entry.portIdx.forEach((q) => { if (!onlyPoints || onlyPoints.has(q.id)) drop.set(q.id, [...(drop.get(q.id) || []), ...q.i]); });
+  });
+  const ops = [];
+  drop.forEach((list, id) => {
+    const pt = state.data.points.find((x) => x.id === id && !x.deleted); if (!pt) return;
+    const rest = (pt.shStuck || []).filter((i) => !list.includes(i));
+    if (rest.length !== (pt.shStuck || []).length) ops.push({ coll: 'points', id, data: { shStuck: rest } });
+  });
+  if (ops.length) getRepo().save(currentProject().id, ops);
+}
+
 // строки журнала записи: добавить недостающие, убрать лишние
 export function syncJournal(entryId, pointIds) {
   const repo = getRepo(); const pid = currentProject().id;
@@ -381,7 +399,9 @@ export function syncJournal(entryId, pointIds) {
   const live = new Map(have.filter((r) => !r.deleted).map((r) => [r.pointId, r]));
   const ops = pointIds.filter((pt) => !live.has(pt)).map((pt) => ({ coll: 'journal', id: `${entryId}_${pt}`, data: { entryId, pointId: pt, deleted: false } }));
   if (ops.length) repo.save(pid, ops);
-  have.filter((r) => !r.deleted && !want.has(r.pointId)).forEach((r) => repo.remove(pid, 'journal', r.id));
+  const gone = have.filter((r) => !r.deleted && !want.has(r.pointId));
+  if (gone.length) releasePorts(state.data.entries.find((e) => e.id === entryId), new Set(gone.map((r) => r.pointId)));
+  gone.forEach((r) => repo.remove(pid, 'journal', r.id));
 }
 
 // ---------- несколько работ сразу по одним и тем же точкам ----------

@@ -117,9 +117,14 @@ export async function openPull(id) {
   const ctx = () => state.ctx;
   const sheetPts = () => [...ctx().points.values()].filter((p) => p.pos && drawingFor(p)?.id === d.id);
   const chosen = () => (P.pointIds || []).map((x) => ctx().points.get(x)).filter(Boolean);
-  const meas = (id) => isMeasured(P, id) || (P.finished || []).includes(id);
+  const meas = (id) => isMeasured(P, id) || finSet().has(id);
   const meters = () => pairsToMap(P.meters); const kept = () => pairsToMap(P.kept);
-  const pulledBefore = (p) => { const i = infoOf(p); return !!(i.pulled) && !(P.finished || []).includes(p.id); };
+  // «протянута» в протяжке, но записи о протяжке в дохе уже нет (удалили) — точка снова не протянута
+  const finSet = () => new Set((P.finished || []).filter((id) => {
+    const pt = ctx().points.get(id); return !(pt && !infoOf(pt).pulled && Date.now() - (P.finishedAt || 0) > 60000);
+  }));
+  const lostFin = (id) => (P.finished || []).includes(id) && !finSet().has(id);
+  const pulledBefore = (p) => { const i = infoOf(p); return !!(i.pulled) && !finSet().has(p.id); };
 
   let buf; let o;
   try { buf = await loadDrawing(d); wk = makeWorker(); o = await wk.call('openDoc', { data: buf.slice(0) }); }
@@ -231,7 +236,7 @@ export async function openPull(id) {
   }
   // «До шкафа» поменяли — метражи в карточках пересчитать
   function rewriteLengths() {
-    const ops = chosen().filter((p) => meters()[p.id] != null && !(P.finished || []).includes(p.id)).map((p) => ({ coll: 'points', id: p.id, data: { length: pullTotal(P, p.id) } }));
+    const ops = chosen().filter((p) => meters()[p.id] != null && !finSet().has(p.id)).map((p) => ({ coll: 'points', id: p.id, data: { length: pullTotal(P, p.id) } }));
     if (ops.length) { getRepo().save(currentProject().id, ops); toast(`Метраж пересчитан у точек: ${ops.length}`); }
   }
 
@@ -254,7 +259,7 @@ export async function openPull(id) {
   // окно ввода метража: название, кусок чертежа вокруг точки, своя цифровая панель (системная клавиатура не выезжает)
   function numpad(pointId, skip = new Set()) {
     padClose?.(); const p = ctx().points.get(pointId); if (!p) return;
-    if ((P.finished || []).includes(p.id)) { toast(`${p.label}: уже протянута, метраж не меняется`); return; }
+    if (finSet().has(p.id)) { toast(`${p.label}: уже протянута, метраж не меняется`); return; }
     focusId = p.id; set({ curId: p.id, pad: true }); viewer.draw();
     const own = meters()[p.id]; const kv = kept()[p.id];
     let val = own != null ? String(own) : '';
@@ -320,7 +325,7 @@ export async function openPull(id) {
 
   // ---- шаг 4: чеклист «Протяжка» ----
   function checkScreen() {
-    const pts = chosen().sort(comparePoints); const chk = new Set(P.checked || []); const fin = new Set(P.finished || []);
+    const pts = chosen().sort(comparePoints); const chk = new Set(P.checked || []); const fin = finSet();
     const toDo = pts.filter((p) => chk.has(p.id) && !fin.has(p.id));
     const row = (p) => {
       const t = pullTotal(P, p.id); const f = fin.has(p.id);
@@ -330,7 +335,7 @@ export async function openPull(id) {
         const s = new Set(P.checked || []); if (on) s.add(p.id); else s.delete(p.id); set({ checked: [...s] }); screen(); } });
       return h('label', { class: 'item', style: { display: 'flex', alignItems: 'center', gap: '10px', background: f ? '#e8f8ec' : '' } },
         h('div', { class: 'name', style: { flex: 1 } }, p.label,
-          h('div', { class: 'sub' }, f ? `✅ протянута${P.finishedAt ? ` ${new Date(P.finishedAt).toLocaleDateString('ru-RU')}` : ''}` : pulledBefore(p) ? '⚠ уже протянута раньше' : (t == null ? 'без метража' : kept()[p.id] != null ? 'метраж из карточки' : `${P.base ?? 0} + ${meters()[p.id]}`))),
+          h('div', { class: 'sub' }, f ? `✅ протянута${P.finishedAt ? ` ${new Date(P.finishedAt).toLocaleDateString('ru-RU')}` : ''}` : lostFin(p.id) ? '⚠ запись о протяжке удалена — отметьте и завершите снова' : pulledBefore(p) ? '⚠ уже протянута раньше' : (t == null ? 'без метража' : kept()[p.id] != null ? 'метраж из карточки' : `${P.base ?? 0} + ${meters()[p.id]}`))),
         h('b', { style: { whiteSpace: 'nowrap' } }, t == null ? '— м' : `${t} м`), cb);
     };
     return [

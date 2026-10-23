@@ -138,6 +138,19 @@ function pickOrNewField(key, label, { empty = '—', hint = '' } = {}) {
   } };
 }
 
+// Что связано с точками: записи работ и незавершённые протяжки (для предупреждений при удалении, смене типа и шкафа)
+async function usageOf(ids) {
+  const set = new Set(ids);
+  const rec = ids.reduce((n, id) => n + (state.ctx.journalByPoint.get(id) || []).length, 0);
+  let pulls = [];
+  try {
+    const { allPulls } = await import('./pullview.js'); const { pullStatus, pullTitle } = await import('../../domain/pull.js');
+    pulls = allPulls().filter((p) => (p.pointIds || []).some((id) => set.has(id)) && pullStatus(p, (id) => state.ctx.points.has(id)) !== 'Завершена').map((p) => pullTitle(p));
+  } catch { /* без протяжек */ }
+  return { rec, pulls };
+}
+const pullsText = (u) => (u.pulls.length ? ` Точки лежат в незавершённых протяжках: ${u.pulls.slice(0, 3).join(', ')}${u.pulls.length > 3 ? '…' : ''}.` : '');
+
 export function pointForm(point, { onDone } = {}) {
   const repo = getRepo(); const pid = currentProject().id;
   const fields = [
@@ -159,7 +172,8 @@ export function pointForm(point, { onDone } = {}) {
   formModal({
     title: point ? point.label : 'Новая точка', fields, values: point ? { ...point, panelText: panelText(point, currentProject()) } : { typeId: typeOptions()[0]?.value, configId: doorPins()[0] },
     extra: point ? [{ label: 'Удалить', kind: 'danger', onClick: async () => {
-      if (!(await confirmDialog(`Удалить точку «${point.label}»? Её можно будет вернуть из истории.`, { yes: 'Удалить', danger: true }))) return false;
+      const u = await usageOf([point.id]);
+      if (!(await confirmDialog(`Удалить точку «${point.label}»? Её можно будет вернуть из истории.${u.rec ? ` ⚠ У неё записей работ: ${u.rec} — из дохов, отчётов и таблиц она пропадёт.` : ''}${pullsText(u)}`, { yes: 'Удалить', danger: true }))) return false;
       repo.remove(pid, 'points', point.id); toast('Точка удалена'); onDone?.(); return true;
     } }] : [],
     onSubmit: async (v) => {
@@ -184,6 +198,14 @@ export function pointForm(point, { onDone } = {}) {
       if (bx) { toast(`Порт ${fmtPanelPort(bx, subNameOf(currentProject(), v.cabinet || '', bx.s))} закрыт крестиком`); return false; }
       const taken = slots.map((x) => ({ x, by: busy.get(`${v.cabinet || ''}|${slotKey(x)}`)?.[0]?.point })).find((t) => t.by);
       if (taken) { toast(`Порт ${fmtPanelPort(taken.x, subNameOf(currentProject(), v.cabinet || '', taken.x.s))} в шкафу ${v.cabinet || '(без шкафа)'} уже занят точкой ${taken.by.label}`); return false; }
+      if (point) {
+        const typeCh = v.typeId !== point.typeId; const cabCh = (v.cabinet || '') !== (point.cabinet || '');
+        if (typeCh || cabCh) {
+          const u = await usageOf([point.id]);
+          const warn = [typeCh && u.rec ? `У точки записей работ: ${u.rec}. У нового типа другие работы и кабели — сделанное может перестать засчитываться, а статус измениться.` : '', cabCh && u.pulls.length ? pullsText(u).trim() + ' Шкаф в протяжке станет смешанным.' : ''].filter(Boolean);
+          if (warn.length && !(await confirmDialog(`⚠ ${warn.join(' ')} Сохранить изменения?`, { yes: 'Сохранить' }))) return false;
+        }
+      }
       let clearHave = false;
       if (point && label !== point.label && printedPortsOf(point, state.ctx).length) {
         if (!(await confirmDialog(`У «${point.label}» шилют уже напечатан или поклеен со старой подписью. После переименования его надо перепечатать. Снять отметку «есть шилют» и продолжить?`, { yes: 'Снять и сохранить' }))) return false;
@@ -505,6 +527,14 @@ export function bulkEditForm(ids, done) {
         const bad = sel.find((pt) => { if (seenL.has(pt.label)) return true; seenL.add(pt.label); return [...state.ctx.points.values()].some((x) => !ids.includes(x.id) && sameLabelClash(x, { label: pt.label, cabinet: v.cabinet })); });
         if (bad) { toast(`«${bad.label}» уже есть в шкафу ${v.cabinet} — перенести нельзя`); return false; }
       }
+      {
+        const sel = ids.map((id) => state.ctx.points.get(id)).filter(Boolean);
+        const typeIds = v.typeId ? sel.filter((pt) => pt.typeId !== v.typeId).map((pt) => pt.id) : [];
+        const cabIds = v.cabinet ? sel.filter((pt) => (pt.cabinet || '') !== v.cabinet).map((pt) => pt.id) : [];
+        const ut = typeIds.length ? await usageOf(typeIds) : { rec: 0, pulls: [] }; const uc = cabIds.length ? await usageOf(cabIds) : { rec: 0, pulls: [] };
+        const warn = [ut.rec ? `У точек со сменой типа записей работ: ${ut.rec}. У нового типа другие работы и кабели — сделанное может перестать засчитываться.` : '', uc.pulls.length ? pullsText(uc).trim() + ' Шкаф в протяжке станет смешанным.' : ''].filter(Boolean);
+        if (warn.length && !(await confirmDialog(`⚠ ${warn.join(' ')} Применить?`, { yes: 'Применить' }))) return false;
+      }
       let clearPanel = new Set();
       if (v.cabinet) {   // порты панели переезжают вместе с точкой: если в новом шкафу они заняты или закрыты крестиком — предупредить
         const sel = ids.map((id) => state.ctx.points.get(id)).filter((pt) => pt && panelOf(pt).length && (pt.cabinet || '') !== v.cabinet);
@@ -570,7 +600,8 @@ export function meterView(ui) {
         h('button', { disabled: !ids.length, onclick: () => bulkEditForm(ids, () => { selected.clear(); selMode = false; ui.render(); }) }, '✏️ Изменить'),
         h('button', { disabled: !ids.length, onclick: () => renameForm(ids, () => { selected.clear(); selMode = false; ui.render(); }) }, '🏷 Переименовать'),
         h('button', { class: 'danger', disabled: !ids.length, onclick: async () => {
-          if (!(await confirmDialog(`Удалить точек: ${ids.length}? Их можно будет вернуть из истории.`, { yes: 'Удалить', danger: true }))) return;
+          const u = await usageOf(ids);
+          if (!(await confirmDialog(`Удалить точек: ${ids.length}? Их можно будет вернуть из истории.${u.rec ? ` ⚠ У них записей работ: ${u.rec} — из дохов, отчётов и таблиц они пропадут.` : ''}${pullsText(u)}`, { yes: 'Удалить', danger: true }))) return;
           const repo = getRepo(); const pid = currentProject().id;
           ids.forEach((id) => repo.remove(pid, 'points', id)); toast(`Удалено точек: ${ids.length}`); selected.clear(); selMode = false; ui.render();
         } }, '🗑 Удалить')),
