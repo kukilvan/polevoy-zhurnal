@@ -1,1 +1,1766 @@
-{"format":"polevoy-starter-pool-1","pool":{}}
+{
+ "format": "polevoy-starter-pool-1",
+ "createdAt": "2026-10-23T17:01:14.083Z",
+ "from": "2026-10-23_1303",
+ "pool": {
+  "types": [
+   {
+    "id": "TV",
+    "workIds": [],
+    "cables": [],
+    "devices": [
+     {
+      "deviceId": "DV_TV",
+      "count": 1
+     }
+    ],
+    "defaultCable": "cat7",
+    "nameHe": "נקודת TV",
+    "stages": [
+     "Протяжка",
+     "Хивут",
+     "Проверка",
+     "Шилют"
+    ],
+    "isDoor": false,
+    "defaultCables": 1,
+    "installWorkIds": [],
+    "installMode": "none"
+   },
+   {
+    "id": "Бакар",
+    "workIds": [],
+    "cables": [],
+    "devices": [
+     {
+      "deviceId": "DV_BAKAR",
+      "count": 1
+     }
+    ],
+    "scanId": false,
+    "installWorkIds": [
+     "EX_TBOX"
+    ],
+    "defaultCable": "cat7",
+    "nameHe": "בקר",
+    "stages": [
+     "Протяжка",
+     "Хивут",
+     "Установка",
+     "Проверка",
+     "Шилют"
+    ],
+    "isDoor": false,
+    "defaultCables": 2,
+    "installMode": "works"
+   },
+   {
+    "id": "Вайфай",
+    "workIds": [],
+    "cables": [],
+    "devices": [
+     {
+      "count": 1,
+      "deviceId": "DV_AP"
+     }
+    ],
+    "installWorkIds": [
+     "INS_AP"
+    ],
+    "defaultCable": "cat7",
+    "nameHe": "אקספוינט",
+    "stages": [
+     "Протяжка",
+     "Хивут",
+     "Установка",
+     "Проверка",
+     "Шилют"
+    ],
+    "isDoor": false,
+    "defaultCables": 1,
+    "installMode": "works"
+   },
+   {
+    "id": "Галай",
+    "workIds": [],
+    "cables": [],
+    "devices": [
+     {
+      "deviceId": "DV_GALAI",
+      "count": 1
+     }
+    ],
+    "scanId": false,
+    "installWorkIds": [
+     "INS_GALAI"
+    ],
+    "defaultCable": "6005",
+    "nameHe": "גלאי",
+    "stages": [
+     "Протяжка",
+     "Хивут",
+     "Установка"
+    ],
+    "isDoor": false,
+    "defaultCables": 1,
+    "installMode": "works"
+   },
+   {
+    "id": "Дверь",
+    "extraCables": [],
+    "workIds": [],
+    "cables": [],
+    "devices": [],
+    "scanId": false,
+    "installWorkIds": [],
+    "defaultCable": "6005",
+    "nameHe": "דלת",
+    "stages": [
+     "Протяжка",
+     "Хивут",
+     "Установка",
+     "Проверка"
+    ],
+    "isDoor": true,
+    "defaultCables": 3,
+    "installMode": "config",
+    "group": ""
+   },
+   {
+    "id": "Интерком",
+    "workIds": [],
+    "cables": [],
+    "devices": [
+     {
+      "count": 1,
+      "deviceId": "DV_INT"
+     }
+    ],
+    "scanId": false,
+    "nameHe": "אינטרקום",
+    "installWorkIds": [
+     "INS_INT"
+    ],
+    "installMode": "works"
+   },
+   {
+    "id": "Камера",
+    "workIds": [],
+    "cables": [],
+    "devices": [
+     {
+      "deviceId": "DV_CAM",
+      "count": 1
+     }
+    ],
+    "scanId": true,
+    "installWorkIds": [
+     "INS_CAM"
+    ],
+    "defaultCable": "cat7",
+    "nameHe": "מצלמה",
+    "stages": [
+     "Протяжка",
+     "Хивут",
+     "Установка",
+     "Проверка",
+     "Шилют"
+    ],
+    "isDoor": false,
+    "defaultCables": 1,
+    "installMode": "works"
+   },
+   {
+    "id": "Киборд",
+    "workIds": [],
+    "cables": [],
+    "devices": [
+     {
+      "count": 1,
+      "deviceId": "DV_KEYB"
+     }
+    ],
+    "scanId": false,
+    "nameHe": "קיבורד"
+   },
+   {
+    "id": "Кнопка на столе",
+    "workIds": [],
+    "cables": [
+     {
+      "cable": "6005",
+      "count": 1
+     }
+    ],
+    "devices": [
+     {
+      "deviceId": "DV_LPTIHA",
+      "count": 1
+     }
+    ],
+    "scanId": false,
+    "nameHe": "‏לחצן פתיחה שולחני"
+   },
+   {
+    "id": "Коре биометри",
+    "workIds": [],
+    "devices": [
+     {
+      "count": 1,
+      "deviceId": "DV_BIO"
+     }
+    ],
+    "scanId": false,
+    "nameHe": "קורא ביומטרי",
+    "installWorkIds": [
+     "INS_BIO"
+    ],
+    "installMode": "works"
+   },
+   {
+    "id": "Лахцан птиха",
+    "workIds": [],
+    "devices": [
+     {
+      "count": 1,
+      "deviceId": "DV_LPTIHA"
+     }
+    ],
+    "nameHe": "לחצן פתיחה",
+    "installWorkIds": [
+     "INS_LPTIHA"
+    ],
+    "installMode": "works"
+   },
+   {
+    "id": "Магнит индикация",
+    "workIds": [],
+    "cables": [
+     {
+      "count": 1,
+      "cable": "6005"
+     }
+    ],
+    "devices": [
+     {
+      "deviceId": "DV_MAGNIT",
+      "count": 1
+     }
+    ],
+    "scanId": false,
+    "nameHe": "‏מגנט אינדיקציה"
+   },
+   {
+    "id": "Оптика",
+    "workIds": [],
+    "cables": [],
+    "devices": [
+     {
+      "deviceId": "DV_FIBER",
+      "count": 1
+     }
+    ],
+    "defaultCable": "Оптика",
+    "nameHe": "סיב אופטי",
+    "stages": [
+     "Протяжка",
+     "Хивут",
+     "Проверка"
+    ],
+    "isDoor": false,
+    "defaultCables": 1
+   },
+   {
+    "id": "Телефон",
+    "workIds": [],
+    "cables": [
+     {
+      "count": 1,
+      "cable": "Телефон"
+     }
+    ],
+    "devices": [],
+    "scanId": false,
+    "nameHe": "‏טלפון",
+    "deleted": false,
+    "group": ""
+   },
+   {
+    "id": "Точка",
+    "workIds": [],
+    "cables": [],
+    "devices": [
+     {
+      "count": 1,
+      "deviceId": "DV_POINT"
+     }
+    ],
+    "defaultCable": "cat7",
+    "nameHe": "נקודת תקשורת",
+    "stages": [
+     "Протяжка",
+     "Хивут",
+     "Проверка",
+     "Шилют"
+    ],
+    "isDoor": false,
+    "defaultCables": 1
+   },
+   {
+    "id": "Тревожная кнопка",
+    "workIds": [],
+    "devices": [
+     {
+      "count": 1,
+      "deviceId": "DV_OB"
+     }
+    ],
+    "nameHe": "לחצן מצוקה",
+    "installWorkIds": [
+     "INS_OB"
+    ],
+    "installMode": "works"
+   },
+   {
+    "id": "Цофар - сирена",
+    "workIds": [],
+    "cables": [],
+    "devices": [
+     {
+      "count": 1,
+      "deviceId": "DV_uxft06"
+     }
+    ],
+    "scanId": false,
+    "nameHe": "‏צופר"
+   }
+  ],
+  "devices": [
+   {
+    "id": "DV_AP",
+    "workIds": [
+     "INS_AP"
+    ],
+    "cables": [
+     {
+      "count": 1,
+      "cable": "cat7"
+     }
+    ],
+    "nameHe": "אקסס פוינט",
+    "name": "Вайфай (аксэспоинт)"
+   },
+   {
+    "id": "DV_BAKAR",
+    "workIds": [
+     "EX_TBOX"
+    ],
+    "cables": [
+     {
+      "count": 2,
+      "cable": "cat7"
+     }
+    ],
+    "nameHe": "בקר",
+    "name": "Бакар"
+   },
+   {
+    "id": "DV_BIO",
+    "workIds": [
+     "INS_BIO"
+    ],
+    "cables": [],
+    "nameHe": "קורא ביומטרי",
+    "name": "Коре биометри",
+    "short": "биометри",
+    "doorPart": null
+   },
+   {
+    "id": "DV_CAM",
+    "workIds": [
+     "INS_CAM",
+     "T_KIVUN"
+    ],
+    "cables": [
+     {
+      "count": 1,
+      "cable": "cat7"
+     }
+    ],
+    "nameHe": "מצלמה",
+    "name": "Камера"
+   },
+   {
+    "id": "DV_EMAG",
+    "workIds": [
+     "INS_EMAG"
+    ],
+    "cables": [],
+    "nameHe": "אלקטרומגנט",
+    "name": "Электромагнит"
+   },
+   {
+    "id": "DV_FIBER",
+    "workIds": [],
+    "cables": [
+     {
+      "count": 1,
+      "cable": "Оптика"
+     }
+    ],
+    "nameHe": "סיב אופטי",
+    "name": "Оптика"
+   },
+   {
+    "id": "DV_GALAI",
+    "workIds": [
+     "INS_GALAI"
+    ],
+    "cables": [
+     {
+      "count": 1,
+      "cable": "6005"
+     }
+    ],
+    "nameHe": "גלאי",
+    "name": "Галай"
+   },
+   {
+    "id": "DV_INT",
+    "workIds": [
+     "INS_INT"
+    ],
+    "cables": [
+     {
+      "count": 1,
+      "cable": "6005"
+     },
+     {
+      "count": 1,
+      "cable": "cat7"
+     }
+    ],
+    "nameHe": "אינטרקום",
+    "name": "Интерком"
+   },
+   {
+    "id": "DV_KEYB",
+    "workIds": [
+     "INS_KEYB"
+    ],
+    "cables": [
+     {
+      "count": 1,
+      "cable": "6005"
+     }
+    ],
+    "nameHe": "קיבורד",
+    "name": "Киборд",
+    "short": null,
+    "doorPart": "none"
+   },
+   {
+    "id": "DV_KORE",
+    "workIds": [
+     "INS_KORE"
+    ],
+    "cables": [],
+    "nameHe": "קורא כרטיסים",
+    "name": "Коре картисим"
+   },
+   {
+    "id": "DV_LNIPUTZ",
+    "workIds": [
+     "INS_LNIPUTZ"
+    ],
+    "cables": [],
+    "nameHe": "לחצן ניפוץ",
+    "name": "Лахцан нипуц"
+   },
+   {
+    "id": "DV_LPTIHA",
+    "workIds": [
+     "INS_LPTIHA"
+    ],
+    "cables": [],
+    "nameHe": "לחצן פתיחה",
+    "name": "Лахцан птиха"
+   },
+   {
+    "id": "DV_MAGNIT",
+    "workIds": [
+     "INS_MAGNIT"
+    ],
+    "cables": [],
+    "nameHe": "מגנט אינדיקציה",
+    "name": "Магнит индикация"
+   },
+   {
+    "id": "DV_MANUL",
+    "workIds": [
+     "INS_MANUL"
+    ],
+    "cables": [],
+    "nameHe": "מנעול חשמלי",
+    "name": "Мануль хашмали"
+   },
+   {
+    "id": "DV_OB",
+    "workIds": [
+     "INS_OB"
+    ],
+    "cables": [
+     {
+      "count": 1,
+      "cable": "6005"
+     }
+    ],
+    "nameHe": "לחצן מצוקה",
+    "name": "Тревожная кнопка"
+   },
+   {
+    "id": "DV_POINT",
+    "workIds": [],
+    "cables": [
+     {
+      "count": 1,
+      "cable": "cat7"
+     }
+    ],
+    "nameHe": "נקודת תקשורת",
+    "name": "Точка связи"
+   },
+   {
+    "id": "DV_TV",
+    "workIds": [],
+    "cables": [
+     {
+      "count": 1,
+      "cable": "cat7"
+     }
+    ],
+    "nameHe": "נקודת TV",
+    "name": "Точка TV"
+   },
+   {
+    "id": "DV_uxft06",
+    "workIds": [
+     "EX_SIREN"
+    ],
+    "cables": [
+     {
+      "count": 1,
+      "cable": "6005"
+     }
+    ],
+    "nameHe": "‏צופר",
+    "name": "Цофар - сирена"
+   }
+  ],
+  "cables": [
+   {
+    "id": "6005",
+    "workIds": [
+     "HIV_DEV"
+    ],
+    "nameHe": "כבל 6005",
+    "accounting": "Метры"
+   },
+   {
+    "id": "cat7",
+    "nameHe": "כבל CAT7",
+    "accounting": "Точки",
+    "workIds": [
+     "W_poa7cm",
+     "HIV_KEY",
+     "CHK_FLUKE",
+     "SHL"
+    ]
+   },
+   {
+    "id": "Оптика",
+    "workIds": [
+     "SHL"
+    ],
+    "nameHe": "סיב אופטי",
+    "accounting": "Метры"
+   },
+   {
+    "id": "Телефон",
+    "nameHe": "‏כבל טלפון",
+    "accounting": "Точки",
+    "workIds": [
+     "W_hgqfqw",
+     "W_cvncwo"
+    ],
+    "deleted": false
+   }
+  ],
+  "catalog": [
+   {
+    "id": "CHK_DOOR",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "בדיקת דלת",
+    "name": "Проверка двери",
+    "workType": "Проверка",
+    "forTypes": [
+     "Дверь"
+    ]
+   },
+   {
+    "id": "CHK_FLUKE",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "בדיקת כבל Fluke",
+    "name": "Проверка кабеля Fluke",
+    "workType": "Проверка",
+    "forTypes": [
+     "TV",
+     "Бакар",
+     "Вайфай",
+     "Дверь МХ Биометри 3x6005 1xcat7",
+     "Дверь ЭМ Биометри 2x6005 1xcat7",
+     "Интерком",
+     "Камера",
+     "Точка"
+    ]
+   },
+   {
+    "id": "EX_ARON_HIV",
+    "multiplier": 1,
+    "active": true,
+    "unit": "мин",
+    "isDoorComponent": false,
+    "nameHe": "חיווט ארון בקרה",
+    "name": "Хивут арона бакары",
+    "workType": "Доп. работа",
+    "forTypes": []
+   },
+   {
+    "id": "EX_ARON_MEG",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "חיבור ארון בקרה במגשר",
+    "name": "Подключение арона бакары мегашером",
+    "workType": "Доп. работа",
+    "forTypes": []
+   },
+   {
+    "id": "EX_BATT",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "התקנת מצברים",
+    "name": "Установка аккумуляторов",
+    "workType": "Доп. работа",
+    "forTypes": []
+   },
+   {
+    "id": "EX_BRUSH",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "התקנת פאנל שערות",
+    "name": "Установка панели сеарот",
+    "workType": "Доп. работа",
+    "forTypes": []
+   },
+   {
+    "id": "EX_CABINET",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "התקנת ארון",
+    "name": "Установка шкафа",
+    "workType": "Доп. работа",
+    "forTypes": []
+   },
+   {
+    "id": "EX_COBRA",
+    "multiplier": 1,
+    "active": true,
+    "unit": "м",
+    "isDoorComponent": false,
+    "nameHe": "התקנת צינור קוברה",
+    "name": "Установка кобры",
+    "workType": "Доп. работа",
+    "forTypes": []
+   },
+   {
+    "id": "EX_KIDUAH",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "קידוח",
+    "name": "Кидуах",
+    "workType": "Доп. работа",
+    "forTypes": []
+   },
+   {
+    "id": "EX_KIDUAH_D",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "קידוח לדלת",
+    "name": "Кидуах для двери",
+    "workType": "Доп. работа",
+    "forTypes": []
+   },
+   {
+    "id": "EX_KUFSAT",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "התקנת קופסת חיבורים",
+    "name": "Установка куфсат хибурим",
+    "workType": "Доп. работа",
+    "forTypes": []
+   },
+   {
+    "id": "EX_KUFSAT_H",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "חיווט קופסת חיבורים",
+    "name": "Хивут куфсат хибурим",
+    "workType": "Доп. работа",
+    "forTypes": []
+   },
+   {
+    "id": "EX_MERIRON",
+    "multiplier": 1,
+    "active": true,
+    "unit": "м",
+    "isDoorComponent": false,
+    "nameHe": "התקנת מרירון",
+    "name": "Установка мерирона",
+    "workType": "Доп. работа",
+    "forTypes": []
+   },
+   {
+    "id": "EX_OPANEL",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "התקנת פאנל אופטי",
+    "name": "Установка оптической панели",
+    "workType": "Доп. работа",
+    "forTypes": []
+   },
+   {
+    "id": "EX_PANEL",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "התקנת פאנל",
+    "name": "Установка панели",
+    "workType": "Доп. работа",
+    "forTypes": []
+   },
+   {
+    "id": "EX_PAS",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "התקנת פס חשמל",
+    "name": "Установка пас хашмаль",
+    "workType": "Доп. работа",
+    "forTypes": []
+   },
+   {
+    "id": "EX_SHARSHUR",
+    "multiplier": 1,
+    "active": true,
+    "unit": "м",
+    "isDoorComponent": false,
+    "nameHe": "התקנת שרשרת",
+    "name": "Установка шаршура",
+    "workType": "Доп. работа",
+    "forTypes": []
+   },
+   {
+    "id": "EX_SIREN",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "התקנת צופר",
+    "name": "Установка сирены",
+    "workType": "Установка",
+    "forTypes": [
+     "Цофар - сирена"
+    ]
+   },
+   {
+    "id": "EX_SW_MEG",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "חיבור נקודות למתג במגשרים",
+    "name": "Подключение точек мегашерами к свитчу",
+    "workType": "Доп. работа",
+    "forTypes": []
+   },
+   {
+    "id": "EX_TAALA",
+    "multiplier": 1,
+    "active": true,
+    "unit": "м",
+    "isDoorComponent": false,
+    "nameHe": "התקנת תעלה",
+    "name": "Установка таалы",
+    "workType": "Доп. работа",
+    "forTypes": []
+   },
+   {
+    "id": "EX_TBOX",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "התקנת קופסת תקשורת",
+    "name": "Установка тикшоретной коробки",
+    "workType": "Установка",
+    "forTypes": [
+     "TV",
+     "Бакар",
+     "Вайфай",
+     "Камера",
+     "Точка"
+    ]
+   },
+   {
+    "id": "HIV_DEV",
+    "multiplier": 1,
+    "active": true,
+    "unit": "мин",
+    "isDoorComponent": false,
+    "nameHe": "חיווט בארון",
+    "name": "Хивут в шкафа бакары",
+    "workType": "Хивут",
+    "forTypes": [
+     "Галай",
+     "Дверь МХ 2 кабеля",
+     "Дверь МХ 3 кабеля",
+     "Дверь МХ Биометри 3x6005 1xcat7",
+     "Дверь ЭМ 2 кабеля",
+     "Дверь ЭМ 3 кабеля",
+     "Дверь ЭМ Биометри 2x6005 1xcat7",
+     "Киборд",
+     "Кнопка на столе",
+     "Коре биометри",
+     "Лахцан птиха",
+     "Магнит индикация",
+     "Тревожная кнопка",
+     "Цофар - сирена"
+    ]
+   },
+   {
+    "id": "HIV_KEY",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "חיווט קיסטון",
+    "name": "Хивут кистона на шетахе",
+    "workType": "Хивут",
+    "forTypes": [
+     "TV",
+     "Бакар",
+     "Вайфай",
+     "Дверь МХ Биометри 3x6005 1xcat7",
+     "Дверь ЭМ Биометри 2x6005 1xcat7",
+     "Интерком",
+     "Камера",
+     "Точка"
+    ]
+   },
+   {
+    "id": "INS_AP",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "התקנת נקודת Wi-Fi",
+    "name": "Установка вайфая",
+    "workType": "Установка",
+    "forTypes": [
+     "Вайфай"
+    ]
+   },
+   {
+    "id": "INS_BIO",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": true,
+    "nameHe": "קורא ביומטרי",
+    "name": "Коре биометри",
+    "workType": "Установка",
+    "forTypes": [
+     "Дверь"
+    ]
+   },
+   {
+    "id": "INS_CAM",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "התקנת מצלמה",
+    "name": "Установка камеры",
+    "workType": "Установка",
+    "forTypes": [
+     "Камера"
+    ]
+   },
+   {
+    "id": "INS_EMAG",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": true,
+    "nameHe": "התקנת אלקטרומגנט",
+    "name": "Электромагнит",
+    "workType": "Установка",
+    "forTypes": [
+     "Дверь"
+    ]
+   },
+   {
+    "id": "INS_GALAI",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "התקנת גלאי",
+    "name": "Установка галая",
+    "workType": "Установка",
+    "forTypes": [
+     "Галай"
+    ]
+   },
+   {
+    "id": "INS_INT",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "התקנת אינטרקום",
+    "name": "Установка интеркома",
+    "workType": "Установка",
+    "forTypes": [
+     "Интерком"
+    ]
+   },
+   {
+    "id": "INS_KEYB",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": true,
+    "nameHe": "התקנת קיבורד",
+    "name": "Киборд",
+    "workType": "Установка",
+    "forTypes": [
+     "Киборд"
+    ]
+   },
+   {
+    "id": "INS_KORE",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": true,
+    "nameHe": "קורא כרטיסים",
+    "name": "Коре картисим",
+    "workType": "Установка",
+    "forTypes": [
+     "Дверь"
+    ]
+   },
+   {
+    "id": "INS_LNIPUTZ",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": true,
+    "nameHe": "התקנת לחצן ניפוץ",
+    "name": "Лахцан нипуц",
+    "workType": "Установка",
+    "forTypes": [
+     "Дверь"
+    ]
+   },
+   {
+    "id": "INS_LPTIHA",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": true,
+    "nameHe": "התקנת לחצן פתיחה",
+    "name": "Лахцан птиха",
+    "workType": "Установка",
+    "forTypes": [
+     "Дверь"
+    ]
+   },
+   {
+    "id": "INS_MAGNIT",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": true,
+    "nameHe": "התקנת מגנט אינדיקציה",
+    "name": "Магнит индикация",
+    "workType": "Установка",
+    "forTypes": [
+     "Дверь"
+    ]
+   },
+   {
+    "id": "INS_MANUL",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": true,
+    "nameHe": "חיבור מנעול חשמלי",
+    "name": "Мануль хашмали",
+    "workType": "Установка",
+    "forTypes": [
+     "Дверь"
+    ]
+   },
+   {
+    "id": "INS_OB",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "התקנת לחצן מצוקה",
+    "name": "Установка тревожной кнопки",
+    "workType": "Установка",
+    "forTypes": [
+     "Тревожная кнопка"
+    ]
+   },
+   {
+    "id": "MOVE_CAM",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "העתקת מצלמה",
+    "name": "Перенос камеры",
+    "workType": "Перенос",
+    "forTypes": [
+     "Камера"
+    ]
+   },
+   {
+    "id": "MOVE_PT",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "העתקת נקודה",
+    "name": "Перенос точки",
+    "workType": "Перенос",
+    "forTypes": [
+     "TV",
+     "Бакар",
+     "Вайфай",
+     "Галай",
+     "Дверь МХ 3 кабеля",
+     "Дверь МХ Биометри 3x6005 1xcat7",
+     "Дверь ЭМ 2 кабеля",
+     "Дверь ЭМ Биометри 2x6005 1xcat7",
+     "Интерком",
+     "Камера",
+     "Киборд",
+     "Кнопка на столе",
+     "Коре биометри",
+     "Лахцан птиха",
+     "Оптика",
+     "Точка",
+     "Тревожная кнопка",
+     "Цофар - сирена"
+    ]
+   },
+   {
+    "id": "PR_PTS",
+    "multiplier": 1,
+    "active": true,
+    "unit": "по кабелю",
+    "isDoorComponent": false,
+    "nameHe": "השחלת כבלים",
+    "name": "Протяжка",
+    "workType": "Протяжка",
+    "forTypes": [
+     "TV",
+     "Бакар",
+     "Вайфай",
+     "Галай",
+     "Дверь МХ 3 кабеля",
+     "Дверь МХ Биометри 3x6005 1xcat7",
+     "Дверь ЭМ 2 кабеля",
+     "Дверь ЭМ Биометри 2x6005 1xcat7",
+     "Интерком",
+     "Камера",
+     "Киборд",
+     "Кнопка на столе",
+     "Коре биометри",
+     "Лахцан птиха",
+     "Оптика",
+     "Точка",
+     "Тревожная кнопка",
+     "Цофар - сирена"
+    ]
+   },
+   {
+    "id": "RE_PULL",
+    "multiplier": 1,
+    "active": true,
+    "unit": "точка",
+    "isDoorComponent": false,
+    "nameHe": "השחלה חוזרת של נקודה",
+    "name": "Перетяжка точки",
+    "workType": "Перетяжка",
+    "forTypes": [
+     "TV",
+     "Бакар",
+     "Вайфай",
+     "Галай",
+     "Дверь МХ 3 кабеля",
+     "Дверь МХ Биометри 3x6005 1xcat7",
+     "Дверь ЭМ 2 кабеля",
+     "Дверь ЭМ Биометри 2x6005 1xcat7",
+     "Интерком",
+     "Камера",
+     "Киборд",
+     "Кнопка на столе",
+     "Коре биометри",
+     "Лахцан птиха",
+     "Оптика",
+     "Точка",
+     "Тревожная кнопка",
+     "Цофар - сирена"
+    ]
+   },
+   {
+    "id": "SHL",
+    "multiplier": 1,
+    "active": true,
+    "unit": "мин",
+    "isDoorComponent": false,
+    "nameHe": "שילוט",
+    "name": "Шилют",
+    "workType": "Шилют",
+    "forTypes": [
+     "TV",
+     "Бакар",
+     "Вайфай",
+     "Камера",
+     "Оптика",
+     "Точка"
+    ]
+   },
+   {
+    "id": "T_ADRAHA",
+    "multiplier": 1,
+    "active": true,
+    "unit": "мин",
+    "isDoorComponent": false,
+    "nameHe": "הדרכה",
+    "name": "Адраха",
+    "workType": "Время",
+    "forTypes": []
+   },
+   {
+    "id": "T_CABINET",
+    "multiplier": 1,
+    "active": true,
+    "unit": "мин",
+    "isDoorComponent": false,
+    "nameHe": "סידור ארון",
+    "name": "Сидур шкафа",
+    "workType": "Время",
+    "forTypes": []
+   },
+   {
+    "id": "T_DOCS",
+    "multiplier": 1,
+    "active": true,
+    "unit": "мин",
+    "isDoorComponent": false,
+    "nameHe": "מילוי טבלאות ותיעוד",
+    "name": "Таблицы и документация",
+    "workType": "Время",
+    "forTypes": []
+   },
+   {
+    "id": "T_DOOR",
+    "multiplier": 1,
+    "active": true,
+    "unit": "мин",
+    "isDoorComponent": false,
+    "nameHe": "השחלת כבלים לדלתות",
+    "name": "Затяжка кабелей в двери",
+    "workType": "Время",
+    "forTypes": []
+   },
+   {
+    "id": "T_FAULT",
+    "multiplier": 1,
+    "active": true,
+    "unit": "мин",
+    "isDoorComponent": false,
+    "nameHe": "איתור תקלה",
+    "name": "Поиск неисправности",
+    "workType": "Время",
+    "forTypes": []
+   },
+   {
+    "id": "T_KIVUN",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "כיוון מצלמות",
+    "name": "Кивун камер",
+    "workType": "Проверка",
+    "forTypes": [
+     "Камера"
+    ]
+   },
+   {
+    "id": "T_MATERIAL",
+    "multiplier": 1,
+    "active": true,
+    "unit": "мин",
+    "isDoorComponent": false,
+    "nameHe": "קבלת חומרים",
+    "name": "Получение материала",
+    "workType": "Время",
+    "forTypes": []
+   },
+   {
+    "id": "T_REQUEST",
+    "multiplier": 1,
+    "active": true,
+    "unit": "мин",
+    "isDoorComponent": false,
+    "nameHe": "ביצוע בקשות מנהל הפרויקט",
+    "name": "Просьбы менахеля проекта",
+    "workType": "Время",
+    "forTypes": []
+   },
+   {
+    "id": "T_SIYUR",
+    "multiplier": 1,
+    "active": true,
+    "unit": "мин",
+    "isDoorComponent": false,
+    "nameHe": "סיור",
+    "name": "Сиюр",
+    "workType": "Время",
+    "forTypes": []
+   },
+   {
+    "id": "T_TASHTIT",
+    "multiplier": 1,
+    "active": true,
+    "unit": "мин",
+    "isDoorComponent": false,
+    "nameHe": "הכנת תשתית",
+    "name": "Таштит",
+    "workType": "Время",
+    "forTypes": []
+   },
+   {
+    "id": "T_WAIT",
+    "multiplier": 1,
+    "active": true,
+    "unit": "мин",
+    "isDoorComponent": false,
+    "nameHe": "המתנה",
+    "name": "Ожидание",
+    "workType": "Время",
+    "forTypes": []
+   },
+   {
+    "id": "W_4rsb6f",
+    "multiplier": 1,
+    "active": true,
+    "unit": "мин",
+    "isDoorComponent": false,
+    "nameHe": "‏חיווט קרונה",
+    "name": "Подключение к кроне",
+    "workType": "Время",
+    "forTypes": []
+   },
+   {
+    "id": "W_cvncwo",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "‏חיווט מתאם טלפון",
+    "name": "Хивут телефонного метаэма",
+    "workType": "Хивут",
+    "forTypes": []
+   },
+   {
+    "id": "W_hgqfqw",
+    "multiplier": 1,
+    "active": true,
+    "unit": "мин",
+    "isDoorComponent": false,
+    "nameHe": "חיווט קרונה",
+    "name": "Хивут кроны",
+    "workType": "Хивут",
+    "forTypes": [
+     "Телефон"
+    ]
+   },
+   {
+    "id": "W_poa7cm",
+    "multiplier": 1,
+    "active": true,
+    "unit": "шт",
+    "isDoorComponent": false,
+    "nameHe": "חיווט קיסטון",
+    "name": "Хивут кистона",
+    "workType": "Хивут",
+    "forTypes": [
+     "TV",
+     "Бакар",
+     "Вайфай",
+     "Дверь МХ Биометри 3x6005 1xcat7",
+     "Дверь ЭМ Биометри 2x6005 1xcat7",
+     "Интерком",
+     "Камера",
+     "Коре биометри"
+    ]
+   }
+  ],
+  "doorcfg": [
+   {
+    "id": "DC_13j7k7f",
+    "cables": [
+     {
+      "cable": "6005",
+      "count": 2
+     }
+    ],
+    "deleted": false,
+    "devices": [
+     {
+      "deviceId": "DV_MANUL",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_MAGNIT",
+      "count": 2
+     }
+    ],
+    "kind": "door",
+    "name": "МХ · 2 магнита · 6005×2"
+   },
+   {
+    "id": "DC_1avh8ow",
+    "cables": [
+     {
+      "cable": "6005",
+      "count": 3
+     },
+     {
+      "cable": "cat7",
+      "count": 1
+     }
+    ],
+    "deleted": false,
+    "devices": [
+     {
+      "deviceId": "DV_MANUL",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_BIO",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_MAGNIT",
+      "count": 2
+     }
+    ],
+    "kind": "door",
+    "name": "МХ · биометри · 2 магнита · 6005×3 + cat7×1"
+   },
+   {
+    "id": "DC_1bhwmzg",
+    "cables": [
+     {
+      "cable": "6005",
+      "count": 3
+     },
+     {
+      "cable": "cat7",
+      "count": 1
+     }
+    ],
+    "deleted": false,
+    "devices": [
+     {
+      "deviceId": "DV_EMAG",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_BIO",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_LPTIHA",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_LNIPUTZ",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_MAGNIT",
+      "count": 1
+     }
+    ],
+    "kind": "door",
+    "name": "ЭМ · биометри · птиха · нипуц · магнит · 6005×3 + cat7×1"
+   },
+   {
+    "id": "DC_1n3v6dp",
+    "cables": [
+     {
+      "cable": "6005",
+      "count": 3
+     }
+    ],
+    "deleted": false,
+    "devices": [
+     {
+      "deviceId": "DV_KORE",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_MAGNIT",
+      "count": 1
+     }
+    ],
+    "kind": "door",
+    "name": "коре · магнит · 6005×3"
+   },
+   {
+    "id": "DC_1pjhcd2",
+    "cables": [
+     {
+      "cable": "6005",
+      "count": 3
+     }
+    ],
+    "deleted": false,
+    "devices": [
+     {
+      "deviceId": "DV_EMAG",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_KORE",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_LPTIHA",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_LNIPUTZ",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_MAGNIT",
+      "count": 1
+     }
+    ],
+    "kind": "door",
+    "name": "ЭМ · коре · птиха · нипуц · магнит · 6005×3"
+   },
+   {
+    "id": "DC_1ptgy21",
+    "cables": [
+     {
+      "cable": "6005",
+      "count": 2
+     }
+    ],
+    "devices": [
+     {
+      "deviceId": "DV_EMAG",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_KORE",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_LPTIHA",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_LNIPUTZ",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_MAGNIT",
+      "count": 1
+     }
+    ],
+    "kind": "door",
+    "name": "ЭМ · коре · птиха · нипуц · магнит · 6005×2",
+    "deleted": false
+   },
+   {
+    "id": "DC_50doze",
+    "cables": [
+     {
+      "cable": "6005",
+      "count": 3
+     }
+    ],
+    "deleted": false,
+    "devices": [
+     {
+      "deviceId": "DV_MANUL",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_KORE",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_MAGNIT",
+      "count": 2
+     }
+    ],
+    "kind": "door",
+    "name": "МХ · коре · 2 магнита · 6005×3"
+   },
+   {
+    "id": "DC_bpbch",
+    "cables": [
+     {
+      "cable": "6005",
+      "count": 3
+     },
+     {
+      "cable": "cat7",
+      "count": 2
+     }
+    ],
+    "deleted": false,
+    "devices": [
+     {
+      "deviceId": "DV_EMAG",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_BIO",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_LPTIHA",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_LNIPUTZ",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_MAGNIT",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_INT",
+      "count": 1
+     }
+    ],
+    "kind": "door",
+    "name": "ЭМ · коре биометри · птиха · нипуц · магнит · интерком · 6005×3 + cat7×2"
+   },
+   {
+    "id": "DC_cvz60",
+    "cables": [
+     {
+      "cable": "6005",
+      "count": 2
+     }
+    ],
+    "deleted": false,
+    "devices": [
+     {
+      "deviceId": "DV_MANUL",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_KORE",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_MAGNIT",
+      "count": 1
+     }
+    ],
+    "kind": "door",
+    "name": "МХ · коре · магнит · 6005×2"
+   },
+   {
+    "id": "DC_l3ykdi",
+    "cables": [
+     {
+      "cable": "6005",
+      "count": 2
+     },
+     {
+      "cable": "cat7",
+      "count": 1
+     }
+    ],
+    "deleted": false,
+    "devices": [
+     {
+      "deviceId": "DV_MANUL",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_BIO",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_MAGNIT",
+      "count": 1
+     }
+    ],
+    "kind": "door",
+    "name": "МХ · биометри · магнит · 6005×2 + cat7×1"
+   },
+   {
+    "id": "DC_mvkuz",
+    "cables": [
+     {
+      "cable": "6005",
+      "count": 3
+     }
+    ],
+    "deleted": false,
+    "devices": [
+     {
+      "deviceId": "DV_MANUL",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_KORE",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_MAGNIT",
+      "count": 1
+     }
+    ],
+    "kind": "door",
+    "name": "МХ · коре · магнит · 6005×3"
+   },
+   {
+    "id": "DC_ni57dx",
+    "cables": [
+     {
+      "cable": "6005",
+      "count": 2
+     },
+     {
+      "cable": "cat7",
+      "count": 1
+     }
+    ],
+    "deleted": false,
+    "devices": [
+     {
+      "deviceId": "DV_EMAG",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_BIO",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_LPTIHA",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_LNIPUTZ",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_MAGNIT",
+      "count": 1
+     }
+    ],
+    "kind": "door",
+    "name": "ЭМ · биометри · птиха · нипуц · магнит · 6005×2 + cat7×1"
+   },
+   {
+    "id": "DC_qzv91j",
+    "cables": [
+     {
+      "cable": "6005",
+      "count": 3
+     },
+     {
+      "cable": "cat7",
+      "count": 1
+     }
+    ],
+    "deleted": false,
+    "devices": [
+     {
+      "deviceId": "DV_MANUL",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_BIO",
+      "count": 1
+     },
+     {
+      "deviceId": "DV_MAGNIT",
+      "count": 1
+     }
+    ],
+    "kind": "door",
+    "name": "МХ · биометри · магнит · 6005×3 + cat7×1"
+   }
+  ]
+ }
+}
