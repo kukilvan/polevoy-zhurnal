@@ -37,9 +37,9 @@ import { exportExcel } from './excel.js';
 import { mainTable } from '../domain/index.js';
 
 const TABS = [
-  ['project', 'Проект', '🏗'], ['meter', 'Точки', '📏'], ['todos', 'Дела и заметки', '✅'], ['journal', 'История', '📒'], ['doh', 'Отчёты', '📝'], ['settings', 'Ещё', '⚙️'],
+  ['project', 'Проект', '🏗'], ['meter', 'Точки', '📏'], ['todos', 'Дела и заметки', '✅'], ['doh', 'Отчёты', '📝'], ['settings', 'Ещё', '⚙️'],
 ];
-const SCREEN_TITLES = { projects: 'Все проекты', month: 'Отчёт за месяц', history: 'Откат записей', import: 'Импорт', ref: 'Справочник', members: 'Участники', tables: 'Для руководства', racks: 'Шкафы и шильют', sheets: 'Таблицы', guide: 'Как пользоваться', log: 'Журнал событий' };
+const SCREEN_TITLES = { projects: 'Все проекты', month: 'Отчёт за месяц', journal: 'История', history: 'Откат записей', import: 'Импорт', ref: 'Справочник', members: 'Участники', tables: 'Для руководства', racks: 'Шкафы и шильют', sheets: 'Таблицы', guide: 'Как пользоваться', log: 'Журнал событий' };
 
 export function createShell({ user, onLogout, diag }) {
   const root = document.getElementById('app');
@@ -65,7 +65,7 @@ export function createShell({ user, onLogout, diag }) {
       p ? item('✏️ Редактировать проект', () => projectForm(p, ui)) : null,
       p ? item('👥 Участники', () => open('members')) : null,
       item('➕ Новый проект', () => projectWizard(ui)),
-      item('🧾 Журнал событий', () => open('log')),
+      p ? item('📒 История', () => open('journal')) : null,
       p ? item('🕘 Откат записей', () => open('history')) : null,
       p ? item('📅 Отчёт за месяц', () => open('month')) : null]),
       section('Руководства', [
@@ -75,14 +75,15 @@ export function createShell({ user, onLogout, diag }) {
       section('Настройки', [
       item(`🎨 Тема: ${themeLabel()} → ${themeLabel(nextTheme())}`, () => { setTheme(nextTheme()); render(); }),
       item(`🔄 Обновить приложение (сборка ${typeof __BUILD__ !== 'undefined' ? __BUILD__ : 'dev'})`, refreshApp)]),
-      p ? section('Данные', [
+      section('Данные', [
+      item('🧾 Журнал событий', () => open('log')),
       p ? item('🔄 Обновить таблицу для руководства', updateManagerTable) : null,
       p && mainTable(p).link ? item('📊 Открыть таблицу руководства', () => window.open(mainTable(p).link, '_blank')) : null,
       p ? item(p.backupAt ? `💾 Резервная копия на Диск (последняя: ${new Date(p.backupAt).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })})` : '💾 Резервная копия на Диск', backupNow) : null,
       p ? item('📁 Разложить файлы на Диске по папкам', organizeDrive) : null,
       p ? item('📊 Выгрузить всё в Excel', exportExcel) : null,
       p ? item('🩺 Проверка справочников', auditModal) : null,
-      p ? item('📥 Импорт данных (замена всего проекта)', () => open('import')) : null]) : null,
+      p ? item('📥 Импорт данных (замена всего проекта)', () => open('import')) : null]),
       h('div', { class: 'mut', style: { padding: '10px 4px' } }, user.displayName || user.email),
       item('🚪 Выйти', onLogout)));
   }
@@ -111,6 +112,7 @@ export function createShell({ user, onLogout, diag }) {
     if (ui.screen === 'guide') return guideView(ui);
     if (ui.screen === 'month') return monthView(ui);
     if (ui.screen === 'history') return historyView(ui);
+    if (ui.screen === 'journal') return journalView(ui);
     if (ui.screen === 'import') return importView();
     switch (ui.tab) {
       case 'project': return projectView(ui);
