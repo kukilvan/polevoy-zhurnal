@@ -59,7 +59,18 @@ function dayForm(day, ui) {
       helper: isNew ? p.helper : (day.helper === 'сам' ? '' : day.helper),
       helperHe: isNew ? p.helperHe : (day.helperHe === 'сам' ? '' : day.helperHe),
     },
-    onSubmit: (v) => {
+    onSubmit: async (v) => {
+      // один день на одну дату: второй дох за ту же дату не создаём
+      const same = daysSorted().find((d) => d.date === v.date && d.id !== day.id);
+      if (same) {
+        if (isNew) { toast('На эту дату день уже есть — открываю его'); openDayId = same.id; ui?.go?.('doh'); ui?.render?.(); return; }
+        toast('На эту дату уже есть другой день — две даты в одном дохе нельзя'); return false;
+      }
+      // дата сильно отличается от сегодняшней — скорее всего опечатка в годе или дне
+      const diff = (Date.parse(v.date) - Date.parse(todayIso())) / 86400000;
+      if (diff > 1 || diff < -730) {
+        if (!(await confirmDialog(`Дата ${dateText(v.date)} — ${diff > 0 ? 'в будущем' : 'очень давно'}. Всё верно?`, { yes: 'Да, сохранить' }))) return false;
+      }
       const id = day.id || newId();
       repo.save(p.id, [{ coll: 'days', id, data: {
         date: v.date, helper: v.helper || 'сам', helperHe: v.helperHe || 'сам', object: v.object, comment: v.comment,
@@ -165,6 +176,14 @@ function entryForm(day, entry, preset) {
     },
   });
   picker.set(entry?.pointIds ?? preset?.pointIds);
+  // сменили работу — точки, которым она не подходит, убираем из выбора (с сообщением)
+  let lastWork = `${entry?.workType ?? preset?.workType ?? ''}|${entry?.workId ?? preset?.workId ?? ''}`;
+  picker.update = (v) => {
+    const key = `${v.workType || ''}|${v.workId || ''}`; if (key === lastWork) return; lastWork = key;
+    const work = workOf(v); const ids = picker.get(); if (!work || !ids.length) return;
+    const keep = ids.filter((id) => { const pt = ctx.points.get(id); return !pt || workFits(pt, ctx, work); });
+    if (keep.length !== ids.length) { picker.set(keep); toast(`Убрано точек, которым «${work.name}» не подходит: ${ids.length - keep.length}`); }
+  };
 
   // новая запись, разбитая на несколько (виды кабеля / пропуск сделанного); время, виновник и приписка — в первую
   const saveGroups = (v, groups) => {
@@ -223,9 +242,30 @@ function entryForm(day, entry, preset) {
       result: entry?.result ?? 'Работает', note: entry?.note,
     },
     onSubmit: (v) => {
-      const pointIds = (isText(v) || !hasPointsWork(v)) ? [] : (v.pointIds || []);
+      let pointIds = (isText(v) || !hasPointsWork(v)) ? [] : (v.pointIds || []);
       if (isText(v)) { if (blank(v.note)) { toast('Введите текст строки'); return false; } }
       else {
+        // числа: только больше нуля
+        const bad = [['quantity', 'Количество', !isTime(v) && !effPts(v).length && v.workType !== 'Протяжка'], ['pullCount', 'Сколько кабелей / точек', v.workType === 'Протяжка' && !effPts(v).length],
+          ['meters', 'Метры', v.workType === 'Протяжка' && !effPts(v).length && ctx.cables.get(v.cableId)?.accounting === 'Метры'], ['minutes', 'Время, мин', isTime(v) || !blank(entry?.minutes)], ['delayMinutes', 'Задержка: время', true]]
+          .find(([k, , on]) => on && v[k] !== undefined && !(v[k] > 0));
+        if (bad) { toast(`${bad[1]}: нужно число больше нуля`); return false; }
+        // точки, которым выбранная работа не подходит, не записываем
+        const work = workOf(v);
+        if (work && pointIds.length) {
+          const misfit = pointIds.filter((id) => { const pt = ctx.points.get(id); return pt && !workFits(pt, ctx, work) && !(entry?.pointIds || []).includes(id) && !(entry && entry.workId === v.workId); });
+          if (misfit.length) { toast(`Работа «${work.name}» не подходит точкам: ${misfit.slice(0, 4).map((id) => ctx.points.get(id).label).join(', ')}${misfit.length > 4 ? '…' : ''}`); return false; }
+        }
+        // правка записи: точки, добавленные в неё, не должны быть уже отмечены другой записью (иначе работа посчитается дважды)
+        if (entry && pointIds.length) {
+          const added = pointIds.filter((id) => !(entry.pointIds || []).includes(id)).map((id) => ctx.points.get(id)).filter(Boolean);
+          if (added.length) {
+            const done = v.workType === 'Протяжка' ? pullGroups(added, ctx, v.deviceIds, (p) => v.cableId || infoOf(p).cable).done
+              : added.filter((p) => { const o = openTasksFor(p, ctx, workOf(v), v.deviceIds); return o !== null && !o.length; }).map((p) => p.label);
+            if (done.length) { toast(`Уже отмечено другой записью: ${done.slice(0, 5).join(', ')}${done.length > 5 ? '…' : ''}`); return false; }
+          }
+        }
+
         if (blank(v.workId)) { toast('Выберите работу'); return false; }
         if (isTime(v) && blank(v.minutes)) { toast('Укажите время в минутах'); return false; }
         if (!isTime(v) && v.workType !== 'Протяжка' && !pointIds.length && blank(v.quantity)) { toast('Выберите точки или укажите количество'); return false; }
