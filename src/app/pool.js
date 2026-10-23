@@ -12,6 +12,8 @@ export const onPool = (fn) => { subs.add(fn); return () => subs.delete(fn); };
 const emit = () => subs.forEach((f) => { try { f(); } catch { /* ok */ } });
 export const isPoolAdmin = () => String(getRepo()?.user?.email || '').toLowerCase() === POOL_ADMIN;
 export const poolReady = () => loaded.size === POOL_KINDS.length;
+// Пул реально скачан на телефон (а не пустой из-за того, что связи ещё не было ни разу)
+export const poolHasData = () => POOL_KINDS.some((k) => pool[k].size > 0);
 
 let started = false; let timer = null;
 export function startPool() {

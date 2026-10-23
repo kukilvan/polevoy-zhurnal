@@ -1,5 +1,6 @@
 // Настройки: быстрый ввод латиницей (список «тв = TV») и поиск названий с перепутанной раскладкой.
-import { h, openModal, toast } from '../ui.js';
+import { h, openModal, toast, confirmDialog } from '../ui.js';
+import { printedPortsOf } from '../../domain/rack.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { fixLatin, fixCabinet, needsFix, DEFAULT_SHORTCUTS, shortcutsToText, shortcutsFromText, compareLabels, sameLabelClash } from '../../domain/index.js';
 
@@ -47,8 +48,12 @@ export function fixLayoutModal() {
   const close = openModal('🔤 Раскладка в названиях', h('div', {},
     h('div', { class: 'mut' }, 'Названия, где вместо латинской буквы стоит такая же на вид русская (С, Т, Н, К…). Исправляются только они; слова с настоящими русскими буквами не трогаются.'),
     info, list,
-    h('div', { class: 'btns' }, h('button', { onclick: () => {
-      const ops = rows.filter((r) => r.on).map((r) => ({ coll: 'points', id: r.p.id, data: { ...(r.to !== r.p.label ? { label: r.to } : {}), ...(r.pn !== r.p.planName ? { planName: r.pn } : {}) } }));
+    h('div', { class: 'btns' }, h('button', { onclick: async () => {
+      // шилют, напечатанный или поклеенный со старой подписью, после смены названия устаревает — снимаем отметку «есть шилют»
+      const stale = rows.filter((r) => r.on && r.to !== r.p.label && printedPortsOf(r.p, state.ctx).length);
+      if (stale.length && !(await confirmDialog(`У точек: ${stale.length} (${stale.slice(0, 4).map((r) => r.p.label).join(', ')}${stale.length > 4 ? '…' : ''}) шилют уже напечатан или поклеен со старой подписью. После исправления его надо перепечатать. Снять у них отметку «есть шилют» и исправить названия?`, { yes: 'Исправить' }))) return;
+      const staleIds = new Set(stale.map((r) => r.p.id));
+      const ops = rows.filter((r) => r.on).map((r) => ({ coll: 'points', id: r.p.id, data: { ...(r.to !== r.p.label ? { label: r.to } : {}), ...(r.pn !== r.p.planName ? { planName: r.pn } : {}), ...(staleIds.has(r.p.id) ? { shHave: [] } : {}) } }));
       if (ops.length) getRepo().save(currentProject().id, ops);
       toast(`Исправлено названий: ${ops.length}`); close();
     } }, 'Исправить отмеченные'))));

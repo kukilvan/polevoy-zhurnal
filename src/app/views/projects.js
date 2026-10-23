@@ -27,7 +27,7 @@ export function projectForm(existing, ui) {
     title: isNew ? 'Новый проект' : 'Проект',
     fields, values: isNew ? { helper: 'Марина', helperHe: 'מרינה' } : existing,
     submitLabel: isNew ? 'Создать' : 'Сохранить',
-    extra: isNew ? [] : [{ label: '📦 В архив', onClick: async () => {
+    extra: isNew || !repo.isCreator(existing) ? [] : [{ label: '📦 В архив', onClick: async () => {
       if (!(await confirmDialog(`Убрать проект «${existing.name}» в архив? Он пропадёт из списка, все данные сохранятся. Вернуть можно в «Все проекты» → «Архив».`, { yes: 'В архив' }))) return false;
       repo.saveProject(existing.id, { archived: true, archivedAt: Date.now(), archivedBy: repo.by.uid });
       toast('Проект в архиве'); return true;
@@ -73,5 +73,5 @@ function sideList(title, list, subOf, restore, doneText) {
     h('summary', { style: { cursor: 'pointer', fontWeight: 600 } }, `${title} (${list.length})`),
     list.map((p) => h('div', { class: 'item', style: { padding: '8px 0' } },
       h('div', { class: 'name' }, p.name, h('div', { class: 'sub' }, subOf(p))),
-      h('button', { class: 'sec', onclick: () => { restore(p); toast(doneText); } }, 'Вернуть'))));
+      repo().isCreator(p) ? h('button', { class: 'sec', onclick: () => { restore(p); toast(doneText); } }, 'Вернуть') : h('small', { class: 'mut' }, 'вернуть может создатель'))));
 }

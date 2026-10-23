@@ -57,7 +57,7 @@ export async function pushManual(entry, buf = null) {
   if (!r.ok) throw new Error(`Загрузка на Диск: HTTP ${r.status}`);
   const fileId = (await r.json()).id;
   await driveCall('POST', `${D}/${fileId}/permissions?fields=id`, { body: JSON.stringify({ role: 'reader', type: 'anyone' }), headers: { 'Content-Type': 'application/json' } });
-  getRepo().savePool([{ coll: 'manuals', id: entry.id, data: { ...entry, fileId } }]);
+  getRepo().savePool([{ coll: 'manuals', id: entry.id, data: { fileId } }]);   // только ссылка на файл: остальное не трогаем (его могли изменить на другом устройстве)
   return { ...entry, fileId };
 }
 /** Файл инструкции: с устройства, иначе с Диска (и сохранить на устройстве) */
@@ -67,5 +67,5 @@ export async function loadManual(entry) {
   const r = await driveCall('GET', `${D}/${entry.fileId}?alt=media`, { raw: true });
   const buf = await r.arrayBuffer(); await cachePut(entry.id, buf); return buf;
 }
-export function updateManual(entry, patch) { getRepo().savePool([{ coll: 'manuals', id: entry.id, data: { ...entry, ...patch } }]); }
+export function updateManual(entry, patch) { getRepo().savePool([{ coll: 'manuals', id: entry.id, data: { ...patch } }]); }   // только изменённые поля
 export function removeManual(entry) { getRepo().savePool([{ coll: 'manuals', id: entry.id, remove: true }]); }  // файл на Диске остаётся (удаляется только вручную)

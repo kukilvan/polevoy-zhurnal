@@ -66,6 +66,7 @@ function previewBody(data, title, close, { off, missing, assign, setAssign }) {
   const nLink = () => (linkCb.checked ? toLink.length : 0);
   const label = () => { const n = plan.add.filter((p) => !off.has(offKey(p))).length; goBtn.textContent = n > 0 ? `➕ Добавить точек: ${n}${nLink() ? ` · отметить на чертеже: ${nLink()}` : ''}` : nLink() ? `📍 Отметить на чертеже: ${nLink()}` : '➕ Добавить точек: 0'; goBtn.disabled = n <= 0 && !nLink(); };
   goBtn.onclick = () => {
+    if (goBtn.disabled) return; goBtn.disabled = true;   // второе нажатие не должно добавить те же точки ещё раз
     const ops = pointsImportOps({ ...plan, add: plan.add.filter((p) => !off.has(offKey(p))) }, newId, data);
     const linkOps = nLink() ? toLink.map(({ f, p }) => ({ coll: 'points', id: p.id, data: { pos: posOf(f, data) } })) : [];
     getRepo().save(currentProject().id, [...ops.map((o) => ({ ...o, data: { ...o.data, deleted: false } })), ...linkOps]);
