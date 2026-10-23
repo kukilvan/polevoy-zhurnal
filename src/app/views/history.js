@@ -1,4 +1,5 @@
 // История изменений: кто, когда и что менял; откат одной записи и откат всех правок пользователя за период.
+import { lang as uiLang } from '../../i18n/index.js';
 import { h, confirmDialog, toast } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { dateText, entryLine } from '../../domain/index.js';
@@ -23,7 +24,7 @@ export function describe(coll, data) {
     switch (coll) {
       case 'points': return data.label;
       case 'days': return dateText(data.date);
-      case 'entries': return entryLine(data, ctx, 'ru') || data.workType;
+      case 'entries': return entryLine(data, ctx, uiLang()) || data.workType;
       case 'journal': return `${ctx.points.get(data.pointId)?.label ?? data.pointId ?? ''} · ${ctx.catalog.get(data.editWorkId)?.name ?? (data.entryId ? 'отметка из дня' : '')}`;
       case 'todos': return data.text;
       case 'notes': return data.title;

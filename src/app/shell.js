@@ -5,7 +5,7 @@ import { projectWizard } from './views/wizard.js';
 import { startPool } from './pool.js';
 import { seedStarterPool } from './starter.js';
 import { APP_NAME, connection, isLocal } from '../edition.js';
-import { LANGS, lang, setLang } from '../i18n/index.js';
+import { LANGS, lang, setLang, addTranslations } from '../i18n/index.js';
 import { startManuals } from './manuals.js';
 import { startDoorPool } from './doorpool.js';
 import { h, openModal, toast, confirmDialog, setShortcutsProvider } from './ui.js';
@@ -230,7 +230,19 @@ export function createShell({ user, onLogout, diag }) {
 
   window.addEventListener('online', () => { state.online = true; render(); });
   window.addEventListener('offline', () => { state.online = false; render(); });
-  const unsub = subscribe(() => { render(); if (ready() && !demo.on) { maybeWelcome(ui, user); maybeOfferTour(ui); if (currentProject()?.serverEmail) import('./views/managersfolder.js').then((m) => m.ensureServerAccess()).catch(() => {}); } });
+  // иврит: названия из справочников проекта (в т. ч. добавленные вручную) берутся из их ивритских полей
+  let lastCtx = null;
+  const ctxNames = () => {
+    const c = state.ctx; if (!c || c === lastCtx || lang() !== 'he') return; lastCtx = c;
+    const m = {};
+    c.catalog?.forEach((x) => { if (x.name && x.nameHe) m[x.name] = x.nameHe; });
+    c.types?.forEach((x) => { if (x.nameHe) m[x.id] = x.nameHe; });
+    c.devices?.forEach((x) => { if (x.name && x.nameHe) m[x.name] = x.nameHe; });
+    c.cables?.forEach((x) => { if (x.nameHe) m[x.id] = x.nameHe; });
+    [c.units, c.culprits, c.delayReasons].forEach((l) => l?.forEach((x) => { if (x.he) m[x.id] = x.he; }));
+    addTranslations(m);
+  };
+  const unsub = subscribe(() => { ctxNames(); render(); if (ready() && !demo.on) { maybeWelcome(ui, user); maybeOfferTour(ui); if (currentProject()?.serverEmail) import('./views/managersfolder.js').then((m) => m.ensureServerAccess()).catch(() => {}); } });
   startPool(); startDoorPool(); startManuals(); seedStarterPool();  // общий пул: слушать, входящие администратора, отправка нового из проекта
   render();
 

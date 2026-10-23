@@ -1,7 +1,9 @@
 import './style.css';
 import './app/theme.js';
-import { startI18n } from './i18n/index.js';
+import { startI18n, tr } from './i18n/index.js';
+import { setNameTranslator } from './domain/doh.js';
 startI18n();
+setNameTranslator(tr);
 import { initKeyboard } from './app/keyboard.js';
 initKeyboard();
 import { info, warn, error } from './log.js';

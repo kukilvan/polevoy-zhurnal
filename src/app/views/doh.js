@@ -1,4 +1,5 @@
 // Вкладка «Отчёты»: дни работ, записи дня, текст отчёта RU/HE, копирование и ссылка на команду «Doh».
+import { lang as uiLang } from '../../i18n/index.js';
 import { typeMatch, typeFilterOptions } from '../typegroups.js';
 import { latinKey } from '../../domain/index.js';
 import { rackPortsOf, stuckPortsOf } from '../../domain/rack.js';
@@ -490,6 +491,7 @@ const changedSince = (e, ctx) => !!e.snap && e.snap !== entryLine(e, ctx, 'ru');
 function dayScreen(day, ui) {
   const ctx = state.ctx; const entries = dayEntries(day, ctx);
   const ru = doh(day, ctx, 'ru'); const he = doh(day, ctx, 'he');
+  const enText = uiLang() === 'en' ? doh(day, ctx, 'en') : null;   // английский отчёт — когда интерфейс на английском
   const textBlock = (text, rtl) => h('pre', { class: 'dohtext', dir: rtl ? 'rtl' : 'ltr' }, text);
   const act = (label, text, cls = 'sec') => h('button', { class: cls, onclick: async () => { toast((await copyText(text)) ? 'Скопировано' : 'Не удалось скопировать'); } }, label);
   const link = (label, text) => h('a', { class: 'btnlink', href: shortcutUrl(text) }, label);
@@ -503,7 +505,7 @@ function dayScreen(day, ui) {
         h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => { getRepo().save(currentProject().id, entries.filter((e) => changedSince(e, ctx)).map((e) => ({ coll: 'entries', id: e.id, data: {} }))); toast('Принято: пометки сняты'); } }, '✔ Принять новые данные'))) : null,
       entries.length ? h('div', { style: { marginTop: '8px' } }, entries.map((e) =>
         h('div', { class: 'item', onclick: () => entryForm(day, e) },
-          h('div', { class: 'name' }, entryLine(e, ctx, 'ru') || '—',
+          h('div', { class: 'name' }, entryLine(e, ctx, uiLang()) || '—',
             changedSince(e, ctx) ? h('div', { class: 'sub', style: { color: RED, fontWeight: 600 } }, `⚠ данные изменились после записи (было: ${e.snap.replace(/\n/g, ' / ')})`) : null,
             e.updatedByName ? h('div', { class: 'sub' }, e.updatedByName) : null))))
         : hint(ui, 'Записей пока нет. «Добавить работу» — одна работа (можно сразу на много точек). «Несколько работ» — выбрать точки один раз и отметить сразу несколько работ.', 'doh', '📖 Что такое отчёт и как его заполнять'),
@@ -513,7 +515,9 @@ function dayScreen(day, ui) {
     h('div', { class: 'card' }, h('b', {}, 'Отчёт (русский)'), textBlock(ru, false),
       h('div', { class: 'btns' }, act('📋 Копировать RU', ru, ''), link('➡️ Отправить', ru))),
     h('div', { class: 'card' }, h('b', {}, 'Отчёт (иврит)'), textBlock(he, true),
-      h('div', { class: 'btns' }, act('📋 Копировать HE', he, ''), link('➡️ Отправить', he))));
+      h('div', { class: 'btns' }, act('📋 Копировать HE', he, ''), link('➡️ Отправить', he))),
+    enText ? h('div', { class: 'card' }, h('b', {}, 'Отчёт (английский)'), textBlock(enText, false),
+      h('div', { class: 'btns' }, act('📋 Копировать EN', enText, ''), link('➡️ Отправить', enText))) : null);
 }
 
 // ---------- вкладка ----------

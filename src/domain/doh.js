@@ -1,10 +1,16 @@
-// Текст «отчёта» (отчёт за день) на русском и иврите (раздел 3.5, Приложение А).
+// Текст «отчёта» (отчёт за день) на русском, иврите и английском (раздел 3.5, Приложение А).
+// Английские названия работ, кабелей, единиц и т. п. берутся из словаря интерфейса (setNameTranslator).
 import { round2, cableCountFor } from './points.js';
 import { taskQty } from './compose.js';
 
 // Формат отчёта как в настоящих дохах Ивана (WhatsApp): дата, на следующей строке объект и помощник,
 // затем каждая работа отдельным абзацем. Однострочная шапка (дата объект помощник) — для месячного списка.
 export const DOH_FORMAT = { headerSep: '\n', blockSep: '\n\n', oneLineSep: ' ' };
+
+let trName = (s) => s;
+/** Перевод названий для английского отчёта (по-русски хранится в данных) */
+export const setNameTranslator = (fn) => { trName = fn || ((s) => s); };
+const en = (s) => (blank(s) ? s : trName(String(s)));
 
 const blank = (v) => v === undefined || v === null || v === '';
 const num = (v) => (blank(v) ? 0 : Number(v));
@@ -41,24 +47,25 @@ export function pullFigures(entry, ctx) {
   return { count: num(entry.quantity), meters: num(entry.meters) };
 }
 
-const tail = (entry, ctx, he) => ({
-  minutes: !blank(entry.minutes) ? (he ? `, ${entry.minutes} דקות` : `, ${entry.minutes} мин`) : '',
+const tail = (entry, ctx, he, eng = false) => ({
+  minutes: !blank(entry.minutes) ? (he ? `, ${entry.minutes} דקות` : eng ? `, ${entry.minutes} min` : `, ${entry.minutes} мин`) : '',
   note: !blank(entry.note) ? `. ${entry.note}` : '',
   culprit: !blank(entry.culprit)
-    ? ` (${he ? (ctx.culprits.get(entry.culprit)?.he ?? entry.culprit) : entry.culprit})` : '',
+    ? ` (${he ? (ctx.culprits.get(entry.culprit)?.he ?? entry.culprit) : eng ? en(entry.culprit) : entry.culprit})` : '',
 });
 
 // Задержка к работе: «Задержка: нет доступа, Электрики, ждали ключ — 40 мин» (иврит: «עיכוב: …»). Пусто, если ничего не указано.
 export function delayLine(entry, ctx, lang = 'ru') {
   if (!entry || entry.workType === 'Текст') return '';
-  const he = lang === 'he';
-  const reason = blank(entry.delayReason) ? '' : (he ? (ctx.delayReasons.get(entry.delayReason)?.he || entry.delayReason) : entry.delayReason);
-  const culprit = blank(entry.delayCulprit) ? '' : (he ? (ctx.culprits.get(entry.delayCulprit)?.he || entry.delayCulprit) : entry.delayCulprit);
+  const he = lang === 'he'; const eng = lang === 'en';
+  const loc = (v, list) => (he ? (list.get(v)?.he || v) : eng ? en(v) : v);
+  const reason = blank(entry.delayReason) ? '' : loc(entry.delayReason, ctx.delayReasons);
+  const culprit = blank(entry.delayCulprit) ? '' : loc(entry.delayCulprit, ctx.culprits);
   const note = blank(entry.delayNote) ? '' : String(entry.delayNote);
-  const mins = blank(entry.delayMinutes) ? '' : (he ? `${entry.delayMinutes} דקות` : `${entry.delayMinutes} мин`);
+  const mins = blank(entry.delayMinutes) ? '' : (he ? `${entry.delayMinutes} דקות` : eng ? `${entry.delayMinutes} min` : `${entry.delayMinutes} мин`);
   const parts = [reason, culprit, note].filter(Boolean);
   if (!parts.length && !mins) return '';
-  const head = he ? 'עיכוב' : 'Задержка';
+  const head = he ? 'עיכוב' : eng ? 'Delay' : 'Задержка';
   return `${head}: ${parts.join(', ')}${parts.length && mins ? ' — ' : ''}${mins}`;
 }
 
@@ -69,10 +76,10 @@ export function entryLine(entry, ctx, lang = 'ru') {
 }
 
 function workLine(entry, ctx, lang = 'ru') {
-  const he = lang === 'he';
+  const he = lang === 'he'; const eng = lang === 'en';
   const work = ctx.catalog.get(entry.workId);
-  const name = he ? work?.nameHe : work?.name;
-  const t = tail(entry, ctx, he);
+  const name = he ? work?.nameHe : eng ? en(work?.name) : work?.name;
+  const t = tail(entry, ctx, he, eng);
   const unit = ctx.units.get(work?.unit);
 
   if (entry.workType === 'Текст') return String(entry.note ?? ''); // свободная строка без цифр
@@ -80,7 +87,7 @@ function workLine(entry, ctx, lang = 'ru') {
   if (isTime(entry, work)) { // «Время» и любые работы в минутах
     return he
       ? `${name} ${entry.minutes ?? ''} דקות${t.culprit}${t.note}`
-      : `${name} ${entry.minutes ?? ''} мин${t.culprit}${t.note}`;
+      : `${name} ${entry.minutes ?? ''} ${eng ? 'min' : 'мин'}${t.culprit}${t.note}`;
   }
   if (entry.workType === 'Протяжка') {
     const cable = ctx.cables.get(entry.cableId);
@@ -89,10 +96,11 @@ function workLine(entry, ctx, lang = 'ru') {
     if (he) {
       return `השחלת ${cable?.nameHe ?? entry.cableId ?? ''}: ${count}${meterMode ? ` כבלים, ${meters} מטר` : ' נקודות'}${t.minutes}${t.culprit}${t.note}`;
     }
+    if (eng) return `Cable pull ${en(entry.cableId ?? '')}: ${count}${meterMode ? ` cables, ${meters} m` : ' points'}${t.minutes}${t.culprit}${t.note}`;
     return `Протяжка ${entry.cableId ?? ''}: ${count}${meterMode ? ` каб., ${meters} м` : ' точек'}${t.minutes}${t.culprit}${t.note}`;
   }
-  const bad = entry.result === 'Не работает' ? (he ? ' (לא תקין)' : ' (не работает)') : '';
-  return `${name} ${itogShtuk(entry, ctx)} ${he ? (unit?.he ?? work?.unit) : work?.unit}${bad}${t.minutes}${t.culprit}${t.note}`;
+  const bad = entry.result === 'Не работает' ? (he ? ' (לא תקין)' : eng ? ' (not working)' : ' (не работает)') : '';
+  return `${name} ${itogShtuk(entry, ctx)} ${he ? (unit?.he ?? work?.unit) : eng ? en(work?.unit) : work?.unit}${bad}${t.minutes}${t.culprit}${t.note}`;
 }
 
 const helperIsSelf = (h) => blank(h) || h === 'сам';
@@ -103,7 +111,7 @@ function headerParts(day, ctx, lang) {
   const where = p.oneOff ? day.object
     : he ? `${p.nameHe || p.name} ${p.objectHe ?? ''}`.trim() : `${p.contractor ?? ''} ${p.object ?? ''}`.trim();
   const helper = he ? (day.helperHe ?? p.helperHe) : (day.helper ?? p.helper);
-  const who = helperIsSelf(helper) ? (he ? ' לבד' : ' сам') : (he ? ` עם ${helper}` : ` с ${helper}`);
+  const who = helperIsSelf(helper) ? (he ? ' לבד' : lang === 'en' ? ' alone' : ' сам') : (he ? ` עם ${helper}` : lang === 'en' ? ` with ${helper}` : ` с ${helper}`);
   return { date: dateText(day.date), place: `${where ?? ''}${who}` };
 }
 
