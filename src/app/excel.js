@@ -3,6 +3,7 @@ import { state, currentProject } from './store.js';
 import { exportSheets, exportFileName } from '../domain/index.js';
 import { memberNameByUid } from './views/members.js';
 import { toast } from './ui.js';
+import { tr } from '../i18n/index.js';   // файл — на языке приложения (заголовки, листы, названия работ)
 
 let busy = false;
 export async function exportExcel() {
@@ -14,16 +15,16 @@ export async function exportExcel() {
     const { default: writeExcelFile } = await import('write-excel-file/browser');
     const head = (v) => ({ value: v, fontWeight: 'bold', backgroundColor: '#E5E7EB' });
     const data = sheets.map((sh) => ({
-      sheet: sh.name, stickyRowsCount: 1,
+      sheet: tr(sh.name).slice(0, 31), stickyRowsCount: 1,
       columns: sh.widths.map((width) => ({ width })),
       data: sh.rows.map((row, i) => row.map((v) => {
-        if (i === 0) return head(v);
+        if (i === 0) return head(tr(v));
         if (v === '' || v === undefined || v === null) return null;
-        return typeof v === 'number' ? { value: v, type: Number } : { value: String(v), type: String };
+        return typeof v === 'number' ? { value: v, type: Number } : { value: tr(String(v)), type: String };
       })),
     }));
     const blob = await writeExcelFile(data).toBlob();
-    const name = exportFileName(p);
+    const name = tr(exportFileName(p));
     window.__lastExport = { name, size: blob.size, sheets: sheets.map((x) => [x.name, x.rows.length - 1]) };
     const file = new File([blob], name, { type: blob.type || 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
     if (!new URLSearchParams(location.search).get('mem') && navigator.canShare?.({ files: [file] })) {

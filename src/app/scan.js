@@ -69,7 +69,7 @@ export function scanDevice({ kind, onPick, title }) {
   const pick = (value) => { stop(); close(); onPick(value); };
   const refresh = () => {
     const c = candidatesFor(kind, texts);
-    list.replaceChildren(...c.map((x) => h('button', { type: 'button', class: x.sure ? '' : 'sec', style: { display: 'block', width: '100%', textAlign: 'left', margin: '6px 0' }, onclick: () => pick(x.value) },
+    list.replaceChildren(...c.map((x) => h('button', { type: 'button', class: x.sure ? '' : 'sec', style: { display: 'block', width: '100%', textAlign: 'start', margin: '6px 0' }, onclick: () => pick(x.value) },
       x.value, h('small', { style: { display: 'block', opacity: 0.7 } }, x.note))));
     return c;
   };

@@ -274,7 +274,7 @@ export function unsortedModal(ui) {
       const picker = typePicker({ extra: [['__skip', '🚫 Не точки (удалить)']], onChange: (v) => { choice = v; cab.set(v); label(); } });
       const rows = h('div', { class: 'picklist', style: { maxHeight: '220px', display: 'none' } }, list.map((p) => {
         const cb = h('input', { type: 'checkbox', checked: true, onchange: () => { cb.checked ? on.add(p.id) : on.delete(p.id); label(); } });
-        const pin = p.pos && drawingFor(p) ? h('button', { type: 'button', class: 'sec', style: { padding: '2px 8px', marginLeft: 'auto' }, onclick: (e) => { e.preventDefault(); e.stopPropagation(); import('./planmodal.js').then((m) => m.planModal({ point: p })); } }, '📍') : null;
+        const pin = p.pos && drawingFor(p) ? h('button', { type: 'button', class: 'sec', style: { padding: '2px 8px', marginInlineStart: 'auto' }, onclick: (e) => { e.preventDefault(); e.stopPropagation(); import('./planmodal.js').then((m) => m.planModal({ point: p })); } }, '📍') : null;
         return h('label', { class: 'pickrow' }, cb, h('span', {}, p.label, p.cabinet ? h('small', {}, ` · шкаф ${p.cabinet}`) : null, p.pos?.sheet ? h('small', {}, ` · ${p.pos.sheet}`) : null), pin);
       }));
       const toggle = h('button', { type: 'button', class: 'sec', onclick: () => { open = !open; rows.style.display = open ? '' : 'none'; toggle.textContent = open ? '▲ Скрыть список' : `▼ По одной (${list.length})`; } }, `▼ По одной (${list.length})`);

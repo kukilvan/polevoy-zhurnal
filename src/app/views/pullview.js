@@ -56,7 +56,7 @@ export function openPulls() {
     list.replaceChildren(...(rows.length ? rows.map(({ p, hits }) => {
       const st = pullStatus(p, (id) => state.ctx.points.has(id)); const n = (p.pointIds || []).length; const m = (p.pointIds || []).filter((id) => isMeasured(p, id)).length; const f = (p.finished || []).length;
       const fin = new Set(p.finished || []);
-      return h('div', { class: 'card', style: { margin: '6px 0', padding: '10px', cursor: 'pointer', borderLeft: `6px solid ${pullColor(st)}` }, onclick: () => openPull(p.id) },
+      return h('div', { class: 'card', style: { margin: '6px 0', padding: '10px', cursor: 'pointer', borderInlineStart: `6px solid ${pullColor(st)}` }, onclick: () => openPull(p.id) },
         h('div', { style: { display: 'flex', justifyContent: 'space-between', gap: '8px', alignItems: 'flex-start' } },
           h('div', { style: { minWidth: 0 } }, h('b', {}, pullTitle(p)),
             h('div', { class: 'mut', style: { fontSize: '13px' } }, `${drawingTitle(drawingsOf().find((d) => d.id === p.drawingId)) || 'чертёж?'} · точек ${n} · метраж ${m}/${n}${f ? ` · протянуто ${f}` : ''}`)),
@@ -200,7 +200,7 @@ export async function openPull(id) {
       h('div', { class: 'card', style: { position: 'sticky', bottom: 0, display: 'flex', gap: '8px', alignItems: 'center', flexWrap: 'wrap', margin: '6px 0', padding: '8px' } },
         h('b', {}, `Выбрано: ${n}`),
         n ? h('button', { class: 'sec', onclick: async () => { if (await confirmDialog('Снять все выбранные точки?', { yes: 'Снять' })) { set({ pointIds: [] }); screen(); } } }, 'Снять все') : null,
-        h('button', { style: { marginLeft: 'auto' }, disabled: !n, onclick: () => { set({ screen: 'base' }); screen(); } }, 'Далее →')),
+        h('button', { style: { marginInlineStart: 'auto' }, disabled: !n, onclick: () => { set({ screen: 'base' }); screen(); } }, 'Далее →')),
     ];
   }
 

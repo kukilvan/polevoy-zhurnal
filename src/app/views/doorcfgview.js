@@ -67,7 +67,7 @@ export function doorPicker({ current = null, title = '🚪 Конфигурац�
     const box = h('div', { style: { margin: '8px 0' } }, head(`${p.name}${p.hint ? ` · ${p.hint}` : ''}`),
       h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '8px', margin: '6px 0' } },
         ...items.map((d) => { const n = sel.get(d.id) || 0; const c = doorColorOf(d);
-          return h('button', { type: 'button', class: n ? '' : 'sec', style: { flex: '1 1 40%', borderLeft: `6px solid ${c}`, ...(n ? { background: c, color: '#fff', borderColor: c } : {}) }, onclick: () => tap(d) }, n ? `${d.name} ×${n}` : d.name); })),
+          return h('button', { type: 'button', class: n ? '' : 'sec', style: { flex: '1 1 40%', borderInlineStart: `6px solid ${c}`, ...(n ? { background: c, color: '#fff', borderColor: c } : {}) }, onclick: () => tap(d) }, n ? `${d.name} ×${n}` : d.name); })),
       h('div', { class: 'btns' }, doneBtn(hasAny ? 'Готово' : 'Пропустить')));
     activeEl = box; return box;
   }

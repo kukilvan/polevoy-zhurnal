@@ -1,4 +1,4 @@
-// Руководство «Как пользоваться приложением»: от оформления и проекта до серийных номеров и MAC; Шпаргалка и Словарик — отдельно. Тексты только на русском.
+// Руководство «Как пользоваться приложением»: от оформления и проекта до серийных номеров и MAC; Шпаргалка и Словарик — отдельно. Тексты переводятся на английский и иврит словарём (src/i18n).
 import { startTour, topicList } from '../tour/index.js';
 import { h, openModal, formModal, confirmDialog, toast } from '../ui.js';
 import { getRepo } from '../store.js';
@@ -466,7 +466,7 @@ function searchBox(ui) {
     }
     if (!hits.length) { box.append(h('div', { class: 'mut' }, 'Ничего не найдено. Попробуйте другое слово или загляните в «Словарик».')); return; }
     for (const e of hits.slice(0, 8)) {
-      box.append(h('button', { class: 'sec', style: { display: 'block', width: '100%', textAlign: 'left', marginBottom: '4px' }, onclick: () => go(e.sec) },
+      box.append(h('button', { class: 'sec', style: { display: 'block', width: '100%', textAlign: 'start', marginBottom: '4px' }, onclick: () => go(e.sec) },
         h('div', {}, e.term), h('div', { class: 'mut', style: { fontSize: '12px' } }, `${e.sec.icon} ${e.sec.title}`)));
     }
   };

@@ -108,7 +108,7 @@ export function setupView({ onDone, onBack }) {
       h('h1', {}, 'Своя база'),
       h('div', { class: 'card' },
         h('b', {}, 'Что это даёт'),
-        h('ul', { style: { paddingLeft: '20px', lineHeight: 1.5 } },
+        h('ul', { style: { paddingInlineStart: '20px', lineHeight: 1.5 } },
           h('li', {}, 'Работа вместе: приглашайте коллег в проекты.'),
           h('li', {}, 'Одни и те же данные на телефоне и компьютере, изменения видны сразу.'),
           h('li', {}, 'Данные надёжно хранятся у Google в вашем личном проекте. Потеря телефона ничего не стирает.'),

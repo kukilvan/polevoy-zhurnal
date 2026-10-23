@@ -104,7 +104,7 @@ export function ruleEditor({ kind = 'labels', rule = null, samples = null, type 
   const partsBox = h('div', { style: { display: 'flex', flexWrap: 'wrap', gap: '8px', margin: '8px 0' } });
   const summary = h('div', { style: { margin: '6px 0', fontWeight: 600 } });
   const testIn = h('input', { type: 'text', placeholder: 'Проверить другую подпись', autocomplete: 'off', autocapitalize: 'characters' });
-  const testOut = h('span', { style: { marginLeft: '8px' } });
+  const testOut = h('span', { style: { marginInlineStart: '8px' } });
   const reIn = h('input', { type: 'text', value: rule?.re || '', autocomplete: 'off', autocapitalize: 'off' }); let manual = false;
   reIn.addEventListener('input', () => { manual = true; check(); });
   const projIn = h('input', { type: 'text', value: rule?.project || '', placeholder: 'пусто — для всех проектов' });

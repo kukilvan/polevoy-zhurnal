@@ -59,7 +59,7 @@ export function createShell({ user, onLogout, diag }) {
     const section = (title, items) => {
       const list = h('div', { style: { display: 'none' } }, ...items.filter(Boolean));
       const mark = h('span', {}, '▸ ');
-      const head = h('div', { class: 'group', style: { position: 'static', paddingLeft: '4px', cursor: 'pointer', userSelect: 'none' },
+      const head = h('div', { class: 'group', style: { position: 'static', paddingInlineStart: '4px', cursor: 'pointer', userSelect: 'none' },
         onclick: () => { const on = list.style.display === 'none'; list.style.display = on ? '' : 'none'; mark.textContent = on ? '▾ ' : '▸ '; } }, mark, title);
       return h('div', {}, head, list);
     };

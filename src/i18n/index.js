@@ -6,34 +6,46 @@ import he from './he.json';
 
 export const LANGS = [['ru', 'Русский'], ['en', 'English'], ['he', 'עברית']];
 const KEY = 'pm.lang';
-const AUTO = false;  // язык по настройкам телефона — включить, когда переводы будут готовы
+// Язык по умолчанию — по языку телефона, но только для новых людей: кто уже пользовался приложением
+// (есть сохранённые настройки), остаётся на русском, пока сам не сменит язык.
 const DICTS = { en, he };
+function detect() {
+  let used = false;
+  try { for (let i = 0; i < localStorage.length; i++) { const k = localStorage.key(i); if (/^(pm|pz)\./.test(k)) used = true; } } catch { return 'ru'; }
+  if (used) return 'ru';
+  const nav = String(navigator.language || '').slice(0, 2);
+  return nav === 'he' || nav === 'iw' ? 'he' : nav === 'ru' || nav === 'uk' || nav === 'be' ? 'ru' : 'en';
+}
 export function lang() {
   let l = null; try { l = localStorage.getItem(KEY); } catch { /* ok */ }
   if (l && (l === 'ru' || DICTS[l])) return l;
-  if (!AUTO) return 'ru';   // пока переводы не закончены — язык только по выбору человека
-  const nav = String(navigator.language || '').slice(0, 2);
-  return nav === 'he' || nav === 'iw' ? 'he' : nav === 'ru' || nav === 'uk' || nav === 'be' ? 'ru' : 'en';
+  l = detect();
+  try { localStorage.setItem(KEY, l); } catch { /* ok */ }
+  return l;
 }
 export function setLang(l) { try { localStorage.setItem(KEY, l); } catch { /* ok */ } location.reload(); }
 export const isRtl = () => lang() === 'he';
 
 // ---------- словарь ----------
 const CYR = /[А-Яа-яЁё]/;
+const ICON = /^((?:\p{Extended_Pictographic}|[\d#*]️?⃣|[️‍]|[^\p{L}\p{N}\s«"(])+\s+)([\s\S]+)$/u;
 let exact = null; let patterns = null; let extra = new Map();
 const esc = (s) => s.replace(/[.*+?^$()|[\]\\]/g, '\\$&').replace(/[{}]/g, (c) => `\\${c}`);
 function build() {
   const d = DICTS[lang()] || {};
   exact = new Map(); patterns = [];
-  for (const [ru, tr] of Object.entries(d)) {
-    if (!tr) continue;
+  for (const [ru0, tr0] of Object.entries(d)) {
+    if (!tr0) continue;
+    // пробелы по краям ключа не важны: tr() сравнивает текст без них и возвращает их на место
+    const ru = ru0.trim(); const tr = ru0 !== ru ? tr0.trim() : tr0;
     if (ru.includes('{}')) {
       const parts = ru.split('{}');
-      patterns.push({ re: new RegExp(`^${parts.map(esc).join('([\\s\\S]*?)')}$`), tr, head: parts[0], n: parts.length - 1 });
+      patterns.push({ re: new RegExp(`^${parts.map(esc).join('([\\s\\S]*?)')}$`), reG: new RegExp(`^${parts.map(esc).join('([\\s\\S]*)')}$`), tr, head: parts[0], n: parts.length - 1 });
     } else exact.set(ru, tr);
   }
   // длинные шаблоны первыми: «Шкаф {} · {}» раньше, чем «{} · {}»
-  patterns.sort((a, b) => b.head.length - a.head.length || b.re.source.length - a.re.source.length);
+  const lit = (p) => p.re.source.replace(/\(\[\\s\\S\]\*\?\)/g, '').length;
+  patterns.sort((a, b) => b.head.length - a.head.length || lit(b) - lit(a));
 }
 /** Добавить переводы на лету (названия из справочников: nameHe и т. п.) */
 export function addTranslations(map) { if (lang() === 'ru') return; extra = new Map([...extra, ...Object.entries(map)]); }
@@ -47,14 +59,24 @@ export function tr(s, depth = 0) {
   const hit = exact.get(core) ?? extra.get(core);
   if (hit !== undefined) return lead + hit + trail;
   if (depth > 8) return s;
+  // значок перед текстом («👋 Знакомство», «1️⃣ Шаг 1…»): перевести текст без значка
+  const icon = core.match(ICON);
+  if (icon) { const hit2 = exact.get(icon[2]) ?? extra.get(icon[2]); if (hit2 !== undefined) return lead + icon[1] + hit2 + trail; }
   for (const p of patterns) {
     if (p.head && !core.startsWith(p.head)) continue;
-    const m = core.match(p.re); if (!m) continue;
+    let m = core.match(p.re); if (!m) continue;
+    // «Проект «Офис»» — кавычки внутри названия: берём разбиение, где кавычки в каждой части парные
+    const odd = (a) => (a.match(/«/g) || []).length !== (a.match(/»/g) || []).length;
+    if (m.slice(1).some(odd)) { const g = core.match(p.reG); if (g && !g.slice(1).some(odd)) m = g; }
     const args = m.slice(1).map((a) => tr(a, depth + 1));
     let i = 0;
     const out = p.tr.replace(/\{(\d*)\}/g, (_, k) => (k === '' ? args[i++] : args[Number(k)]) ?? '');
     return lead + out + trail;
   }
+  if (icon) { const rest = tr(icon[2], depth + 1); if (rest !== icon[2]) return lead + icon[1] + rest + trail; }
+  // число в скобках в конце («Установка камеры (8)»)
+  const cnt = core.match(/^([\s\S]+?)(\s*\(\d+\))$/);
+  if (cnt) { const a = tr(cnt[1], depth + 1); if (a !== cnt[1]) return lead + a + cnt[2] + trail; }
   return s;
 }
 export const t = tr;
@@ -67,6 +89,8 @@ function doText(node) {
   const p = node.parentNode; if (!p || SKIP.has(p.nodeName) || p.closest?.('[data-notr],[contenteditable]')) return;
   const cur = node.nodeValue; const o = orig.get(node);
   if (o && o.out === cur) return;      // уже переведён
+  // кнопка «←» (назад) справа налево смотрит в другую сторону
+  if (isRtl() && (cur === '←' || cur === '→')) { const out = cur === '←' ? '→' : '←'; orig.set(node, { src: cur, out }); node.nodeValue = out; return; }
   if (!CYR.test(cur)) return;
   const out = tr(cur);
   if (out !== cur) { orig.set(node, { src: cur, out }); node.nodeValue = out; }
@@ -88,6 +112,10 @@ export function startI18n() {
   if (l === 'ru') return;
   build();
   document.title = tr(document.title);
+  // значок на главном экране — с названием на языке приложения
+  const man = document.querySelector('link[rel="manifest"]');
+  if (man) man.href = man.href.replace(/manifest(-\w+)?\.webmanifest/, `manifest-${l}.webmanifest`);
+  document.querySelector('meta[name="apple-mobile-web-app-title"]')?.setAttribute('content', tr('Проекты'));
   // системные окна подтверждения/сообщения
   const c = window.confirm.bind(window); window.confirm = (m) => c(tr(String(m)));
   const a = window.alert.bind(window); window.alert = (m) => a(tr(String(m)));

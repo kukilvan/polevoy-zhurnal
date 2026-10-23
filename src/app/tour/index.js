@@ -60,7 +60,7 @@ export function withCreatorGuide(fn) {
   const key = uidKey('creatorGuide');
   if (demo.on || lsGet(key) || getRepo()?.prefs?.creatorGuideSeen) { fn(); return; }
   const close = openModal('Новый проект: коротко', h('div', {},
-    h('ol', { style: { paddingLeft: '20px', lineHeight: 1.5 } },
+    h('ol', { style: { paddingInlineStart: '20px', lineHeight: 1.5 } },
       h('li', {}, 'Впишите название проекта и объект.'),
       h('li', {}, 'Отметьте типы точек, устройства, кабели и работы из общего набора. Лишнее потом можно добавить в «Ещё».'),
       h('li', {}, 'Остальные шаги (участники, чертежи, точки) необязательны. Их можно пропустить и вернуться позже.'),

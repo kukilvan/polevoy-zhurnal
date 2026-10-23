@@ -7,7 +7,7 @@ import { doorTokens, doorShortColor, doorCfgShort } from '../../domain/index.js'
 const chip = (t, big) => h('span', { style: {
   display: 'inline-flex', alignItems: 'baseline', gap: '1px', padding: big ? '2px 8px' : '1px 6px', borderRadius: '6px', fontWeight: 700, fontSize: big ? '15px' : '13px', lineHeight: 1.35, whiteSpace: 'nowrap',
   ...(t.lock ? { background: t.color, color: '#fff', border: `1px solid ${t.color}` } : { color: t.color, border: `1.5px solid ${t.color}`, background: `${t.color}1f` }),
-} }, t.text, t.count > 1 ? h('sup', { style: { fontSize: '10px', marginLeft: '1px' } }, `×${t.count}`) : null);
+} }, t.text, t.count > 1 ? h('sup', { style: { fontSize: '10px', marginInlineStart: '1px' } }, `×${t.count}`) : null);
 
 /** Плашки конфигурации (cfg — запись конфигурации) */
 export function doorChips(cfg, { big = false } = {}) {
@@ -15,14 +15,14 @@ export function doorChips(cfg, { big = false } = {}) {
   if (!items.length && !cables.length) return h('span', { class: 'mut' }, cfg?.name || '—');
   return h('span', { style: { display: 'inline-flex', flexWrap: 'wrap', gap: '4px', alignItems: 'center' } },
     ...items.map((t) => chip(t, big)),
-    cables.length ? h('span', { style: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: big ? '13px' : '12px', color: 'var(--mut)', marginLeft: '2px', whiteSpace: 'nowrap' } },
+    cables.length ? h('span', { style: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: big ? '13px' : '12px', color: 'var(--mut)', marginInlineStart: '2px', whiteSpace: 'nowrap' } },
       cables.map((c) => `${c.cable}×${c.count}`).join(' + ')) : null);
 }
 /** Короткое ЭМ / МХ плашкой (список точек) */
 export function doorShortChip(cfg) {
   const t = doorCfgShort(state.ctx, cfg); if (!t) return null;
   const c = doorShortColor(state.ctx, cfg) || '#8e8e93';
-  return h('span', { style: { marginLeft: '6px', padding: '0 6px', borderRadius: '5px', background: c, color: '#fff', fontSize: '12px', fontWeight: 700 } }, t);
+  return h('span', { style: { marginInlineStart: '6px', padding: '0 6px', borderRadius: '5px', background: c, color: '#fff', fontSize: '12px', fontWeight: 700 } }, t);
 }
 
 // ---- выбор цвета ----

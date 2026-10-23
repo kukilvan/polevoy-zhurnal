@@ -91,7 +91,7 @@ function dayForm(day, ui) {
 // ---------- выбор точек ----------
 export function pointsPicker({ typesOf, fits, onPick }) {
   let ids = [];
-  const btn = h('button', { type: 'button', class: 'sec', style: { width: '100%', textAlign: 'left' } }, 'Выбрать точки…');
+  const btn = h('button', { type: 'button', class: 'sec', style: { width: '100%', textAlign: 'start' } }, 'Выбрать точки…');
   const label = () => { btn.textContent = ids.length ? `Выбрано точек: ${ids.length} — изменить` : 'Выбрать точки…'; };
   let valuesFn = () => ({}); let changedFn = null;
   btn.onclick = () => openPicker();

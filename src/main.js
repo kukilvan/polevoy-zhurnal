@@ -14,7 +14,7 @@ import { createShell } from './app/shell.js';
 
 import { captureTokenFromUrl } from './app/google.js';
 import { APP_NAME, connection, saveConnection, parseConnect, setAdminEmail, mode, setLocalMode, localUser, isStandalone } from './edition.js';
-document.title = APP_NAME;
+document.title = tr(APP_NAME);
 const popupReturn = captureTokenFromUrl() === 'popup';   // окно входа Google: токен сохранён, само приложение здесь не запускаем
 const BUILD = typeof __BUILD__ !== 'undefined' ? __BUILD__ : 'dev';
 const app = document.getElementById('app');
