@@ -9,7 +9,6 @@ import { doorCfgOf, doorCfgShort, isDoorCfg } from '../../domain/index.js';
 import { dateText, cablesText, missingDetails, isComposedType, isSystemType, UNSORTED_TYPE, cableOverrideFor } from '../../domain/index.js';
 import { addWorkForPoint, addWorkForPoints } from './doh.js';
 import { whoIs } from './journal.js';
-import { pointsFromFile } from './pointsfile.js';
 import { drawingsHub, unsortedModal } from './tohnitview.js';
 import { cablesField, cablesPicker } from './cablespick.js';
 import { doorField } from './doorcfgview.js';
@@ -332,11 +331,10 @@ export function pointCard(startPoint, { fromPlan = false } = {}) {
     const p = ctx.points.get(startPoint.id);
     if (!p) { close(); return; }
     const info = infoOf(p);
-    const cfg = ctx.configs.get(p.configId || proj.defaultConfigId);
     const hasLen = p.length !== undefined && p.length !== null && p.length !== '';
     const facts = [
       ['Шкаф / этаж', [p.cabinet && `шкаф ${p.cabinet}`, p.floor && `этаж ${p.floor}`].filter(Boolean).join(', ')],
-      ['Тип', p.typeId], ['Конфигурация', (doorCfgOf(p, ctx) && doorChips(doorCfgOf(p, ctx))) || (usesConfig(ctx.types.get(p.typeId)) ? cfg?.name : '')], ['Состав', compText(p)], ['Имя в плане', p.planName], ['Кабели', `${info.cableList?.length ? cablesText(info.cableList) : info.cable || ''}${Array.isArray(p.cableOverride) ? ' (свои у точки)' : ''}`],
+      ['Тип', p.typeId], ['Конфигурация', (doorCfgOf(p, ctx) && doorChips(doorCfgOf(p, ctx))) || ''], ['Состав', compText(p)], ['Имя в плане', p.planName], ['Кабели', `${info.cableList?.length ? cablesText(info.cableList) : info.cable || ''}${Array.isArray(p.cableOverride) ? ' (свои у точки)' : ''}`],
       ['Длина', hasLen ? `${p.length} м на 1 кабель${info.metrage ? ` (всего ${Math.round(info.metrage * 100) / 100} м)` : ''}` : ''],
       ['Порт в свитче', p.port], ['Порт в панели', panelText(p, proj)], ['Серийный номер', p.serial], ['MAC', p.mac], ['Причина задержки', p.delayReasonId], ['Примечание', p.note],
     ].filter(([, v]) => v);
@@ -648,7 +646,6 @@ export function meterView(ui) {
     h('div', { class: 'btns', style: { marginTop: 0 } },
       h('button', { onclick: () => generatorForm() }, '➕ Точки пачкой'),
       h('button', { class: 'sec', onclick: () => pointForm(null) }, 'Новая точка'),
-      h('button', { class: 'sec', onclick: () => pointsFromFile() }, '📥 Из файла'),
       h('button', { class: 'sec', onclick: () => drawingsHub() }, '📐 Из чертежа'),
       h('button', { class: 'sec', onclick: () => planModal() }, '🗺 План'),
       h('button', { class: 'wide sec', onclick: () => remainingModal() }, '🧾 Что осталось'),

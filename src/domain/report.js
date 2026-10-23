@@ -2,7 +2,8 @@
 // Профиль: { id, name, main, lang: 'he'|'ru', cabinets: [], types: [], statuses: [], columns: [id…], layout: 'one'|'perCabinet', summary }
 // Пустой список шкафов/типов/статусов = «все».
 import { comparePoints, cableListOf, cablesCountOf, metrageOf } from './points.js';
-import { pointInfo, installBinding } from './status.js';
+import { pointInfo, usesConfig } from './status.js';
+import { doorCfgOf } from './doorcfg.js';
 import { sheetSerial, hashOf, TITLE_PREFIX } from './managers.js';
 import { panelText } from './rack.js';
 
@@ -92,22 +93,9 @@ export function fileTitle(project, table) {
   return `${d} – ${table.name}`;
 }
 
-// Этапы типа точек с учётом привязки установки (если установка не требуется — этапа «Установка» нет)
-function stagesOf(type) {
-  if (!type) return null;
-  const stages = (type.stages || []).filter((x) => x !== 'Установка');
-  if (installBinding(type).mode !== 'none') { const i = stages.indexOf('Проверка'); stages.splice(i >= 0 ? i : stages.length, 0, 'Установка'); }
-  return stages;
-}
+// Этапы типа точек (как заданы в типе)
+const stagesOf = (type) => (type ? [...(type.stages || [])] : null);
 
-function configText(point, project, ctx, lang) {
-  const type = ctx.types.get(point.typeId);
-  if (installBinding(type).mode !== 'config') return '';
-  const cfg = ctx.configs.get(point.configId || project.defaultConfigId);
-  if (!cfg) return '';
-  if (lang === 'ru') return cfg.name || '';
-  return (cfg.components || []).map((id) => ctx.catalog.get(id)?.nameHe || ctx.catalog.get(id)?.name || id).join(' + ');
-}
 
 // версия оформления: при её смене таблицы перестраиваются, даже если данные те же
 const STYLE_V = 3;
@@ -133,7 +121,7 @@ function cellOf(col, point, info, ctx, project, lang, nameOf) {
     case 'panel': return panelText(point, project);
     case 'serial': return s(point.serial);
     case 'mac': return s(point.mac);
-    case 'config': return configText(point, project, ctx, lang);
+    case 'config': { const cfg = usesConfig(ctx.types.get(point.typeId)) ? doorCfgOf(point, ctx) : null; return cfg ? s(cfg.name) : ''; }
     case 'delay': { const r = ctx.delayReasons.get(point.delayReasonId); return r ? (lang === 'he' ? (r.he || r.id) : r.id) : s(point.delayReasonId); }
     case 'note': return s(point.note);
     case 'status': {

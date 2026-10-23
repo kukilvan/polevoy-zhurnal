@@ -19,7 +19,7 @@ export function bundleFrom(maps, typeId) {
   });
   (type.cables || []).forEach((c) => addC(c.cable));
   if (type.defaultCable) addC(type.defaultCable);
-  (type.workIds || []).forEach(addW); (type.installWorkIds || []).forEach(addW);
+  (type.workIds || []).forEach(addW);
   return { type: bare(type), devices, cables, catalog };
 }
 

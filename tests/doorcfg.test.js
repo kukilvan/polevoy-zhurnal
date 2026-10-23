@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  CATALOG, POINT_TYPES, CABLES, CONFIGS, UNITS, CULPRITS, DELAY_REASONS, DEVICES, composedTypes, buildContext, pointInfo,
+  CATALOG, POINT_TYPES, CABLES, UNITS, CULPRITS, DELAY_REASONS, DEVICES, composedTypes, buildContext, pointInfo,
   applyDoorRules, autoDoorCables, makeDoorCfg, standardDoorCfgs, doorCfgShort, doorDevices, doorCfgId,
 } from '../src/domain/index.js';
 
@@ -9,7 +9,7 @@ const project = { id: 'P1', name: 'X' };
 const tsofar = { id: 'DV_TS', name: 'Цофар', nameHe: 'צופר', cables: [{ cable: '6005', count: 1 }], workIds: [] };
 function make(extra = {}) {
   return buildContext({ projects: [project], points: [], days: [], entries: [], journal: [], cabinetSettings: [],
-    catalog: CATALOG, types: composedTypes(POINT_TYPES), cables: CABLES, devices: [...DEVICES, tsofar], configs: CONFIGS, units: UNITS, culprits: CULPRITS, delayReasons: DELAY_REASONS, ...extra });
+    catalog: CATALOG, types: composedTypes(POINT_TYPES), cables: CABLES, devices: [...DEVICES, tsofar], units: UNITS, culprits: CULPRITS, delayReasons: DELAY_REASONS, ...extra });
 }
 
 test('двери: части по устройствам', () => {
@@ -46,7 +46,7 @@ test('двери: название, id, стандартные', () => {
 
 test('двери: точка с конфигурацией — состав и кабели из неё', () => {
   const base = make(); const [em] = standardDoorCfgs(base);
-  const ctx = make({ configs: [...CONFIGS, em], points: [{ id: 'd1', projectId: 'P1', label: 'D1', typeId: 'Дверь', configId: em.id }] });
+  const ctx = make({ configs: [em], points: [{ id: 'd1', projectId: 'P1', label: 'D1', typeId: 'Дверь', configId: em.id }] });
   const info = pointInfo(ctx.points.get('d1'), ctx);
   assert.deepEqual(info.cableList, [{ cable: '6005', count: 2 }]);
   const ins = info.tasks.filter((t) => t.stage === 'Установка').map((t) => t.workId).sort();

@@ -58,7 +58,7 @@ export function exportSheets(project, ctx, { nameOf = (u) => s(u) } = {}) {
   ctx.catalog.forEach((w) => ref.push(['Работа', w.name, s(w.nameHe), [s(w.workType), s(w.unit)].filter(Boolean).join(', ')]));
   ctx.culprits.forEach((c) => ref.push(['Виновник', c.id, s(c.he), '']));
   ctx.delayReasons.forEach((r) => ref.push(['Причина задержки', r.id, s(r.he), '']));
-  ctx.configs.forEach((c) => ref.push(['Конфигурация двери', s(c.name), '', (c.components || []).map((id) => ctx.catalog.get(id)?.name || id).join(' + ')]));
+  ctx.configs.forEach((c) => ref.push(['Конфигурация двери', s(c.name), '', '']));
   sheets.push({ name: 'Справочники', rows: ref, widths: [20, 30, 30, 40] });
   return sheets;
 }

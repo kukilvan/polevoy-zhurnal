@@ -1,15 +1,9 @@
 // Статусы точек, установка, комплектность (разделы 3.1–3.3, Приложение А).
 import { cableOf, cablesCountOf, metrageOf, cableListOf } from './points.js';
-import { defaultInstallBinding } from './seed.js';
 import { compositionOf, composedInfo, composedCables as composedCablesOf, doneByPorts, workFits, STAGES } from './compose.js';
 
-// Привязка установки типа точек: поля типа (installMode/installWorkIds), для старых данных — стандартная привязка по названию типа
-export function installBinding(type) {
-  if (!type) return { mode: 'any', workIds: [] };
-  if (type.installMode) return { mode: type.installMode, workIds: type.installWorkIds || [] };
-  return defaultInstallBinding(type.id) || { mode: type.isDoor ? 'config' : 'any', workIds: [] };
-}
-export const usesConfig = (type) => installBinding(type).mode === 'config';
+// Типы-двери (у них выбирается конфигурация двери): тип «Дверь» и все типы из группы «Дверь»
+export const usesConfig = (type) => !!type && (type.id === 'Дверь' || type.group === 'Дверь');
 
 // Кабели точки целиком [{ cable, count }]: свои (cableOverride) или по типу/устройствам/настройке шкафа
 export function effectiveCablesOf(point, ctx) {
@@ -53,19 +47,9 @@ export function pointInfo(point, ctx) {
 
   const installedIds = [...new Set(rows.filter((r) => r.action === 'Установка').map((r) => r.workId))];
   const type = ctx.types.get(point.typeId);
-  const project = ctx.projects.get(point.projectId);
-  const config = ctx.configs.get(point.configId || project?.defaultConfigId);
 
-  // Установка по привязке типа: config — набор двери (k/n), works — выбранные работы (k/n), any — любая установка, none — не требуется
-  const bind = installBinding(type);
-  let install = ''; let installDone = 0; let installTotal = 0;
-  const partial = (ids) => {
-    installTotal = ids.length; installDone = ids.filter((c) => installedIds.includes(c)).length;
-    return installDone === 0 ? '' : installDone >= installTotal ? 'Установлено' : `Установлено ${installDone}/${installTotal}`;
-  };
-  if (bind.mode === 'config') install = config ? partial(config.components) : (installedIds.length > 0 ? 'Установлено' : '');
-  else if (bind.mode === 'works' && bind.workIds.length) install = partial(bind.workIds);
-  else install = installedIds.length > 0 ? 'Установлено' : '';
+  // Установка (старые точки): любая запись «Установка» в журнале
+  const install = installedIds.length > 0 ? 'Установлено' : ''; const installDone = installedIds.length; const installTotal = installedIds.length;
 
   // Статус: первое сработавшее правило сверху вниз
   let status;

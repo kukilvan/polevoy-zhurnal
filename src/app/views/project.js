@@ -199,9 +199,5 @@ export function projectView(ui) {
       h('button', { class: 'wide', onclick: () => import('./pullview.js').then((m) => m.openPulls()) }, '🧵 Протяжки'),
       h('button', { class: 'sec', onclick: () => ui.open('projects') }, 'Все проекты'),
       autoBackupLine(p),
-      h('div', { class: 'mut', style: { width: '100%' } }, readsLine()),
-      h('button', { class: 'sec', onclick: backupNow }, p.backupAt ? `💾 Резервная копия (последняя: ${new Date(p.backupAt).toLocaleString('ru-RU', { dateStyle: 'short', timeStyle: 'short' })})` : '💾 Резервная копия на Диск'),
-      h('button', { class: 'sec', onclick: exportExcel }, '📊 Выгрузить всё в Excel'),
-      h('button', { class: 'sec', onclick: updateManagerTable }, '🔄 Обновить таблицу для руководства'),
-      mainTable(p).link ? h('button', { class: 'sec', onclick: () => window.open(mainTable(p).link, '_blank') }, '📊 Открыть таблицу руководства') : null));
+      h('div', { class: 'mut', style: { width: '100%' } }, readsLine())));
 }

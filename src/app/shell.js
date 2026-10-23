@@ -33,7 +33,6 @@ import { historyView } from './views/history.js';
 import { monthView } from './views/month.js';
 import { tablesView } from './views/tables.js';
 import { guideView, maybeWelcome } from './views/guide.js';
-import { soonView } from './views/soon.js';
 
 const TABS = [
   ['project', 'Проект', '🏗'], ['meter', 'Точки', '📏'], ['todos', 'Дела', '✅'], ['journal', 'Журнал', '📒'], ['doh', 'Дохот', '📝'], ['settings', 'Настройки', '⚙️'],
@@ -94,7 +93,7 @@ export function createShell({ user, onLogout, diag }) {
       case 'settings': return settingsView(ui);
       case 'todos': return todosView();
       case 'journal': return journalView(ui);
-      default: return soonView(ui.tab);
+      default: return h('div', {});
     }
   }
 

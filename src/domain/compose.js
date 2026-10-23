@@ -239,37 +239,6 @@ export function pullGroups(points, ctx, deviceIds, mainCable) {
   return { groups: [...m.entries()].map(([c, ids]) => [c || undefined, ids]), done };
 }
 
-// ---------- перевод типов проекта на устройства ----------
-// typeDevices: { тип: [[deviceId, count]] }, typeWorks: { тип: [workId] }, library: { ops, devices, cables, catalog } — что будет добавлено.
-// Задним числом: если у точки есть проверка, а шилют по новой схеме не отмечен — шилют с датой проверки (по просьбе Ивана).
-export function migrationOps(ctx, { typeDevices, typeWorks, libraryOps }) {
-  const ops = [...libraryOps];
-  const added = (coll) => new Map(ops.filter((o) => o.coll === coll).map((o) => [o.id, { ...(ctx[coll].get(o.id) || {}), ...o.data, id: o.id }]));
-  const merge = (coll) => { const m = new Map(ctx[coll]); added(coll).forEach((v, k) => m.set(k, v)); return m; };
-  const types = merge('types'); const converted = [];
-  const ctx2pre = { devices: merge('devices'), catalog: merge('catalog') };
-  [...types.values()].forEach((t) => {
-    if (isComposedType(t) || !typeDevices[t.id]) return;
-    const devs = typeDevices[t.id].filter(([deviceId]) => ctx2pre.devices.has(deviceId)).map(([deviceId, count = 1]) => ({ deviceId, count }));
-    const data = { devices: devs, cables: [], workIds: (typeWorks[t.id] || []).filter((w) => ctx2pre.catalog.has(w)) };
-    types.set(t.id, { ...t, ...data }); converted.push(t.id);
-    ops.push({ coll: 'types', id: t.id, data });
-  });
-  const ctx2 = { ...ctx, types, devices: merge('devices'), cables: merge('cables'), catalog: merge('catalog') };
-  let backfilled = 0;
-  [...ctx.points.values()].filter((p) => converted.includes(p.typeId) && !Array.isArray(p.devices)).forEach((p) => {
-    const rows = ctx.journalByPoint.get(p.id) || [];
-    const checkDate = maxDate(rows.filter((r) => r.action === 'Проверка'));
-    if (!checkDate) return;
-    const info = composedInfo(p, ctx2, compositionOf(p, ctx2));
-    [...new Set(info.tasks.filter((t) => !t.done && t.stage === 'Шилют').map((t) => t.workId))].forEach((w) => {
-      ops.push({ coll: 'journal', id: `edit_${p.id}_${w}`, data: { pointId: p.id, editDate: checkDate, editWorkId: w, entryId: null, deleted: false } });
-      backfilled += 1;
-    });
-  });
-  return { ops, converted, backfilled };
-}
-
 // ---------- проверка справочников на противоречия ----------
 // → [{ level: 'error' | 'warn' | 'info', text }]
 export function auditRefs(ctx) {
@@ -284,7 +253,7 @@ export function auditRefs(ctx) {
   ctx.cables.forEach((c) => (c.workIds || []).forEach((w) => usedWork.add(w)));
   ctx.devices.forEach((d) => (d.workIds || []).forEach((w) => usedWork.add(w)));
   ctx.types.forEach((t) => {
-    if (!isComposedType(t)) { warn(`Тип «${t.id}» — старая схема (ещё не переведён на устройства)`); (t.installWorkIds || []).forEach((w) => usedWork.add(w)); return; }
+    if (!isComposedType(t)) { warn(`Тип «${t.id}» — без устройств и кабелей`); return; }
     (t.devices || []).forEach((x) => { usedDev.add(x.deviceId); if (!ctx.devices.has(x.deviceId)) err(`Тип «${t.id}»: устройства «${x.deviceId}» нет`); });
     (t.cables || []).forEach((c) => { if (!ctx.cables.has(c.cable)) err(`Тип «${t.id}»: кабеля «${c.cable}» нет`); });
     (t.workIds || []).forEach((w) => { usedWork.add(w); if (!ctx.catalog.has(w)) err(`Тип «${t.id}»: работы «${w}» нет в каталоге`); });
@@ -318,30 +287,4 @@ export function inheritedOfType(ctx, devices = [], cables = []) {
   });
   inheritedFromCables(ctx, cables).forEach((v, w) => { if (!out.has(w)) out.set(w, `${v} точки`); });
   return out;
-}
-// Повторы в справочниках и точках: [{ coll, id, name, workId, from }] + ops (убрать лишнюю копию на верхнем уровне)
-export function duplicateWorks(ctx) {
-  const found = []; const ops = [];
-  const w = (id) => ctx.catalog.get(id)?.name || id;
-  ctx.devices.forEach((d) => {
-    const inh = inheritedFromCables(ctx, d.cables); const dup = (d.workIds || []).filter((x) => inh.has(x));
-    if (dup.length) { dup.forEach((x) => found.push({ what: `Устройство «${d.name}»`, work: w(x), from: inh.get(x) })); ops.push({ coll: 'devices', id: d.id, data: { workIds: d.workIds.filter((x) => !inh.has(x)) } }); }
-  });
-  ctx.types.forEach((t) => {
-    if (!Array.isArray(t.devices)) return;
-    const inh = inheritedOfType(ctx, t.devices, t.cables); const dup = (t.workIds || []).filter((x) => inh.has(x));
-    if (dup.length) { dup.forEach((x) => found.push({ what: `Тип «${t.id}»`, work: w(x), from: inh.get(x) })); ops.push({ coll: 'types', id: t.id, data: { workIds: t.workIds.filter((x) => !inh.has(x)) } }); }
-  });
-  ctx.points.forEach((p) => {
-    if (!Array.isArray(p.devices)) return; let changed = false;
-    const devices = p.devices.map((e) => {
-      if (!Array.isArray(e.workIds)) return e;
-      const base = ctx.devices.get(e.deviceId) || {}; const inh = inheritedFromCables(ctx, Array.isArray(e.cables) ? e.cables : base.cables);
-      const dup = e.workIds.filter((x) => inh.has(x)); if (!dup.length) return e;
-      changed = true; dup.forEach((x) => found.push({ what: `Точка ${p.label}, устройство «${base.name || e.deviceId}»`, work: w(x), from: inh.get(x) }));
-      return { ...e, workIds: e.workIds.filter((x) => !inh.has(x)) };
-    });
-    if (changed) ops.push({ coll: 'points', id: p.id, data: { devices } });
-  });
-  return { found, ops };
 }

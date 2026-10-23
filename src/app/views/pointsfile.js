@@ -1,24 +1,10 @@
-// «📥 Точки из файла»: добавить точки из JSON (например, после разбора тохнита) — с предпросмотром, ничего не заменяет.
+// Предпросмотр и добавление точек из разбора чертежа (JSON-формат polevoy-points-1).
 import { h, openModal, toast } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { newId } from '../repo.js';
 import { parsePointsFile, planPointsImport, pointsImportOps, UNSORTED_TYPE, posOf } from '../../domain/index.js';
 import { poolBundles } from '../pool.js';
 import { drawingsOf } from '../drawings.js';
-
-export function pointsFromFile() {
-  const input = h('input', { type: 'file', accept: '.json,application/json,text/plain', style: { display: 'none' } });
-  const out = h('div', {});
-  const close = openModal('Точки из файла', h('div', {},
-    h('div', { class: 'mut' }, 'Файл .json с точками (например, после разбора тохнита). Точки добавятся к проекту; уже существующие (то же обозначение в том же шкафу) пропускаются; такое же обозначение в другом шкафу — не помеха. Перед добавлением — предпросмотр.'),
-    h('div', { class: 'btns' }, h('button', { onclick: () => input.click() }, '📂 Выбрать файл'), input), out), { sticky: true });
-  input.addEventListener('change', async () => {
-    const file = input.files?.[0]; if (!file) return;
-    let data;
-    try { data = parsePointsFile(await file.text()); } catch (e) { out.replaceChildren(h('div', { class: 'err' }, e.message)); return; }
-    out.replaceChildren(importPreview(data, file.name, close));
-  });
-}
 
 // Предпросмотр добавления точек (общий для файла и для разбора чертежа в приложении)
 // Точки без шкафа не добавляются: предпросмотр просит указать им шкаф (один на все такие точки) — иначе они остаются за бортом.

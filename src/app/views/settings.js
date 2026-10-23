@@ -5,12 +5,11 @@ import { allGroups } from '../typegroups.js';
 import { h, formModal, confirmDialog, toast, qtyList, openModal } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { newId } from '../repo.js';
-import { inheritedOfType, inheritedFromCables, duplicateWorks, tablesOf, mainTable, hasDeviceId, libraryOps, migrateProject, auditRefs, buildContext, typePool, bundleFrom, libWith, addBundleOps, isSystemType } from '../../domain/index.js';
+import { inheritedOfType, inheritedFromCables, tablesOf, mainTable, hasDeviceId, libraryOps, auditRefs, buildContext, typePool, bundleFrom, libWith, addBundleOps, isSystemType } from '../../domain/index.js';
 import { projectForm } from './projects.js';
 import { themeLabel, setTheme, nextTheme } from '../theme.js';
 import { updateManagerTable, backupNow, organizeDrive } from './project.js';
 import { exportExcel } from '../excel.js';
-import { pointsFromFile } from './pointsfile.js';
 import { catalogModal } from './catalogview.js';
 import { doorConfigsView } from './doorcfgview.js';
 import { colorField } from './doorchips.js';
@@ -100,34 +99,26 @@ export const REFS = {
     items: () => [...ctx().types.values()].filter((t) => !isSystemType(t)),
     line: (x) => [x.id, Array.isArray(x.devices) && x.devices.length
       || x.cables?.length ? `состав: ${[compText(x.devices), x.cables?.length ? `кабели точки ${x.cables.map((c) => `${c.cable}×${c.count}`).join(' + ')}` : ''].filter(Boolean).join(' + ')}${x.workIds?.length ? ` · на точку: ${x.workIds.map((w) => nameOf('catalog', w)).join(', ')}` : ''} · ${x.nameHe || '—'}`
-      : `${x.nameHe || '—'} · ${x.defaultCable || 'без кабеля'} ×${x.defaultCables ?? '?'} · старая схема`],
+      : `${x.nameHe || '—'} · состав пуст`],
     fields: ({ existing, created } = {}) => {
-      // поля старой схемы (кабель по умолчанию, установка) — только у старых типов без состава; новый тип можно сохранить пустым
-      const legacyType = !!existing && !Array.isArray(existing.devices) && !(existing.cables?.length);
-      const legacy = (v) => legacyType && !(v.devices?.length || v.cables?.length);
-      const old = (f) => ({ ...f, visible: (v) => legacy(v) && (!f.visible || f.visible(v)) });
       return [
         { key: 'nameHe', label: 'Название (иврит)', required: true },
         { key: 'group', label: 'Общая группа (для фильтров)', placeholder: 'например: Дверь', hint: `Типы с одной группой можно выбрать в фильтрах точек все вместе («▸ Все: Дверь»), каждый тип тоже остаётся в фильтре отдельно.${allGroups().length ? ` Уже есть: ${allGroups().join(', ')}.` : ''}` },
         qtyField('devices', 'Состав точки (устройства)', opts(ctx().devices, (d) => d.name), 'deviceId',
-          { addLabel: '➕ Добавить устройство', empty: legacyType ? 'Пусто — точка по старой схеме (кабель и установка ниже)' : 'Пусто — состав можно дописать потом', ...creator('devices', '🆕 Новое устройство'),
+          { addLabel: '➕ Добавить устройство', empty: 'Пусто — состав можно дописать потом', ...creator('devices', '🆕 Новое устройство'),
             hint: 'Из каких устройств состоит точка этого типа по умолчанию. При добавлении точек состав можно поменять. Устройства — в «Настройки → Устройства».' }),
         qtyField('cables', 'Кабели точки (не от устройств)', opts(ctx().cables, (c) => c.id), 'cable',
           { addLabel: '➕ Добавить кабель', empty: 'Нет — кабели только от устройств', ...creator('cables', '🆕 Новый кабель'),
             hint: 'Когда несколько авизарим сидят на одном кабеле: например, дверь — 2×6005 на точку, а устройства без кабелей. Работы кабелей (хивут, проверка…) добавятся сами.' }),
         { ...custom('pointWorks', 'Работы на всю точку', taskWorks(), { hint: 'Не по устройствам, а один раз на точку: например, проверка двери. Серые галочки — работы, которые уже есть у устройств или кабелей состава (второй раз не нужны). Новая работа, созданная здесь, сама получит этот тип в «Для каких типов точек».', empty: 'Нет работ',
           locked: (v) => inheritedOfType(ctx(), v.devices, v.cables),
-          ...creator('catalog', '🆕 Новая работа', (id, data) => created?.set(id, data.forTypes || [])) }), visible: (v) => !legacy(v) },
-        old({ key: 'defaultCable', label: 'Кабель по умолчанию', type: 'select', required: true, options: opts(ctx().cables, (c) => c.id), emptyLabel: 'Выберите' }),
-        old({ key: 'defaultCables', label: 'Кабелей на точку', type: 'number', required: true }),
+          ...creator('catalog', '🆕 Новая работа', (id, data) => created?.set(id, data.forTypes || [])) }) },
         { key: 'scanId', label: 'Серийный номер и MAC (со сканером)', type: 'checkbox', hint: 'Поля появятся в карточке точки этого типа. У камер и вайфая включено по умолчанию.' },
-        old(custom('stages', 'Этапы точки (видны в таблице руководства)', STAGES.map((s) => ({ value: s, label: s })))),
       ];
     },
-    defaults: { defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Проверка'] },
+    defaults: {},
     toForm: (x) => ({ ...x, scanId: hasDeviceId(x), pointWorks: x.workIds || [], devices: Array.isArray(x.devices) ? x.devices : [], cables: Array.isArray(x.cables) ? x.cables : [] }),
-    prepare: (v, { existing } = {}) => (v.devices?.length || v.cables?.length || !(existing && !Array.isArray(existing.devices)) ? { scanId: !!v.scanId, nameHe: v.nameHe, group: String(v.group || '').trim(), devices: v.devices || [], cables: v.cables || [], workIds: v.pointWorks || [] } : {
-      scanId: !!v.scanId, nameHe: v.nameHe, group: String(v.group || '').trim(), defaultCable: v.defaultCable, defaultCables: v.defaultCables, stages: v.stages || [], devices: null, cables: [], workIds: [], }),
+    prepare: (v) => ({ scanId: !!v.scanId, nameHe: v.nameHe, group: String(v.group || '').trim(), devices: v.devices || [], cables: v.cables || [], workIds: v.pointWorks || [] }),
     usage: (x) => [...ctx().points.values()].filter((p) => p.typeId === x.id).length,
   },
   cables: {
@@ -163,19 +154,6 @@ export const REFS = {
     defaults: {},
     prepare: (v) => ({ name: v.name, nameHe: v.nameHe, cables: v.cables || [], workIds: v.workIds || [], doorPart: v.doorPart || null, short: String(v.short || '').trim() || null, color: v.color || null }),
     usage: (x) => usesOf(ctx(), 'devices', x.id).reduce((n, u) => n + u.n, 0), uses: (x) => usesOf(ctx(), 'devices', x.id),
-  },
-  configs: {
-    title: 'Конфигурации дверей', coll: 'configs', hint: 'Наборы установки для двери: из каких работ она состоит. Дверь «установлена», когда сделаны все компоненты.',
-    idMode: 'generated', prefix: 'CFG_', nameKey: 'name',
-    items: () => [...ctx().configs.values()],
-    line: (x) => [x.name, (x.components || []).map((id) => ctx().catalog.get(id)?.name || id).join(' + ')],
-    fields: () => [
-      { key: 'name', label: 'Название (русский)', required: true, hint: 'Например: Коре + мануль + магнит' },
-      custom('components', 'Из каких работ состоит', opts(new Map([...ctx().catalog].filter(([, w]) => w.workType === 'Установка')), (w) => w.name), { hint: 'Работы с типом «Установка» из каталога.', empty: 'В каталоге нет работ типа «Установка»' }),
-    ],
-    defaults: {},
-    prepare: (v) => ({ name: v.name, components: v.components || [] }),
-    usage: (x) => [...ctx().points.values()].filter((p) => p.configId === x.id).length + (currentProject()?.defaultConfigId === x.id ? 1 : 0),
   },
   units: { title: 'Единицы измерения', coll: 'units', hint: 'Шт, м, мин… Показываются в доху.', idMode: 'name', nameLabel: 'Единица (русский)', heKey: 'he', heLabel: 'Единица (иврит)',
     items: () => [...ctx().units.values()], line: (x) => [x.id, x.he || '—'], usage: (x) => [...ctx().catalog.values()].filter((w) => w.unit === x.id).length },
@@ -251,15 +229,6 @@ export function auditModal() {
     auditBox(auditRefs(state.ctx))));
 }
 
-// ---- Повторы работ: работа на верхнем уровне (тип / устройство / устройство у точки), которая уже приходит с нижнего (устройство / кабель) ----
-function dupWorksModal() {
-  const { found, ops } = duplicateWorks(ctx());
-  if (!found.length) { toast('Повторов работ нет'); return; }
-  const c = openModal('🧹 Повторы работ', h('div', {},
-    h('div', { class: 'mut' }, 'Эти работы записаны дважды: на верхнем уровне и в составе (устройство или кабель). Лишняя копия на верхнем уровне будет убрана, работа в составе останется. Журнал не меняется.'),
-    h('div', { class: 'picklist', style: { maxHeight: '50vh' } }, found.map((f) => h('div', { class: 'pickrow' }, h('span', {}, h('b', {}, f.what), ` — «${f.work}»`, h('div', { class: 'sub mut' }, `уже есть: ${f.from}`))))),
-    h('div', { class: 'btns' }, h('button', { onclick: () => { getRepo().save(currentProject().id, ops); toast(`Убрано повторов: ${found.length}`); c(); } }, `🧹 Убрать (${found.length})`))), { sticky: true });
-}
 
 // ---- Общая группа для нескольких типов сразу (например, все двери) ----
 function groupModal() {
@@ -285,28 +254,6 @@ function groupModal() {
 
 
 // Перевод типов старой схемы на устройства: подробный предпросмотр и проверка «как будет после»
-function migrateTypes() {
-  const ctx = state.ctx; const r = migrateProject(ctx, knownIds());
-  if (!r.converted.length) { toast('Старых типов нет'); return; }
-  const after = ctxAfter(r.ops);
-  const dn = (id) => after.devices.get(id)?.name || id; const wn = (id) => after.catalog.get(id)?.name || id;
-  const added = (c) => r.ops.filter((o) => o.coll === c && !ctx[c].has(o.id));
-  const sec = (title, ...kids) => h('div', { style: { margin: '10px 0' } }, h('b', {}, title), ...kids);
-  const body = h('div', { style: { fontSize: '14px' } },
-    sec('Типы → состав', ...r.converted.map((id) => { const t = after.types.get(id);
-      return h('div', {}, `• ${id}: ${(t.devices || []).map((x) => dn(x.deviceId)).join(' + ') || '— пусто'}${t.workIds?.length ? `; на точку: ${t.workIds.map(wn).join(', ')}` : ''} (точек: ${[...ctx.points.values()].filter((p) => p.typeId === id).length})`); })),
-    added('devices').length ? sec('Будут добавлены устройства', h('div', {}, added('devices').map((o) => o.data.name).join(', '))) : null,
-    added('catalog').length ? sec('Будут добавлены работы', h('div', {}, added('catalog').map((o) => o.data.name).join(', '))) : null,
-    added('types').length ? sec('Будут добавлены типы', h('div', {}, added('types').map((o) => o.id).join(', '))) : null,
-    r.ops.some((o) => o.coll === 'cables') ? sec('Работы кабелей', h('div', {}, r.ops.filter((o) => o.coll === 'cables').map((o) => `${o.id}: ${(o.data.workIds || []).map(wn).join(', ')}`).join('; '))) : null,
-    sec(`Шилют задним числом: ${r.backfilled} точек`, h('div', { class: 'mut' }, 'Там, где проверка уже отмечена.')),
-    sec('Проверка «как будет после»', auditBox(auditRefs(after).filter((x) => x.level !== 'info'))),
-    h('div', { class: 'mut' }, 'Что не так — можно поправить и до, и после перевода (в «Устройствах» и «Типах точек»). Вернуть всё можно через «История и откат».'),
-    h('div', { class: 'btns' },
-      h('button', { onclick: () => { getRepo().save(currentProject().id, r.ops.map((o) => ({ ...o, data: { ...o.data, deleted: false } }))); close(); toast(`Переведено типов: ${r.converted.length}`); } }, '🔄 Перевести'),
-      h('button', { class: 'sec', onclick: () => close() }, 'Отмена')));
-  const close = openModal('Перевод на устройства', body);
-}
 
 export function refView() {
   const key = state.settingsRef; const def = REFS[key];
@@ -326,9 +273,7 @@ export function refView() {
     h('div', { class: 'mut', style: { marginBottom: '10px' } }, def.hint),
     h('div', { class: 'btns', style: { marginTop: 0 } }, h('button', { onclick: () => itemForm(key, null) }, '➕ Добавить пункт'),
       POOL_KINDS.includes(key) ? poolButton(key) : null,
-      key === 'types' ? h('button', { class: 'sec', onclick: () => groupModal() }, '📂 Общая группа') : null,
-      key === 'types' ? h('button', { class: 'sec', onclick: () => dupWorksModal() }, '🧹 Убрать повторы работ') : null,
-      key === 'types' && migrateProject(state.ctx, knownIds()).converted.length ? h('button', { class: 'wide', onclick: migrateTypes }, '🔄 Перевести старые типы на устройства') : null),
+      key === 'types' ? h('button', { class: 'sec', onclick: () => groupModal() }, '📂 Общая группа') : null),
     h('div', { class: 'card', style: { padding: 0, marginTop: '12px' } }, rows.length ? rows : h('div', { class: 'empty' }, 'Список пуст.')));
 }
 
@@ -348,7 +293,7 @@ export function settingsView(ui) {
       row('🎨', `Тема: ${themeLabel()}`, 'Нажмите, чтобы переключить: тёмная → светлая → как в телефоне (только на этом устройстве)', () => { setTheme(nextTheme()); ui.render(); })),
     h('div', { class: 'card', style: { padding: 0 } },
       h('div', { class: 'group', style: { padding: '10px 14px 4px' } }, 'Выпадающие списки (справочники)'),
-      ['types', 'devices', 'cables', 'catalog', 'configs', 'units', 'culprits', 'delayReasons'].map(ref),
+      ['types', 'devices', 'cables', 'catalog', 'units', 'culprits', 'delayReasons'].map(ref),
       row('🧩', 'Каталог подписей (разбор чертежей)', `Моих правил: ${(getRepo().prefs?.tohnitLearned?.labels || []).length + (getRepo().prefs?.tohnitLearned?.skip || []).length} · общий для всех проектов`, catalogModal),
       row('🩺', 'Проверка справочников', 'Ссылки на удалённое, неиспользуемые устройства и работы', auditModal)),
     h('div', { class: 'card', style: { padding: 0 } },
@@ -367,8 +312,6 @@ export function settingsView(ui) {
       row('📁', 'Разложить файлы на Диске по папкам', 'Полевой журнал → папка проекта → Чертежи, Резервные копии; таблицы — в папке проекта', organizeDrive),
       row('📊', 'Выгрузить всё в Excel', 'Файл .xlsx: точки, журнал, дни, справочники', exportExcel),
       row('⌨', 'Быстрый ввод латиницей', 'Слова вроде «тв», «кам» сами становятся TV, CAM при вводе названий', () => import('./latinfix.js').then((m) => m.shortcutsModal())),
-      row('🔤', 'Раскладка в названиях точек', 'Найти и исправить кириллицу вместо латиницы (С108 → C108)', () => import('./latinfix.js').then((m) => m.fixLayoutModal())),
-      row('📥', 'Точки из файла', 'Добавить точки из JSON (после разбора тохнита), без замены', pointsFromFile),
       row('📥', 'Импорт данных (замена всего проекта)', null, () => ui.open('import')),
       row('🕘', 'История и откат', null, () => ui.open('history')),
       row('🧾', 'Журнал событий', null, () => ui.open('log'))));

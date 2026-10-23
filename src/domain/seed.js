@@ -1,4 +1,3 @@
-import { migrationOps } from './compose.js';
 // Начальные справочники для нового проекта (раздел 4 описания функционала).
 // Цены не переносятся. Справочники лежат внутри проекта, чтобы все участники видели одно и то же.
 
@@ -75,15 +74,15 @@ export const CATALOG = CATALOG_ROWS.split('\n').map((line) => {
 
 // Этапы типов точек: Протяжка / Хивут / Установка / Проверка / Шилют
 export const POINT_TYPES = [
-  { id: 'Камера', installMode: 'works', installWorkIds: ['INS_CAM'], nameHe: 'מצלמה', defaultCable: 'cat7', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка', 'Шилют'], isDoor: false },
-  { id: 'Дверь', installMode: 'config', installWorkIds: [], nameHe: 'דלת', defaultCable: '6005', defaultCables: 3, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка'], isDoor: true },
-  { id: 'Галай', installMode: 'works', installWorkIds: ['INS_GALAI'], nameHe: 'גלאי', defaultCable: '6005', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Установка'], isDoor: false },
-  { id: 'Вайфай', installMode: 'works', installWorkIds: ['INS_AP'], nameHe: 'נקודת גישה', defaultCable: 'cat7', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка', 'Шилют'], isDoor: false },
-  { id: 'Бакар', installMode: 'none', installWorkIds: [], nameHe: 'בקר', defaultCable: 'cat7', defaultCables: 2, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка'], isDoor: false },
-  { id: 'Точка', installMode: 'none', installWorkIds: [], nameHe: 'נקודת תקשורת', defaultCable: 'cat7', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Проверка', 'Шилют'], isDoor: false },
-  { id: 'TV', installMode: 'none', installWorkIds: [], nameHe: 'נקודת TV', defaultCable: 'cat7', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Проверка', 'Шилют'], isDoor: false },
-  { id: 'Оптика', installMode: 'none', installWorkIds: [], nameHe: 'סיב אופטי', defaultCable: 'Оптика', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Проверка'], isDoor: false },
-  { id: 'Другое', installMode: 'none', installWorkIds: [], nameHe: 'אחר', defaultCable: 'cat7', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка'], isDoor: false },
+  { id: 'Камера', nameHe: 'מצלמה', defaultCable: 'cat7', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка', 'Шилют'], isDoor: false },
+  { id: 'Дверь', nameHe: 'דלת', defaultCable: '6005', defaultCables: 3, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка'], isDoor: true },
+  { id: 'Галай', nameHe: 'גלאי', defaultCable: '6005', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Установка'], isDoor: false },
+  { id: 'Вайфай', nameHe: 'נקודת גישה', defaultCable: 'cat7', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Установка', 'Проверка', 'Шилют'], isDoor: false },
+  { id: 'Бакар', nameHe: 'בקר', defaultCable: 'cat7', defaultCables: 2, stages: ['Протяжка', 'Хивут', 'Проверка'], isDoor: false },
+  { id: 'Точка', nameHe: 'נקודת תקשורת', defaultCable: 'cat7', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Проверка', 'Шилют'], isDoor: false },
+  { id: 'TV', nameHe: 'נקודת TV', defaultCable: 'cat7', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Проверка', 'Шилют'], isDoor: false },
+  { id: 'Оптика', nameHe: 'סיב אופטי', defaultCable: 'Оптика', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Проверка'], isDoor: false },
+  { id: 'Другое', nameHe: 'אחר', defaultCable: 'cat7', defaultCables: 1, stages: ['Протяжка', 'Хивут', 'Проверка'], isDoor: false },
 ];
 
 // accounting: 'Точки' — в доху считаются точки, 'Метры' — кабели и метры
@@ -136,9 +135,6 @@ const compose = (t) => ({ ...t, devices: (TYPE_DEVICES[t.id] || []).map(([device
 export const composedTypes = (types) => [...types, ...NEW_TYPES.filter((n) => !types.some((t) => t.id === n.id))].map(compose);
 
 // Чего не хватает проекту из стандартной библиотеки (не трогая того, что уже есть): операции записи
-// Перевод проекта на устройства. known — все id, которые когда-либо были в проекте (включая удалённые): удалённое не возвращаем.
-export const migrateProject = (ctx, known) => migrationOps(ctx, { typeDevices: TYPE_DEVICES, typeWorks: TYPE_WORKS, libraryOps: libraryOps(ctx, known) });
-
 // Чего не хватает проекту из стандартной библиотеки: только то, чего в проекте никогда не было (удалённое Иваном не возвращается).
 // Ссылки на удалённые работы/кабели/устройства из библиотечных записей убираются.
 export function libraryOps(ctx, known) {
@@ -165,11 +161,6 @@ export function libraryOps(ctx, known) {
   return ops;
 }
 
-export const CONFIGS = [
-  { id: 'CFG1', name: 'Коре + мануль + магнит', components: ['INS_KORE', 'INS_MANUL', 'INS_MAGNIT'] },
-  { id: 'CFG2', name: 'Коре + 2 лахцана + электромагнит', components: ['INS_KORE', 'INS_LNIPUTZ', 'INS_LPTIHA', 'INS_EMAG'] },
-];
-
 export const UNITS = [
   { id: 'шт', he: "יח'" }, { id: 'м', he: "מ'" }, { id: 'точка', he: "נק'" },
   { id: 'мин', he: "דק'" }, { id: 'по кабелю', he: 'לפי כבל' },
@@ -187,8 +178,3 @@ export const DELAY_REASONS = [
   { id: 'Ждём другую бригаду', he: 'ממתין לצוות' }, { id: 'Столы', he: 'שולחנות' }, { id: 'Другое', he: 'אחר' },
 ];
 
-// Что считается «установкой» точки (привязка по умолчанию): none — не требуется, works — перечисленные работы, config — набор двери (конфигурация)
-export const defaultInstallBinding = (typeId) => {
-  const t = POINT_TYPES.find((x) => x.id === typeId);
-  return t ? { mode: t.installMode, workIds: [...t.installWorkIds] } : null;
-};

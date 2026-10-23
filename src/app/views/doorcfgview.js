@@ -137,7 +137,6 @@ export function doorConfigsView() {
     if (!state.ctx) return;
     const all = allDoorCfgs(); const pins = pinsOf(); const list = pins.map((id) => all.get(id)).filter(Boolean);
     const rest = [...all.values()].filter((c) => !pins.includes(c.id)).sort((a, b) => usageOf(b.id) - usageOf(a.id) || a.name.localeCompare(b.name, 'ru'));
-    const legacy = [...state.ctx.configs.values()].filter((c) => !isDoorCfg(c));
     const move = (i, d) => { const l = [...pins]; const j = i + d; if (j < 0 || j >= l.length) return; [l[i], l[j]] = [l[j], l[i]]; setPins(l); };
     const sub = (c) => [c.standard ? 'стандарт' : '', usageOf(c.id) ? `дверей в проекте: ${usageOf(c.id)}` : ''].filter(Boolean).join(' · ');
     box.replaceChildren(...[
@@ -155,10 +154,7 @@ export function doorConfigsView() {
         h('div', {}, doorChips(c), sub(c) ? h('div', { class: 'wk-sub' }, sub(c)) : null),
         h('span', { style: { display: 'flex', gap: '4px' } },
           h('button', { class: 'sec', style: { padding: '2px 10px' }, title: 'Закрепить', onclick: () => pin(c) }, '📌'),
-          delBtn(c))))) : h('div', { class: 'empty' }, 'Пусто'),
-      legacy.length ? h('div', {}, h('div', { class: 'group', style: { padding: '12px 0 4px' } }, `Старые конфигурации — только работы (${legacy.length})`),
-        h('div', { class: 'card', style: { padding: 0 } }, ...legacy.map((c) => h('div', { class: 'item', onclick: () => itemForm('configs', c) },
-          h('div', { class: 'name' }, c.name, h('div', { class: 'sub' }, (c.components || []).map((id) => state.ctx.catalog.get(id)?.name || id).join(' + '))))))) : null].filter(Boolean));
+          delBtn(c))))) : h('div', { class: 'empty' }, 'Пусто')].filter(Boolean));
   };
   paint();
   const offP = onDoorPool(() => { if (!box.isConnected) { offP(); return; } paint(); });

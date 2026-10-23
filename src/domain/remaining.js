@@ -1,5 +1,4 @@
 // «Что осталось»: точки, на которых ещё не сделан хивут, установка или проверка (с учётом этапов типа точки).
-import { installBinding } from './status.js';
 import { pointInfo } from './status.js';
 import { comparePoints } from './points.js';
 
@@ -23,7 +22,7 @@ export function missingStages(point, ctx) {
   // протянуты не все виды кабеля (например, 6005 есть, а cat7 ещё нет)
   if (has('Протяжка') && !info.pulled && info.pullDone) out.push('Дотянуть');
   if (has('Хивут') && !info.hived) out.push('Хивут');
-  if (has('Установка') && installBinding(type).mode !== 'none' && info.install !== 'Установлено') out.push('Установка');
+  if (has('Установка') && info.install !== 'Установлено') out.push('Установка');
   if (has('Проверка') && (!info.checked || info.checkResult === 'Не работает')) out.push('Проверка');  // неисправная — проверить заново
   return out;
 }
@@ -50,7 +49,7 @@ export function isFinished(point, ctx) {
   if (info.composed) return info.tasks.every((t) => t.done) && info.checkResult !== 'Не работает';
   const ok = {
     'Протяжка': !!info.pulled, 'Хивут': !!info.hived, 'Проверка': !!info.checked && info.checkResult !== 'Не работает', 'Шилют': !!info.shilut,
-    'Установка': installBinding(type).mode === 'none' || info.install === 'Установлено',
+    'Установка': info.install === 'Установлено',
   };
   return stages.every((s) => ok[s] !== false);
 }

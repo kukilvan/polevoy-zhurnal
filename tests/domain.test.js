@@ -1,17 +1,17 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  CATALOG, POINT_TYPES, CABLES, CONFIGS, UNITS, CULPRITS, DELAY_REASONS,
+  CATALOG, POINT_TYPES, CABLES, UNITS, CULPRITS, DELAY_REASONS,
   generateLabels, parseSuffixes, buildContext, pointInfo, pointKey, sortNumber, comparePoints, entryLine, itogShtuk, dohHeader, doh,
 } from '../src/domain/index.js';
 
 const project = { id: 'P1', name: 'Mega Or', contractor: 'Megason', object: 'Mega Or', helper: 'Марина', helperHe: 'מרינה',
-  nameHe: 'מגה אור', objectHe: 'מגה אור', defaultConfigId: 'CFG1', oneOff: false };
+  nameHe: 'מגה אור', objectHe: 'מגה אור', oneOff: false };
 
 function make(extra = {}) {
   return buildContext({
     projects: [project], points: [], days: [], entries: [], journal: [], cabinetSettings: [],
-    catalog: CATALOG, types: POINT_TYPES, cables: CABLES, configs: CONFIGS, units: UNITS, culprits: CULPRITS, delayReasons: DELAY_REASONS,
+    catalog: CATALOG, types: POINT_TYPES, cables: CABLES, units: UNITS, culprits: CULPRITS, delayReasons: DELAY_REASONS,
     ...extra,
   });
 }
@@ -49,28 +49,6 @@ test('статус: проверка «Не работает» → Неиспр�
   const good = entry('e2', 'D2', 'Проверка', 'CHK_FLUKE', ['c1']);
   ctx = scenario([cam], [day('D1', '2026-10-05'), day('D2', '2026-10-06')], [bad, good]);
   assert.equal(pointInfo(ctx.points.get('c1'), ctx).status, 'Проверена');
-});
-
-test('дверь: установка по конфигурации CFG1 (коре + мануль + магнит) — k/n и «Установлено»', () => {
-  const mk = (...ids) => ids.map((w, i) => entry(`e${i + 1}`, 'D1', 'Установка', w, ['d1']));
-  const info = (...ids) => { const ctx = scenario([door], [day('D1', '2026-10-05')], mk(...ids)); return pointInfo(ctx.points.get('d1'), ctx); };
-  assert.equal(info().install, '');
-  assert.equal(info('INS_KORE').install, 'Установлено 1/3');
-  assert.equal(info('INS_KORE').status, 'Установлено 1/3');
-  assert.equal(info('INS_KORE').installHe, 'הותקן חלקית 1/3');
-  assert.equal(info('INS_KORE', 'INS_MANUL').install, 'Установлено 2/3');
-  const full = info('INS_KORE', 'INS_MANUL', 'INS_MAGNIT');
-  assert.equal(full.install, 'Установлено'); assert.equal(full.status, 'Установлена'); assert.equal(full.installHe, 'הותקן');
-  assert.equal(info('INS_BIO').install, ''); // компонент вне конфигурации не считается
-});
-
-test('дверь: конфигурация точки главнее конфигурации проекта; без конфигурации хватает любой установки', () => {
-  const ctx = scenario([{ ...door, configId: 'CFG2' }], [day('D1', '2026-10-05')], [entry('e1', 'D1', 'Установка', 'INS_KORE', ['d1'])]);
-  assert.equal(pointInfo(ctx.points.get('d1'), ctx).install, 'Установлено 1/4');
-  const noCfg = buildContext({ ...{ projects: [{ ...project, defaultConfigId: undefined }], points: [door], days: [day('D1', '2026-10-05')],
-    entries: [entry('e1', 'D1', 'Установка', 'INS_EMAG', ['d1'])], journal: [{ id: 'j', entryId: 'e1', pointId: 'd1' }], cabinetSettings: [],
-    catalog: CATALOG, types: POINT_TYPES, cables: CABLES, configs: CONFIGS, units: UNITS, culprits: CULPRITS, delayReasons: DELAY_REASONS } });
-  assert.equal(pointInfo(noCfg.points.get('d1'), noCfg).install, 'Установлено');
 });
 
 test('кабели и метраж: значения типа, переопределение по шкафу, метраж = длина × кабелей', () => {
@@ -136,7 +114,7 @@ test('дох дня: шапка (сам / с помощником / разовы
   assert.match(doh(solo, ctx2, 'he'), /לבד/);
   const oneOff = { ...d, object: 'Склад Хайфа' };
   const ctx3 = buildContext({ ...{ projects: [{ ...project, oneOff: true }], points: [p1], days: [oneOff], entries: [e1], journal: [], cabinetSettings: [],
-    catalog: CATALOG, types: POINT_TYPES, cables: CABLES, configs: CONFIGS, units: UNITS, culprits: CULPRITS, delayReasons: DELAY_REASONS } });
+    catalog: CATALOG, types: POINT_TYPES, cables: CABLES, units: UNITS, culprits: CULPRITS, delayReasons: DELAY_REASONS } });
   assert.equal(dohHeader(oneOff, ctx3), '05.10.2026 Склад Хайфа с Марина');
 });
 
@@ -209,41 +187,35 @@ test('рабочие дни месяца по всем проектам: тол�
   assert.equal(r.text, 'Рабочие дни за сентябрь 2026\n\n22.09.2026\nЭлектра Тель-Авив с Лешей и Ильёй\n\n23.09.2026\nМегасон Модиин с Мариной');
 });
 
-test('привязка установки: бакар без установки, вайфай по работе, переопределение проектом', async () => {
-  const { buildContext, pointInfo, POINT_TYPES, CATALOG, CONFIGS, installBinding } = await import('../src/domain/index.js');
-  const mk = (types) => buildContext({
-    projects: [{ id: 'p', defaultConfigId: 'CFG1' }], types, catalog: CATALOG, configs: CONFIGS,
-    points: [{ id: 'b', projectId: 'p', label: 'B-1', typeId: 'Бакар', length: 5 }, { id: 'w', projectId: 'p', label: 'W-1', typeId: 'Вайфай', length: 5 }, { id: 'c', projectId: 'p', label: 'C-1', typeId: 'Камера', length: 5 }],
-    journal: [{ id: 'j1', pointId: 'w', editDate: '2026-10-01', editWorkId: 'INS_AP' }, { id: 'j2', pointId: 'b', editDate: '2026-10-01', editWorkId: 'CHK_FLUKE' }, { id: 'j3', pointId: 'c', editDate: '2026-10-01', editWorkId: 'INS_CAM' }],
+test('старые точки (без состава): установка — любая запись «Установка» в журнале', async () => {
+  const { buildContext, pointInfo, POINT_TYPES, CATALOG } = await import('../src/domain/index.js');
+  const ctx = buildContext({
+    projects: [{ id: 'p' }], types: POINT_TYPES, catalog: CATALOG,
+    points: [{ id: 'w', projectId: 'p', label: 'W-1', typeId: 'Вайфай', length: 5 }, { id: 'b', projectId: 'p', label: 'B-1', typeId: 'Бакар', length: 5 }],
+    journal: [{ id: 'j1', pointId: 'w', editDate: '2026-10-01', editWorkId: 'INS_AP' }],
   });
-  const ctx = mk(POINT_TYPES);
   assert.equal(pointInfo(ctx.points.get('w'), ctx).install, 'Установлено');
-  assert.equal(pointInfo(ctx.points.get('b'), ctx).status, 'Проверена');
   assert.equal(pointInfo(ctx.points.get('b'), ctx).install, '');
-  // старые данные без полей привязки: берётся стандартная по названию типа
-  const legacy = mk(POINT_TYPES.map(({ installMode, installWorkIds, ...t }) => t));
-  assert.equal(installBinding(legacy.types.get('Бакар')).mode, 'none');
-  // проект переопределил: камеры только протягиваем — установка не требуется
-  const noCam = mk(POINT_TYPES.map((t) => (t.id === 'Камера' ? { ...t, installMode: 'none', installWorkIds: [] } : t)));
-  assert.equal(installBinding(noCam.types.get('Камера')).mode, 'none');
-  // несколько работ: частично → k/n
-  const two = mk(POINT_TYPES.map((t) => (t.id === 'Камера' ? { ...t, installMode: 'works', installWorkIds: ['INS_CAM', 'HIV_KEY'] } : t)));
-  assert.equal(pointInfo(two.points.get('c'), two).install, 'Установлено 1/2');
 });
 
+test('тип-дверь определяется по названию «Дверь» или группе «Дверь»', async () => {
+  const { usesConfig } = await import('../src/domain/index.js');
+  assert.ok(usesConfig({ id: 'Дверь' })); assert.ok(usesConfig({ id: 'Дверь 2', group: 'Дверь' }));
+  assert.ok(!usesConfig({ id: 'Камера' })); assert.ok(!usesConfig(undefined));
+});
 
 // ---- таблицы для руководства (профили и сборка) ----
 const reportData = async () => {
-  const { buildContext, POINT_TYPES, CONFIGS, CATALOG } = await import('../src/domain/index.js');
+  const { buildContext, POINT_TYPES, CATALOG } = await import('../src/domain/index.js');
   const data = {
-    projects: [{ id: 'p1', name: 'Mega Or', contractor: 'Megason', object: 'Mega Or', nameHe: 'מגה אור', objectHe: 'מגה אור', defaultConfigId: 'CFG1' }],
+    projects: [{ id: 'p1', name: 'Mega Or', contractor: 'Megason', object: 'Mega Or', nameHe: 'מגה אור', objectHe: 'מגה אור' }],
     points: [
       { id: 'a', projectId: 'p1', label: '1A-C01', typeId: 'Камера', cabinet: '1A', length: 70, planName: 'C-71' },
       { id: 'b', projectId: 'p1', label: '1A-D01', typeId: 'Дверь', cabinet: '1A' },
       { id: 'c', projectId: 'p1', label: '2B-C01', typeId: 'Камера', cabinet: '2B' },
       { id: 'd', projectId: 'p1', label: 'G-01', typeId: 'Галай' },
     ],
-    types: POINT_TYPES, configs: CONFIGS, catalog: CATALOG, cables: [{ id: 'cat7', nameHe: 'כבל CAT7' }],
+    types: POINT_TYPES, catalog: CATALOG, cables: [{ id: 'cat7', nameHe: 'כבל CAT7' }],
     journal: [
       { id: 'j1', pointId: 'a', editDate: '2026-10-03', editWorkId: 'PR_PTS', createdBy: 'u1' },
       { id: 'j2', pointId: 'a', editDate: '2026-10-04', editWorkId: 'CHK_FLUKE', createdBy: 'u1' },
@@ -277,13 +249,13 @@ test('таблица: язык, «—» для этапов, которых у �
   assert.equal(he.sheets[0].rtl, true);
   const byLabel = Object.fromEntries(rows.slice(1).map((r) => [r[0], r]));
   assert.equal(byLabel['G-01'][3], '—'); assert.equal(byLabel['G-01'][4], '—'); // у галая нет проверки и шилюта
-  assert.equal(byLabel['1A-D01'][2], 'הותקן חלקית 1/3'); // дверь: 1 из 3 устройств
+  assert.equal(byLabel['1A-D01'][2], 46300);   // дата установки
   assert.equal(byLabel['1A-C01'][5], 'נבדק');
   const ru = buildReport(project, ctx, { ...defaultTables()[1], columns: ['label', 'installed', 'status', 'checkResult'] });
   const rr = Object.fromEntries(ru.sheets[0].rows.slice(ru.sheets[0].headerRow + 1).map((r) => [r[0], r]));
-  assert.equal(rr['1A-D01'][1], 'частично 1/3'); assert.equal(rr['1A-D01'][2], 'Установлено 1/3'); assert.equal(rr['1A-C01'][3], 'Работает');
+  assert.equal(rr['1A-D01'][2], 'Установлена'); assert.equal(rr['1A-C01'][3], 'Работает');
   // итоги сверху: всего 4, протянуто 1, проверено 1
-  assert.deepEqual(ru.sheets[0].rows[3].slice(0, 6), [4, 1, 0, 0, 1, 1]);
+  assert.deepEqual(ru.sheets[0].rows[3].slice(0, 6), [4, 1, 0, 1, 0, 1]);
   assert.ok(!JSON.stringify(ru.sheets[0].rows).includes('=')); // формул нет
 });
 
@@ -601,18 +573,6 @@ test('устройство, изменённое у точки: свои каб�
   assert.ok(!tasksOf(ctx.points.get('a'), ctx).some((t) => t.workId === 'INS_INT'));
 });
 
-test('перевод старых типов на устройства: статусы не меняются, шилют задним числом при наличии проверки', async () => {
-  const { migrateProject } = await import('../src/domain/index.js');
-  const bak = { id: 'b', projectId: 'P1', label: '1A-01-02', cabinet: '1A', typeId: 'Бакар' };
-  const D = day('D1', '2026-10-05');
-  const es = ['PR_PTS', 'HIV_KEY', 'HIV_DEV', 'CHK_FLUKE'].map((w, i) => entry(`E${i}`, 'D1', CATALOG.find((x) => x.id === w).workType, w, ['b']));
-  const ctx = make({ points: [bak], days: [D], entries: es, journal: es.map((e) => ({ id: `j${e.id}`, entryId: e.id, pointId: 'b' })), devices: [] });
-  const r = migrateProject(ctx);
-  assert.ok(r.converted.includes('Бакар'));
-  const shl = r.ops.find((o) => o.coll === 'journal');
-  assert.deepEqual([shl.data.editWorkId, shl.data.editDate], ['SHL', '2026-10-05']);
-});
-
 test('добавление точек из файла: дубли пропускаются, ошибки и подозрительные обозначения, новые типы', async () => {
   const { parsePointsFile, planPointsImport, pointsImportOps } = await import('../src/domain/index.js');
   assert.throws(() => parsePointsFile('{"format":"x"}'));
@@ -724,7 +684,7 @@ test('групповое переименование точек', async () => {
 });
 
 test('повторы работ: нижний уровень главнее, в задачах точки работа один раз', async () => {
-  const { buildContext, tasksOf, duplicateWorks, inheritedOfType } = await import('../src/domain/index.js');
+  const { buildContext, tasksOf, inheritedOfType } = await import('../src/domain/index.js');
   const ctx = buildContext({
     catalog: [{ id: 'W_INST', name: 'Установка интеркома', workType: 'Установка' }, { id: 'W_HK', name: 'Хивут кистона', workType: 'Хивут' }, { id: 'W_CHK', name: 'Проверка', workType: 'Проверка' }],
     cables: [{ id: 'cat7', workIds: ['W_HK'] }],
@@ -737,10 +697,6 @@ test('повторы работ: нижний уровень главнее, в 
   assert.equal(tasks.find((t) => t.workId === 'W_HK').qty, 1);  // кабель + устройство — не 2
   assert.equal(tasks.filter((t) => t.workId === 'W_CHK').length, 1);
   assert.deepEqual([...inheritedOfType(ctx, [{ deviceId: 'DV_INT', count: 1 }]).keys()].sort(), ['W_HK', 'W_INST']);
-  const d = duplicateWorks(ctx);
-  assert.equal(d.found.length, 2);
-  assert.deepEqual(d.ops.find((o) => o.coll === 'types').data.workIds, ['W_CHK']);
-  assert.deepEqual(d.ops.find((o) => o.coll === 'devices').data.workIds, ['W_INST']);
 });
 
 test('повторы работ не трогают количества: 2 магнита, несколько кабелей', async () => {

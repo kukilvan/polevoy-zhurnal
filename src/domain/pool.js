@@ -67,7 +67,7 @@ export function changedFields(a = {}, b = {}) {
 const KIND_ONE = { types: 'Тип', devices: 'Устройство', cables: 'Кабель', catalog: 'Работа' };
 const NEW_ONE = { types: 'Новый тип', devices: 'Новое устройство', cables: 'Новый кабель', catalog: 'Новая работа' };
 const FIELD = { name: 'Название', nameHe: 'Иврит', group: 'Группа', workType: 'Тип работы', unit: 'Единица', accounting: 'Учёт протяжки', scanId: 'Серийник/MAC',
-  active: 'Активна', defaultCable: 'Кабель по умолчанию', defaultCables: 'Кабелей на точку', installMode: 'Установка', stages: 'Этапы' };
+  active: 'Активна', defaultCable: 'Кабель по умолчанию', defaultCables: 'Кабелей на точку', stages: 'Этапы' };
 const show = (v) => (v === undefined || v === null || v === '' ? '—' : Array.isArray(v) ? (v.length ? v.join(', ') : '—') : v === true ? 'да' : v === false ? 'нет' : String(v));
 
 /** Имя элемента по картам (кандидат + пул) */
@@ -150,10 +150,9 @@ export function usesOf(ctx, coll, id) {
     add('Точки со своими кабелями', pts.filter((p) => [p.cables, p.cableOverride].some((l) => (l || []).some((c) => c.cable === id)) || (p.devices || []).some((d) => (d.cables || []).some((c) => c.cable === id))).length);
     add('Конфигурации дверей', cfgs.filter((c) => (c.cables || []).some((k) => k.cable === id)).length);
   } else if (coll === 'catalog') {
-    const has = (x) => (x.workIds || []).includes(id) || (x.installWorkIds || []).includes(id);
+    const has = (x) => (x.workIds || []).includes(id);
     add('Типы', types.filter(has).length); add('Устройства', devs.filter(has).length); add('Кабели', cabs.filter(has).length);
     add('Точки со своими работами', pts.filter((p) => (p.devices || []).some((d) => (d.workIds || []).includes(id))).length);
-    add('Конфигурации дверей (старые)', cfgs.filter((c) => (c.components || []).includes(id)).length);
     add('Записи в дохе', [...ctx.entries.values()].filter((e) => e.workId === id).length);
   }
   void nm;
