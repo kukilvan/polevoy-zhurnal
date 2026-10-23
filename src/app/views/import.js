@@ -2,7 +2,8 @@
 import { h, confirmDialog, toast } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 
-const COLLS = ['points', 'journal', 'days', 'entries', 'cabinetSettings', 'todos', 'notes'];
+const COLLS = ['points', 'journal', 'days', 'entries', 'cabinetSettings', 'todos', 'notes', 'pulls'];
+const REFS = ['catalog', 'types', 'cables', 'devices', 'configs', 'units', 'culprits', 'delayReasons'];
 
 export function parseImport(text) {
   const data = JSON.parse(text);
@@ -25,8 +26,15 @@ export function runImport(repo, pid, data, { replace }) {
     }));
   }
   COLLS.forEach((c) => data[c].forEach((d) => ops.push({ coll: c, id: d.id, action: 'import', data: { ...d, deleted: false } })));
+  // справочники: только добавляем отсутствующие (ничего не затираем и не убираем)
+  REFS.forEach((c) => (data.reference?.[c] || []).forEach((d) => { if (d?.id && !(state.data[c] || []).some((x) => x.id === d.id && !x.deleted)) ops.push({ coll: c, id: d.id, action: 'import', data: { ...d, deleted: false } }); }));
   repo.save(pid, ops);
-  if (data.project) repo.saveProject(pid, data.project);
+  if (data.project || data.projectData) {
+    const pd = { ...(data.projectData || {}) };
+    // ссылки на файлы Диска возвращаем только в тот же проект, из которого сделана копия
+    if (data.backupOf !== pid) ['sheetLinks', 'tables', 'managers', 'rackTable', 'drawings'].forEach((k) => delete pd[k]);
+    repo.saveProject(pid, { ...(data.project || {}), ...pd });
+  }
   return { removed, added: ops.length - removed };
 }
 

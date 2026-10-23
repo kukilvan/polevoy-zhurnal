@@ -15,11 +15,17 @@ async function ensureFolder(req, { name, props, parent }) {
   return (await req('POST', `${D}?fields=id`, { name, mimeType: FOLDER, appProperties: props, ...(parent ? { parents: [parent] } : {}) })).id;
 }
 const cache = new Map();
+// Корневые папки ищем/создаём строго по одной (пока идёт поиск/создание): иначе два параллельных запроса создадут по своей «Полевой журнал»
+const rootLock = new Map();
+const rootOnce = (req, key, mk) => {
+  if (!rootLock.has(key)) { const p = mk(); rootLock.set(key, p); p.then(() => rootLock.delete(key), () => rootLock.delete(key)); }
+  return rootLock.get(key);
+};
 export async function projectFolder(req, project, kind = '') {
   const key = `${project.id}|${kind}|${project.name}`;
   if (cache.has(key)) return cache.get(key);
   const p = (async () => {
-    const root = await ensureFolder(req, { name: ROOT_NAME, props: { pzRoot: '1' } });
+    const root = await rootOnce(req, 'root', () => ensureFolder(req, { name: ROOT_NAME, props: { pzRoot: '1' } }));
     const pf = await ensureFolder(req, { name: safe(project.name), props: { pzProject: project.id, pzKind: 'project' }, parent: root });
     return kind ? ensureFolder(req, { name: KIND_NAMES[kind] || kind, props: { pzProject: project.id, pzKind: kind }, parent: pf }) : pf;
   })();
@@ -48,7 +54,7 @@ let manualsP = null;
 export function manualsFolder(req) {
   if (!manualsP) {
     manualsP = (async () => {
-      const root = await ensureFolder(req, { name: ROOT_NAME, props: { pzRoot: '1' } });
+      const root = await rootOnce(req, 'root', () => ensureFolder(req, { name: ROOT_NAME, props: { pzRoot: '1' } }));
       return ensureFolder(req, { name: KIND_NAMES.manuals, props: { pzKind: 'manuals' }, parent: root });
     })();
     manualsP.catch(() => { manualsP = null; });

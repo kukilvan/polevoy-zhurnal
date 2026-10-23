@@ -11,14 +11,14 @@ const RACK_V = 2;  // версия оформления листов: при и�
 export const rackAuto = (project) => !!project?.rackTable?.fileId && project.rackTable.auto !== false;
 
 // Обновляет файл таблицы шкафов. → { patch, changed, res }; patch — поля для project.rackTable
-export async function syncRackTable(api, project, ctx, { force = false, uid = '', noCreate = false, shareWith = '' } = {}) {
+export async function syncRackTable(api, project, ctx, { force = false, uid = '', noCreate = false, shareWith = '', nameOf } = {}) {
   const rt = project.rackTable || {}; const prefs = rt.prefs || {};
   const res = buildRackSheets(project, ctx, [...ctx.points.values()], { mode: rt.mode || 'fill', mergeColors: !!rt.mergeColors, cabs: rt.cabs?.length ? rt.cabs : null, colors: prefs.colors || [], models: prefs.models || [] });
   if (!res.count) throw new Error('Нет шкафов с планом: сначала постройте план в «🗄 Шкафы и шильют»');
   const patch = {};
   let file = rt.fileId ? await api.fileInfo(rt.fileId) : null;
   if (!file && noCreate) throw new Error('Сервер не видит файл таблицы шкафов: откройте её для сервера кнопкой «Обновить таблицу» в приложении');
-  if (!file && rt.fileId && rt.by && uid && rt.by !== uid) throw new Error('Таблицу шкафов создал другой участник проекта, у вас нет к ней доступа. Обновить её может он.');
+  if (!file && rt.fileId && rt.by && uid && rt.by !== uid) { const who = nameOf?.(rt.by); throw new Error(`Таблицу шкафов создал${who ? ` ${who}` : ' другой участник проекта'}, у вас нет к ней доступа. Обновить её может только он.`); }
   if (!file) { file = await api.create(RACK_TITLE); if (uid) patch.by = uid; }
   patch.fileId = file.id; patch.link = `https://docs.google.com/spreadsheets/d/${file.id}/edit`;
   // файл — в папке «Для руководства» (один раз)

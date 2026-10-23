@@ -1,5 +1,6 @@
 // «📊 Таблица для шильюта»: один файл Google Таблицы «תכנון ארונות ושילוט» на проект (папка проекта «Для руководства»): лист-план на каждый шкаф + общий лист шильюта.
 // Повторное создание обновляет тот же файл. Значения пишутся прямо в ячейки — листы можно копировать и отправлять по отдельности.
+import { memberNameByUid } from './members.js';
 import { h, openModal, toast } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
 import { getToken, realApi, clearToken } from '../google.js';
@@ -43,7 +44,7 @@ export async function generateRackTable(opts = null, retried = false) {
     toast('Создаю таблицу на Диске…');
     const api = mem() ? testApi() : realApi(await getToken('racks'));
     let r;
-    try { r = await syncRackTable(api, proj, state.ctx, { force: true, uid: getRepo().user.uid, shareWith: p.serverEmail || '' }); } catch (e) { if (e.patch) getRepo().saveProject(p.id, { rackTable: { ...next, ...e.patch } }); throw e; }
+    try { r = await syncRackTable(api, proj, state.ctx, { force: true, uid: getRepo().user.uid, nameOf: (u) => memberNameByUid(p, u), shareWith: p.serverEmail || '' }); } catch (e) { if (e.patch) getRepo().saveProject(p.id, { rackTable: { ...next, ...e.patch } }); throw e; }
     getRepo().saveProject(p.id, { rackTable: { ...next, ...r.patch, serverError: '' } });
     const shared = currentProject()?.managers?.shared;
     toast(`Таблица «${RACK_TITLE}» готова (папка «Для руководства»): листов ${r.res.sheets.length}${r.res.warnings.length ? `. Внимание: ${r.res.warnings.join('; ')}` : ''}${shared ? '' : '. Чтобы начальство её увидело: «Для руководства» → «🔄 Обновить всё сейчас»'}`);

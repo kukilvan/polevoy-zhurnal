@@ -1,7 +1,7 @@
 // Вкладка «Проект»: карточка текущего проекта и сводка по точкам.
 import { projectWizard } from './wizard.js';
 import { readsCount, readsToday, readsResetAt, DAILY_READ_LIMIT, writesToday, DAILY_WRITE_LIMIT } from '../repo.js';
-import { state, currentProject, pointsSorted, infoOf, getRepo } from '../store.js';
+import { state, currentProject, pointsSorted, infoOf, getRepo, ready } from '../store.js';
 import { projectForm } from './projects.js';
 import { pointForm, generatorForm } from './points.js';
 import { openToday } from './doh.js';
@@ -9,7 +9,7 @@ import { h, formModal, confirmDialog, toast } from '../ui.js';
 import { getToken, realApi, clearToken } from '../google.js';
 import { syncTable } from '../managers.js';
 import { tablesOf, mainTable, withTable, readinessByCabinet } from '../../domain/index.js';
-import { runBackup, BACKUP_FOLDER, backupName } from '../backup.js';
+import { backupCount, runBackup, BACKUP_FOLDER, backupName } from '../backup.js';
 import { liveProjects } from '../store.js';
 import { filesIn } from '../drivefolders.js';
 import { cacheGet, pushDrawing } from '../drawings.js';
@@ -33,6 +33,9 @@ function testApi() {
 let syncing = false;
 export async function backupNow(retried = false) {
   const p = currentProject(); if (!p || syncing) return;
+  if (!ready()) { toast('Данные проекта ещё загружаются — подождите немного и повторите'); return; }
+  const n = backupCount(state.data);
+  if (p.backupCount > 20 && n < p.backupCount * 0.5 && !(await confirmDialog(`В проекте сейчас записей ${n}, а в прошлой копии было ${p.backupCount}. Копия за сегодня заменит прошлую. Всё равно сохранить?`))) return;
   syncing = true;
   try {
     toast('Сохраняю резервную копию на Диск…');

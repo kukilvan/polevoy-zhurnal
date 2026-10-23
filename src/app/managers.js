@@ -73,7 +73,7 @@ export async function syncTable(api, project, ctx, table, { force = false, uid =
   if (!file && noCreate) throw new Error('Сервер не видит файл таблицы: откройте её для сервера кнопкой «Обновить» в приложении');
   if (!file && fileId && table.by && uid && table.by !== uid) {
     // файл создал другой участник: у вас к нему нет доступа — новый не создаём, чтобы не подменить ссылку
-    throw new Error('Эту таблицу создал другой участник проекта, у вас нет к ней доступа. Обновить её может он.');
+    { const who = nameOf?.(table.by); throw new Error(`Эту таблицу создал${who ? ` ${who}` : ' другой участник проекта'}, у вас нет к ней доступа. Обновить её может только он.`); }
   }
   if (!file) { file = await api.create(rep.title); fileId = file.id; oldHash = ''; if (uid) patch.by = uid; }
   if (uid && !table.by && !patch.by) patch.by = uid;

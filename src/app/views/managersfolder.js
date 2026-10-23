@@ -65,7 +65,7 @@ export async function updateManagersFolder(retried = false) {
       try {
         const cur = currentProject(); const pf = getRepo().prefs || {};
         const rt = { ...cur.rackTable, prefs: { models: pf.panelModels || [], colors: pf.shilutColors || [] } };
-        const r = await syncRackTable(api, { ...cur, rackTable: rt }, state.ctx, { uid: getRepo().user.uid, shareWith: cur.serverEmail || '' });
+        const r = await syncRackTable(api, { ...cur, rackTable: rt }, state.ctx, { uid: getRepo().user.uid, nameOf: (u) => memberNameByUid(cur, u), shareWith: cur.serverEmail || '' });
         getRepo().saveProject(p.id, { rackTable: { ...rt, ...r.patch, serverError: '' } }); nr = 1;
       } catch (e) { if (e.patch) getRepo().saveProject(p.id, { rackTable: { ...currentProject().rackTable, ...e.patch } }); toast(`«${RACK_TITLE}»: ${e.message}`); }
     }
@@ -106,7 +106,7 @@ export function managersFolderCard(ui) {
   return h('div', {},
     h('div', { class: 'card' },
       h('div', { style: { fontWeight: 700, fontSize: '16px' } }, '📁 Папка для руководства'),
-      h('div', { class: 'mut', style: { margin: '4px 0' } }, 'Одна ссылка на папку Google Диска: в ней отмеченные ниже таблицы и тохниты с номерами. Смотреть может любой, у кого есть ссылка. Каждую ночь сервер обновляет их, если что-то поменялось.'),
+      h('div', { class: 'mut', style: { margin: '4px 0' } }, 'Одна ссылка на папку Google Диска: в ней отмеченные ниже таблицы и тохниты с номерами. ⚠ Таблицы при каждом обновлении пересобираются заново: то, что вы добавили в них руками, пропадёт. Смотреть может любой, у кого есть ссылка. Каждую ночь сервер обновляет их, если что-то поменялось.'),
       m.link ? h('div', { style: { wordBreak: 'break-all', margin: '6px 0', fontSize: '13px' } }, m.link) : h('div', { class: 'mut' }, 'Папка появится после первого «🔄 Обновить всё сейчас».'),
       h('div', { class: 'btns' },
         h('button', { onclick: () => updateManagersFolder() }, '🔄 Обновить всё сейчас'),

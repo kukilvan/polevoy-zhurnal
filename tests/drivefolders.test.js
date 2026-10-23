@@ -33,3 +33,9 @@ test('папки Диска: Полевой журнал / проект / Чер
   assert.equal(await moveInto(req, 'X', dr), true); assert.deepEqual(files.get('X').parents, [dr]);
   assert.equal(await moveInto(req, 'X', dr), false);
 });
+
+test('параллельные запросы папок проектов не плодят второй корень «Полевой журнал»', async () => {
+  const { req, files } = fakeDrive();
+  await Promise.all([projectFolder(req, { id: 'A', name: 'A' }, 'backups'), projectFolder(req, { id: 'B', name: 'B' }, 'managers'), projectFolder(req, { id: 'C', name: 'C' })]);
+  assert.equal([...files.values()].filter((f) => f.name === 'Полевой журнал').length, 1);
+});
