@@ -1,6 +1,6 @@
 // Общий пул в приложении: слушает пул (все пользователи), входящие (только администратор пула)
 // и отправляет администратору новое/изменённое из текущего проекта.
-import { state, getRepo, subscribe, currentProject } from './store.js';
+import { state, getRepo, subscribe, currentProject, demo } from './store.js';
 import { POOL_ADMIN, POOL_KINDS, poolMaps, inboxCandidates, deepHash, bundleFrom, coveredBy, candidateChanges } from '../domain/index.js';
 import { docKey } from './repo.js';
 
@@ -29,7 +29,7 @@ const sentKey = 'pz.poolSent';
 function pushCandidates() {
   try {
     const p = currentProject(); const repo = getRepo();
-    if (!p || !poolReady() || !state.ctx || !['types', 'devices', 'cables', 'catalog'].every((c) => state.loaded?.has?.(c))) return;
+    if (demo.on || !p || !poolReady() || !state.ctx || !['types', 'devices', 'cables', 'catalog'].every((c) => state.loaded?.has?.(c))) return;
     if (POOL_KINDS.every((k) => !pool[k].size)) return;
     let sent = {}; try { sent = JSON.parse(localStorage.getItem(sentKey) || '{}'); } catch { /* ok */ }
     const uid = repo.user.uid; const list = [];

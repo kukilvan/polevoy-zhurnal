@@ -1,4 +1,5 @@
 // Руководство «Как пользоваться приложением»: от оформления и проекта до серийных номеров и MAC; Шпаргалка и Словарик — отдельно. Тексты только на русском.
+import { startTour, topicList } from '../tour/index.js';
 import { h, openModal, formModal, confirmDialog, toast } from '../ui.js';
 import { getRepo } from '../store.js';
 import { newId } from '../repo.js';
@@ -454,10 +455,19 @@ function searchBox(ui) {
   return h('div', {}, input, box);
 }
 
+function tourCard(ui) {
+  return h('div', { class: 'card' },
+    h('b', {}, '🎓 Обучение на примере'),
+    h('div', { class: 'mut', style: { margin: '4px 0 8px' } }, 'Покажу кнопки прямо в приложении, на демо-проекте. Ваши данные не затрагиваются. Можно пройти всё сразу или одну тему.'),
+    h('div', { class: 'btns' }, h('button', { onclick: () => startTour(ui, 'all') }, '▶ Пройти весь тур')),
+    h('div', { class: 'btns' }, ...topicList(ui).map((t) => h('button', { class: 'sec', onclick: () => startTour(ui, [t.id]) }, `${t.icon} ${t.title}`))));
+}
+
 export function guideView(ui) {
   if (guidePart === 'manuals') return h('div', {}, manualsCard());
   if (guidePart === 'dict') return h('div', {}, dictCard());
   const wrap = h('div', {},
+    tourCard(ui),
     searchBox(ui),
     h('div', { class: 'mut', style: { margin: '0 2px 10px' } }, 'Коротко о том, как работать в приложении. Нажмите «Подробнее», чтобы увидеть детали.'),
     ...SECTIONS.map((s) => sectionCard(s, ui)));

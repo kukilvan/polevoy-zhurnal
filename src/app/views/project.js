@@ -1,4 +1,5 @@
 // Вкладка «Проект»: карточка текущего проекта и сводка по точкам.
+import { withCreatorGuide, startTour } from '../tour/index.js';
 import { projectWizard } from './wizard.js';
 import { readsCount, readsToday, readsResetAt, DAILY_READ_LIMIT, writesToday, DAILY_WRITE_LIMIT } from '../repo.js';
 import { state, currentProject, pointsSorted, infoOf, getRepo, ready } from '../store.js';
@@ -167,7 +168,8 @@ export function projectView(ui) {
   const p = currentProject();
   if (!p) {
     return h('div', { class: 'empty' }, h('p', {}, 'У вас пока нет проекта.'),
-      h('button', { onclick: () => projectWizard(ui) }, '➕ Создать проект'));
+      h('button', { onclick: () => withCreatorGuide(() => projectWizard(ui)) }, '➕ Создать проект'),
+      h('div', { style: { marginTop: '10px' } }, h('button', { class: 'sec', onclick: () => startTour(ui, 'all') }, '🎓 Пройти обучение')));
   }
   const go = (label, fn, extra = {}) => h('button', { class: 'sec', style: { margin: 0, ...extra }, onclick: fn }, label);
   return h('div', {},

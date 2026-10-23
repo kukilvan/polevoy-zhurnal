@@ -1,4 +1,5 @@
 // Все проекты, создание и правка проекта.
+import { withCreatorGuide } from '../tour/index.js';
 import { projectWizard } from './wizard.js';
 import { h, formModal, confirmDialog, toast } from '../ui.js';
 import { state, liveProjects, archivedProjects, deletedProjects, currentProject, setCurrentProject, getRepo } from '../store.js';
@@ -53,7 +54,7 @@ export function projectsView(ui) {
   const list = liveProjects().sort((a, b) => (b.lastWorkDate || b.createdAt || 0) - (a.lastWorkDate || a.createdAt || 0));
   const cur = currentProject();
   return h('div', {},
-    h('div', { class: 'btns' }, h('button', { onclick: () => projectWizard(ui) }, '➕ Новый проект')),
+    h('div', { class: 'btns' }, h('button', { onclick: () => withCreatorGuide(() => projectWizard(ui)) }, '➕ Новый проект')),
     list.length ? h('div', { class: 'card', style: { marginTop: '12px', padding: 0 } },
       list.map((p) => h('div', { class: 'item', onclick: () => { setCurrentProject(p.id); ui.go('project'); } },
         h('div', { class: 'name' }, p.name, h('div', { class: 'sub' }, [p.contractor, p.object].filter(Boolean).join(' · ') || '—')),

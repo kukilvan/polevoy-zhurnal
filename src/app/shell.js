@@ -9,7 +9,7 @@ import { h, openModal, toast, confirmDialog, setShortcutsProvider } from './ui.j
 import { currentShortcuts } from './views/latinfix.js';
 setShortcutsProvider(() => currentShortcuts());
 setSnapProvider((id, data) => entryLine({ ...(state.ctx?.entries.get(id) || {}), ...data, id }, state.ctx, 'ru'));
-import { nav, state, subscribe, currentProject, ready, getRepo, setCurrentProject, pendingCount } from './store.js';
+import { nav, demo, state, subscribe, currentProject, ready, getRepo, setCurrentProject, pendingCount } from './store.js';
 import { projectsView, projectForm } from './views/projects.js';
 import { settingsView, refView, REFS, auditModal, refreshApp } from './views/settings.js';
 import { membersView } from './views/members.js';
@@ -32,6 +32,7 @@ import { importView } from './views/import.js';
 import { historyView } from './views/history.js';
 import { monthView } from './views/month.js';
 import { tablesView } from './views/tables.js';
+import { maybeOfferTour, withCreatorGuide, startTour } from './tour/index.js';
 import { guideView, guideTitle, openGuide, maybeWelcome } from './views/guide.js';
 import { exportExcel } from './excel.js';
 import { mainTable } from '../domain/index.js';
@@ -64,11 +65,12 @@ export function createShell({ user, onLogout, diag }) {
       item('📁 Все проекты', () => open('projects')),
       p ? item('✏️ Редактировать проект', () => projectForm(p, ui)) : null,
       p ? item('👥 Участники', () => open('members')) : null,
-      item('➕ Новый проект', () => projectWizard(ui)),
+      item('➕ Новый проект', () => withCreatorGuide(() => projectWizard(ui))),
       p ? item('📒 История', () => open('journal')) : null,
       p ? item('🕘 Откат записей', () => open('history')) : null,
       p ? item('📅 Отчёт за месяц', () => open('month')) : null]),
       section('Руководства', [
+      item('🎓 Тур по приложению', () => startTour(ui, 'all')),
       item('📖 Как пользоваться приложением', () => openGuide(ui)),
       item('📚 Шпаргалка (инструкции)', () => openGuide(ui, null, 'manuals')),
       item('🔤 Словарик', () => openGuide(ui, null, 'dict'))]),
@@ -218,7 +220,7 @@ export function createShell({ user, onLogout, diag }) {
 
   window.addEventListener('online', () => { state.online = true; render(); });
   window.addEventListener('offline', () => { state.online = false; render(); });
-  const unsub = subscribe(() => { render(); if (ready()) { maybeWelcome(ui, user); if (currentProject()?.serverEmail) import('./views/managersfolder.js').then((m) => m.ensureServerAccess()).catch(() => {}); } });
+  const unsub = subscribe(() => { render(); if (ready() && !demo.on) { maybeWelcome(ui, user); maybeOfferTour(ui); if (currentProject()?.serverEmail) import('./views/managersfolder.js').then((m) => m.ensureServerAccess()).catch(() => {}); } });
   startPool(); startDoorPool(); startManuals();  // общий пул: слушать, входящие администратора, отправка нового из проекта
   render();
 
