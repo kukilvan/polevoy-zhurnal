@@ -302,7 +302,7 @@ function dictCard() {
 
 // какая часть руководства открыта: шаги (по умолчанию), 'manuals' — инструкции, 'dict' — словарик
 let guidePart = null;
-export const guideTitle = () => (guidePart === 'manuals' ? 'Инструкции' : guidePart === 'dict' ? 'Словарик' : 'Как пользоваться');
+export const guideTitle = () => (guidePart === 'manuals' ? 'Шпаргалка (инструкции)' : guidePart === 'dict' ? 'Словарик' : 'Как пользоваться приложением');
 export function openGuide(ui, id, part = null) {
   guidePart = part;
   if (id) { open.add(id); focusId = id; }
@@ -350,7 +350,7 @@ export function maybeWelcome(ui, user) {
     h('div', { class: 'guide-p' }, '• Отчёты: сюда каждый день вносятся сделанные работы, из них собирается отчёт.'),
     h('div', { class: 'guide-p' }, '• Точки: список точек, карточка с историей работ и длина кабеля к каждой.'),
     h('div', { class: 'guide-p' }, '• История: что и кем сделано на каждой точке.'),
-    h('p', { class: 'mut' }, 'Подробное описание, шаги работы и словарик с объяснением слов — в разделе «Как пользоваться» (Настройки).'),
+    h('p', { class: 'mut' }, 'Подробное описание, шаги работы и словарик с объяснением слов — в разделе «Как пользоваться приложением» (Настройки).'),
     h('div', { class: 'btns' },
       h('button', { onclick: () => { close(); openGuide(ui, 'doh'); } }, '📖 Открыть руководство'),
       h('button', { class: 'sec', onclick: () => close() }, 'Понятно'))));

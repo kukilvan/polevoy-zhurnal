@@ -37,7 +37,7 @@ import { exportExcel } from './excel.js';
 import { mainTable } from '../domain/index.js';
 
 const TABS = [
-  ['project', 'Проект', '🏗'], ['meter', 'Точки', '📏'], ['todos', 'Дела и заметки', '✅'], ['journal', 'История', '📒'], ['doh', 'Отчёты', '📝'], ['settings', 'Настройки', '⚙️'],
+  ['project', 'Проект', '🏗'], ['meter', 'Точки', '📏'], ['todos', 'Дела и заметки', '✅'], ['journal', 'История', '📒'], ['doh', 'Отчёты', '📝'], ['settings', 'Ещё', '⚙️'],
 ];
 const SCREEN_TITLES = { projects: 'Все проекты', month: 'Отчёт за месяц', history: 'Откат записей', import: 'Импорт', ref: 'Справочник', members: 'Участники', tables: 'Для руководства', racks: 'Шкафы и шильют', sheets: 'Таблицы', guide: 'Как пользоваться', log: 'Журнал событий' };
 
@@ -69,8 +69,8 @@ export function createShell({ user, onLogout, diag }) {
       p ? item('🕘 Откат записей', () => open('history')) : null,
       p ? item('📅 Отчёт за месяц', () => open('month')) : null]),
       section('Руководства', [
-      item('📖 Как пользоваться', () => openGuide(ui)),
-      item('📚 Инструкции', () => openGuide(ui, null, 'manuals')),
+      item('📖 Как пользоваться приложением', () => openGuide(ui)),
+      item('📚 Шпаргалка (инструкции)', () => openGuide(ui, null, 'manuals')),
       item('🔤 Словарик', () => openGuide(ui, null, 'dict'))]),
       section('Настройки', [
       item(`🎨 Тема: ${themeLabel()} → ${themeLabel(nextTheme())}`, () => { setTheme(nextTheme()); render(); }),

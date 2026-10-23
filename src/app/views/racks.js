@@ -204,7 +204,7 @@ function wizard(cab, ui) {
     toast(left.length ? `Разложено. Не поместились (нет мест в панелях): ${left.map((p) => p.label).slice(0, 8).join(', ')}${left.length > 8 ? '…' : ''}` : 'Точки разложены по панелям');
     ui.render();
   } }, '✅ Разложить');
-  const close = openModal(`🧙 Мастер: шкаф ${cab}`, h('div', {},
+  const close = openModal(`🧙 Распределить по панелям: шкаф ${cab}`, h('div', {},
     h('div', { class: 'mut' }, `${subs.map((q) => `${many ? `${q.name}: ` : 'Шкаф '}${q.height}U, ${q.bottomUp === false ? 'U1 вверху' : 'U1 внизу'}`).join('; ')}. Для каждого типа укажите, ${many ? 'в каком шкафу и ' : ''}на каких U стоят его панели (по порядку: первая, вторая…). Точки ляжут по возрастанию номера с 1-го порта; занятые другими точками порты пропускаются. Одну и ту же панель можно указать у двух типов — второй тип займёт свободные порты.`),
     box, h('div', { class: 'btns' }, go)), { sticky: true });
 }
@@ -456,7 +456,7 @@ function rackEditor(ui, cab) {
     return h('div', {},
       many ? h('div', { class: 'group', style: { padding: '14px 2px 2px', fontSize: '15px' } }, `🗄 ${sub.name} · ${sub.height}U · ${sub.bottomUp === false ? 'U1 вверху' : 'U1 внизу'} · панелей ${list.length}`) : null,
       ...list.map(panelCard),
-      !list.length ? h('div', { class: 'empty' }, many ? 'В этом шкафу панелей пока нет' : 'Панелей пока нет — «🧙 Мастер» или «➕ Панель»') : null);
+      !list.length ? h('div', { class: 'empty' }, many ? 'В этом шкафу панелей пока нет' : 'Панелей пока нет — «🧙 Распределить по панелям» или «➕ Панель»') : null);
   };
   return h('div', {}, back,
     h('div', { class: 'card', style: { marginTop: '10px' } },
@@ -466,7 +466,7 @@ function rackEditor(ui, cab) {
         h('button', { class: editMode ? '' : 'sec', onclick: () => { editMode = !editMode; blockMode = false; shMode = null; pickSel = null; moving = null; ui.render(); } }, editMode ? '✅ Готово' : '✏️ Редактировать'),
         h('button', { class: pickSel ? '' : 'sec', onclick: () => { pickSel = pickSel ? null : new Set(); editMode = false; blockMode = false; shMode = null; moving = null; ui.render(); } }, pickSel ? '✅ Готово' : '☑ Выбрать точки'),
         h('button', { class: blockMode ? '' : 'sec', onclick: () => { blockMode = !blockMode; editMode = false; shMode = null; pickSel = null; moving = null; ui.render(); } }, blockMode ? '✅ Готово' : '🚫 Закрыть порты'),
-        h('button', { class: 'sec', onclick: () => wizard(cab, ui) }, '🧙 Мастер'),
+        h('button', { class: 'sec', onclick: () => wizard(cab, ui) }, '🧙 Распределить по панелям'),
         h('button', { class: 'sec', onclick: addPanel }, '➕ Панель'),
         h('button', { class: 'sec', onclick: () => shilutSettings(ui) }, '🎨 Шильют'),
         h('button', { class: 'sec', onclick: () => rackForm(cab, () => setTimeout(() => ui.render(), 200)) }, many ? '⚙️ Шкафы, размер и нумерация' : '⚙️ Размер и нумерация'))),

@@ -87,7 +87,7 @@ export function manualsCard() {
   fill();
   onManuals(() => { if (list.isConnected) fill(); });
   return h('div', { class: 'card guide-card', id: 'guide-manuals' },
-    h('div', { class: 'guide-title' }, '🗂 Инструкции'),
+    h('div', { class: 'guide-title' }, '🗂 Шпаргалка (инструкции)'),
     h('div', { class: 'guide-short' }, 'Схемы подключения, фото примеров, таблицы и PDF (замки, хивут, проверки…). Общие для всех проектов: добавленное вами видят все, у кого есть приложение. Открытое один раз потом работает без интернета.'),
     h('div', { class: 'btns' }, h('button', { onclick: () => manualForm(null) }, '➕ Добавить инструкцию')),
     h('input', { type: 'search', placeholder: 'Найти инструкцию', oninput: (e) => { q = e.target.value; fill(); }, style: { marginTop: '8px' } }),

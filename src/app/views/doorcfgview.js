@@ -85,7 +85,7 @@ export function doorPicker({ current = null, title = '🚪 Конфигурац�
         ...pins.map((c) => h('div', { class: `wk ${c.id === current ? 'done' : 'cfg'}`, style: { cursor: 'pointer' }, onclick: () => choose(c) },
           doorChips(c), c.id === current ? h('span', { class: 'wk-st' }, 'сейчас') : null))) : null,
       h('div', { class: 'group', style: { padding: '12px 0 4px' } }, '🧩 Собрать'),
-      noDev ? h('div', { class: 'mut' }, 'В проекте нет устройств двери. Добавьте их в «Настройки → Устройства» (поле «Часть двери») или возьмите стандартные:') : null,
+      noDev ? h('div', { class: 'mut' }, 'В проекте нет устройств двери. Добавьте их в «Ещё → Устройства» (поле «Часть двери») или возьмите стандартные:') : null,
       lib.length ? h('div', { class: 'btns' }, h('button', { type: 'button', class: 'sec', onclick: () => { getRepo().save(currentProject().id, lib); toast(`Добавлено устройств: ${lib.filter((o) => o.coll === 'devices').map((o) => o.data.name).length}`); setTimeout(draw, 400); } },
         `📚 Стандартные устройства двери (${lib.filter((o) => o.coll === 'devices').map((o) => o.data.name).join(', ')})`)) : null,
       ...steps.map((st, i) => stepBlock(st, i, parts, cfg, known, kinds)),

@@ -117,7 +117,7 @@ export function managersFolderCard(ui) {
       h('div', { class: 'mut', style: { margin: '4px 0' } }, 'Отметьте, какие тохниты с номерами положить в папку, и задайте им название (можно на иврите). Это отдельные копии — ваши «Чертежи с номерами» не меняются.'),
       rows.length ? rows : h('div', { class: 'mut' }, 'В проекте пока нет чертежей')),
     p.rackTable?.fileId ? h('div', { class: 'card' }, h('div', { style: { fontWeight: 700 } }, `🗄 ${RACK_TITLE}`),
-      h('div', { class: 'mut', style: { margin: '4px 0' } }, `Планы шкафов и шильют (создаётся в «Настройки → Шкафы и шильют»). ${p.rackTable.auto === false ? 'Автообновление выключено.' : 'Обновляется вместе с папкой и каждую ночь.'}${p.rackTable.at ? ` Обновлена ${when(p.rackTable.at)}.` : ''}`),
+      h('div', { class: 'mut', style: { margin: '4px 0' } }, `Планы шкафов и шильют (создаётся в «Ещё → Шкафы и шильют»). ${p.rackTable.auto === false ? 'Автообновление выключено.' : 'Обновляется вместе с папкой и каждую ночь.'}${p.rackTable.at ? ` Обновлена ${when(p.rackTable.at)}.` : ''}`),
       p.rackTable.serverError ? h('div', { style: { color: '#ff453a', fontSize: '13px' } }, `Сервер: ${p.rackTable.serverError}`) : null,
       h('div', { class: 'btns' }, h('button', { class: 'sec', onclick: () => window.open(p.rackTable.link, '_blank') }, '🔗 Открыть'))) : null,
     h('div', { style: { fontWeight: 700, margin: '14px 2px 6px' } }, '📊 Таблицы'),

@@ -157,7 +157,7 @@ export function pointForm(point, { onDone } = {}) {
     { key: 'planName', label: 'Имя в плане заказчика (по тохниту)', latin: true },
     pickOrNewField('cabinet', 'Шкаф', { empty: point ? '— без шкафа —' : '— выберите шкаф —', hint: point ? '' : 'Новую точку нужно привязать к шкафу' }), pickOrNewField('floor', 'Этаж', { empty: '— без этажа —' }),
     { key: 'typeId', label: 'Тип', type: 'select', required: true, options: typeOptions(), emptyLabel: 'Выберите тип' },
-    doorField('configId', 'Конфигурация двери', { visible: (v) => isDoorType(v.typeId), hint: 'Состав двери и её кабели. Закреплённые — в «Настройки → Конфигурации дверей».' }),
+    doorField('configId', 'Конфигурация двери', { visible: (v) => isDoorType(v.typeId), hint: 'Состав двери и её кабели. Закреплённые — в «Ещё → Конфигурации дверей».' }),
     compField(point),
     { ...cablesField(point), visible: (v) => !!v.typeId && !doorCfgSet(v) },
     { key: 'length', label: 'Длина (м на 1 кабель)', type: 'number' },
