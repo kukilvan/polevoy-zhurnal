@@ -19,7 +19,7 @@ export function runSteps(steps, { onEnd } = {}) {
   const ring = h('div', { class: 'tour-ring' });
   const cap = h('div', { class: 'tour-cap tour-ui' });
   const layer = h('div', { class: 'tour-layer' }, ...dim, ring, cap);
-  document.body.appendChild(layer);
+  document.body.appendChild(layer); document.body.classList.add('tour-on');
   const st = { i: -1, steps, layer, dim, ring, cap, timer: null, target: null, since: 0, onEnd, ended: false };
   cur = st;
   st.timer = setInterval(() => tick(st), 150);
@@ -43,7 +43,7 @@ async function show(st, i) {
   if (step.go) { if (step.keepModals !== true) closeModals(); await step.go(); }
   if (cur !== st) return;
   draw(st);
-  tick(st, true);
+  dock(st); tick(st, true);
 }
 
 function next(st) { show(st, st.i + 1); }
@@ -73,7 +73,7 @@ function place(st, rect) {
   if (!rect) {
     set(dim[0], 0, 0, W, H); [1, 2, 3, 4].forEach((k) => set(dim[k], 0, 0, 0, 0));
     st.ring.style.display = 'none';
-    Object.assign(st.cap.style, { left: '50%', top: '50%', bottom: 'auto', transform: 'translate(-50%, -50%)' });
+    dock(st);
     return;
   }
   const pad = 6;
@@ -82,11 +82,13 @@ function place(st, rect) {
   set(dim[4], l, t, r - l, b - t);   // крышка над окном: не даёт нажать, пока шаг без нажатия
   dim[4].style.background = 'transparent'; dim[4].style.display = step.click ? 'none' : '';
   Object.assign(st.ring.style, { display: '', left: `${l}px`, top: `${t}px`, width: `${r - l}px`, height: `${b - t}px` });
-  // подпись: над окном, если оно в нижней половине, иначе под ним
-  const below = (t + b) / 2 < H / 2;
-  Object.assign(st.cap.style, { left: '50%', transform: 'translateX(-50%)' });
-  if (below) Object.assign(st.cap.style, { top: `${Math.min(H - 20, b + 12)}px`, bottom: 'auto' });
-  else Object.assign(st.cap.style, { bottom: `${Math.min(H - 20, H - t + 12)}px`, top: 'auto' });
+  dock(st);
+}
+
+// Подпись закреплена вверху, приложение сдвинуто вниз (см. .tour-on в style.css): окна приложения занимают всё место под подписью
+function dock(st) {
+  const hh = Math.ceil(st.cap.getBoundingClientRect().bottom) + 8;
+  if (hh !== st.dockH) { st.dockH = hh; document.documentElement.style.setProperty('--tour-h', `${hh}px`); }
 }
 
 function tick(st, force = false) {
@@ -105,7 +107,7 @@ function stop(done) {
   const st = cur; if (!st) return;
   cur = null; clearInterval(st.timer);
   document.removeEventListener('click', onDocClick, true);
-  st.layer.remove();
+  st.layer.remove(); document.body.classList.remove('tour-on'); document.documentElement.style.removeProperty('--tour-h');
   if (!st.ended) { st.ended = true; st.onEnd?.(done); }
 }
 export const endTour = () => stop(false);

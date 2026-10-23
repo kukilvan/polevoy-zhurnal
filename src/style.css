@@ -180,7 +180,11 @@ html, body { overflow-x: hidden; }
 .tour-layer { position: fixed; inset: 0; z-index: 300; pointer-events: none; }
 .tour-dim { position: fixed; background: rgba(0,0,0,.68); pointer-events: auto; }
 .tour-ring { position: fixed; border: 3px solid var(--acc, #0ea5e9); border-radius: 12px; pointer-events: none; box-shadow: 0 0 0 2px rgba(255,255,255,.35); }
-.tour-cap { position: fixed; width: min(92vw, 380px); background: var(--card); color: var(--ink, inherit); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; pointer-events: auto; box-shadow: 0 8px 30px rgba(0,0,0,.45); }
+.tour-cap { position: fixed; left: 8px; right: 8px; top: calc(env(safe-area-inset-top) + 6px); max-height: 45vh; overflow: auto; background: var(--card); color: var(--ink, inherit); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; pointer-events: auto; box-shadow: 0 8px 30px rgba(0,0,0,.45); }
+body.tour-on #app { padding-top: var(--tour-h, 0); }
+body.tour-on .topbar { top: var(--tour-h, 0); }
+body.tour-on .backdrop { top: var(--tour-h, 0); height: auto; bottom: 0; }
+body.tour-on .sheet { max-height: 100%; }
 .tour-count { color: var(--mut); font-size: 12px; margin-bottom: 4px; }
 .tour-title { display: block; font-size: 16px; margin-bottom: 4px; }
 .tour-text { font-size: 15px; line-height: 1.4; }

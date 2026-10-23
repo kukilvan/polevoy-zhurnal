@@ -1,6 +1,7 @@
 // Темы тура. Тексты короткие и простые: тур рассчитан на тех, кто не знаком ни с приложением, ни со слаботочкой.
 import { find, sheet } from './engine.js';
 
+const field = (name) => () => [...document.querySelectorAll('.sheet .field')].find((l) => (l.querySelector('span')?.textContent || '').trim().startsWith(name) && l.getBoundingClientRect().height > 0) || null;
 const tab = (name) => find('nav button', name);
 const btn = (text) => find('button', text);
 const topbar = (i) => () => document.querySelectorAll('.topbar > button, .topbar > .pill')[i] || null;
@@ -44,7 +45,12 @@ export function buildTopics(ui) {
     { id: 'points', icon: '➕', title: 'Добавить точки', steps: [
       add({ title: 'Что такое точка', center: true, text: 'Точка — это место, где что-то подключают: камера, дверь, вайфай. У каждой точки есть обозначение, например 1A-01.', go: tabGo('meter') }),
       add({ title: 'Сразу много', sel: btn('Группа новых точек'), click: true, text: 'Нужно добавить много однотипных точек — нажмите «Группа новых точек».' }),
-      add({ title: 'Как заполнить', sel: sheet, keepModals: true, text: 'Префикс «1A-», от 1 до 24 — получатся 1A-01 … 1A-24. Выберите тип и шкаф, и все точки создадутся разом.' }),
+      add({ title: 'Префикс', sel: field('Префикс'), keepModals: true, text: 'Начало обозначения, например «1A-». Можно оставить пустым.' }),
+      add({ title: 'От', sel: field('От'), keepModals: true, text: 'Первый номер. Например, 1.' }),
+      add({ title: 'До', sel: field('До'), keepModals: true, text: 'Последний номер. От 1 до 24 с префиксом «1A-» даст точки 1A-01 … 1A-24.' }),
+      add({ title: 'Цифр в номере', sel: field('Цифр'), keepModals: true, text: '2 — это номера с нулём впереди: 01, 02… Если 0, нули не добавляются.' }),
+      add({ title: 'Тип', sel: field('Тип'), keepModals: true, text: 'Выберите тип точек: камера, дверь, вайфай. От типа зависят работы и статус.' }),
+      add({ title: 'Шкаф и этаж', sel: field('Шкаф'), keepModals: true, text: 'Шкаф обязателен: точки добавляются только с шкафом. Потом нажмите «Создать». В тур мы ничего не создаём, закрываем окно.' }),
       add({ title: 'По одной', sel: btn('Новая точка'), text: 'Одну точку добавляют кнопкой «Новая точка»: обозначение, шкаф, тип, длина.', go: () => {} }),
       add({ title: 'Из чертежа', sel: btn('План'), text: 'Если чертёж заказчика уже загружен, точки можно найти на нём автоматически: «План» → «Добавить точки из чертежа».' }),
     ] },
