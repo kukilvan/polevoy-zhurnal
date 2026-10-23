@@ -8,25 +8,29 @@ import { initializeFirestore, persistentLocalCache, persistentMultipleTabManager
 import { firebaseConfig } from './edition.js';
 import { info, warn, error } from './log.js';
 
-const app = initializeApp(firebaseConfig());
-export const auth = initializeAuth(app, {
-  persistence: [indexedDBLocalPersistence, browserLocalPersistence],
-  popupRedirectResolver: browserPopupRedirectResolver,
-});
-
+// Подключение создаётся по вызову initFirebase(): в открытой версии настройки появляются только после мастера настройки
+export let auth = null;
 export let db; export let cacheMode = 'нет';
-try {
-  db = initializeFirestore(app, {
-    localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
-    experimentalAutoDetectLongPolling: true, // WebKit иногда ломает WebChannel
+export function initFirebase() {
+  if (auth) return;
+  const app = initializeApp(firebaseConfig());
+  auth = initializeAuth(app, {
+    persistence: [indexedDBLocalPersistence, browserLocalPersistence],
+    popupRedirectResolver: browserPopupRedirectResolver,
   });
-  cacheMode = 'постоянный (IndexedDB)';
-} catch (e) {
-  warn('Постоянный кэш Firestore недоступен, работаю с кэшем в памяти', e);
-  db = initializeFirestore(app, { localCache: memoryLocalCache(), experimentalAutoDetectLongPolling: true });
-  cacheMode = 'в памяти (офлайн не переживёт перезапуск)';
+  try {
+    db = initializeFirestore(app, {
+      localCache: persistentLocalCache({ tabManager: persistentMultipleTabManager() }),
+      experimentalAutoDetectLongPolling: true, // WebKit иногда ломает WebChannel
+    });
+    cacheMode = 'постоянный (IndexedDB)';
+  } catch (e) {
+    warn('Постоянный кэш Firestore недоступен, работаю с кэшем в памяти', e);
+    db = initializeFirestore(app, { localCache: memoryLocalCache(), experimentalAutoDetectLongPolling: true });
+    cacheMode = 'в памяти (офлайн не переживёт перезапуск)';
+  }
+  info(`Кэш Firestore: ${cacheMode}`);
 }
-info(`Кэш Firestore: ${cacheMode}`);
 
 const provider = new GoogleAuthProvider();
 provider.setCustomParameters({ prompt: 'select_account' });

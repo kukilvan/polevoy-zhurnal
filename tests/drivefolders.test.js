@@ -20,12 +20,12 @@ function fakeDrive() {
   return { req, files, log };
 }
 
-test('папки Диска: Полевой журнал / проект / Чертежи; переименование проекта не плодит папки', async () => {
+test('папки Диска: Менеджер проектов / проект / Чертежи; переименование проекта не плодит папки', async () => {
   const { req, files } = fakeDrive();
   const p = { id: 'P1', name: 'Mega Or' };
   const dr = await projectFolder(req, p, 'drawings'); const bk = await projectFolder(req, p, 'backups'); const pf = await projectFolder(req, p);
   const byName = (nm) => [...files.values()].filter((f) => f.name === nm);
-  assert.equal(byName('Полевой журнал').length, 1); assert.equal(byName('Mega Or').length, 1);
+  assert.equal(byName('Менеджер проектов').length, 1); assert.equal(byName('Mega Or').length, 1);
   assert.equal(files.get(dr).name, 'Чертежи'); assert.deepEqual(files.get(dr).parents, [pf]); assert.deepEqual(files.get(bk).parents, [pf]);
   const pf2 = await projectFolder(req, { id: 'P1', name: 'Mega Or Modiin' });
   assert.equal(pf2, pf); assert.equal(files.get(pf).name, 'Mega Or Modiin');
@@ -34,8 +34,8 @@ test('папки Диска: Полевой журнал / проект / Чер
   assert.equal(await moveInto(req, 'X', dr), false);
 });
 
-test('параллельные запросы папок проектов не плодят второй корень «Полевой журнал»', async () => {
+test('параллельные запросы папок проектов не плодят второй корень «Менеджер проектов»', async () => {
   const { req, files } = fakeDrive();
   await Promise.all([projectFolder(req, { id: 'A', name: 'A' }, 'backups'), projectFolder(req, { id: 'B', name: 'B' }, 'managers'), projectFolder(req, { id: 'C', name: 'C' })]);
-  assert.equal([...files.values()].filter((f) => f.name === 'Полевой журнал').length, 1);
+  assert.equal([...files.values()].filter((f) => f.name === 'Менеджер проектов').length, 1);
 });

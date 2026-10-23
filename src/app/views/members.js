@@ -1,6 +1,7 @@
 // Участники проекта: имена, приглашения, удаление (с предложением откатить правки участника).
 import { h, formModal, confirmDialog, toast } from '../ui.js';
 import { state, getRepo, currentProject } from '../store.js';
+import { connection, connectLink, APP_NAME } from '../../edition.js';
 
 export const memberKey = (email) => String(email).toLowerCase().replace(/\./g, '_');
 export const memberName = (p, email) => p.memberNames?.[memberKey(email)] || '';
@@ -63,5 +64,18 @@ export function membersView(ui) {
         !canManage ? null : h('button', { class: 'sec', style: { flex: 'none' }, onclick: async () => {
           if (await confirmDialog(`Отозвать приглашение для ${e}?`, { yes: 'Отозвать', danger: true })) repo.cancelInvite(p, e);
         } }, '✕')))) : null,
-    canManage ? h('div', { class: 'btns' }, h('button', { onclick: () => inviteForm(p) }, '➕ Пригласить коллегу')) : h('div', { class: 'mut', style: { margin: '10px 2px' } }, 'Приглашать и убирать участников может только создатель проекта.'));
+    canManage ? h('div', { class: 'btns' }, h('button', { onclick: () => inviteForm(p) }, '➕ Пригласить коллегу')) : h('div', { class: 'mut', style: { margin: '10px 2px' } }, 'Приглашать и убирать участников может только создатель проекта.'),
+    connection() ? linkCard() : null);
+}
+
+// Ссылка подключения: коллега открывает её — приложение подключается к этой же базе (мастер настройки ему не нужен)
+export function linkCard() {
+  const url = connectLink();
+  const text = `Приложение «${APP_NAME}». Откройте ссылку, войдите своим Google-аккаунтом и примите приглашение в проект:\n${url}`;
+  return h('div', { class: 'card' },
+    h('b', {}, '🔗 Ссылка для подключения'),
+    h('div', { class: 'mut', style: { margin: '4px 0 8px' } }, 'Пригласите коллегу по почте (кнопка выше) и отправьте ему эту ссылку. Она подключает приложение к вашей базе; проекты он увидит только те, куда приглашён.'),
+    h('div', { class: 'btns' },
+      h('button', { class: 'sec', onclick: async () => { try { await navigator.clipboard.writeText(text); toast('Ссылка скопирована'); } catch { toast('Не удалось скопировать'); } } }, '📋 Скопировать'),
+      h('button', { class: 'sec', onclick: () => window.open(`https://wa.me/?text=${encodeURIComponent(text)}`, '_blank') }, '💬 WhatsApp')));
 }

@@ -3,6 +3,8 @@ import { racksView } from './views/racks.js';
 import { sheetsView } from './views/sheetslist.js';
 import { projectWizard } from './views/wizard.js';
 import { startPool } from './pool.js';
+import { seedStarterPool } from './starter.js';
+import { APP_NAME, connection } from '../edition.js';
 import { startManuals } from './manuals.js';
 import { startDoorPool } from './doorpool.js';
 import { h, openModal, toast, confirmDialog, setShortcutsProvider } from './ui.js';
@@ -78,6 +80,7 @@ export function createShell({ user, onLogout, diag }) {
       item(`🎨 Тема: ${themeLabel()} → ${themeLabel(nextTheme())}`, () => { setTheme(nextTheme()); render(); }),
       item(`🔄 Обновить приложение (версия ${typeof __VERSION__ !== 'undefined' ? __VERSION__ : 'dev'}, сборка ${typeof __BUILD__ !== 'undefined' ? __BUILD__ : 'dev'})`, refreshApp)]),
       section('Данные', [
+      connection() ? item('🔌 Подключение к базе', () => import('./setup.js').then((m) => m.connectionModal(onLogout))) : null,
       item('🧾 Журнал событий', () => open('log')),
       p ? item('🔄 Обновить таблицу для руководства', updateManagerTable) : null,
       p && mainTable(p).link ? item('📊 Открыть таблицу руководства', () => window.open(mainTable(p).link, '_blank')) : null,
@@ -204,7 +207,7 @@ export function createShell({ user, onLogout, diag }) {
 
   function render() {
     const p = currentProject();
-    const title = ui.screen === 'ref' ? REFS[state.settingsRef]?.title : ui.screen === 'guide' ? guideTitle() : ui.screen ? SCREEN_TITLES[ui.screen] : (p?.name || 'Полевой журнал');
+    const title = ui.screen === 'ref' ? REFS[state.settingsRef]?.title : ui.screen === 'guide' ? guideTitle() : ui.screen ? SCREEN_TITLES[ui.screen] : (p?.name || APP_NAME);
     root.replaceChildren(
       h('div', { class: 'topbar' },
         ui.screen ? h('button', { class: 'sec', onclick: () => ui.back() }, '←') : h('button', { class: 'sec', onclick: menu }, '☰'),
@@ -221,7 +224,7 @@ export function createShell({ user, onLogout, diag }) {
   window.addEventListener('online', () => { state.online = true; render(); });
   window.addEventListener('offline', () => { state.online = false; render(); });
   const unsub = subscribe(() => { render(); if (ready() && !demo.on) { maybeWelcome(ui, user); maybeOfferTour(ui); if (currentProject()?.serverEmail) import('./views/managersfolder.js').then((m) => m.ensureServerAccess()).catch(() => {}); } });
-  startPool(); startDoorPool(); startManuals();  // общий пул: слушать, входящие администратора, отправка нового из проекта
+  startPool(); startDoorPool(); startManuals(); seedStarterPool();  // общий пул: слушать, входящие администратора, отправка нового из проекта
   render();
 
   // Возврат с Google после выдачи доступа (iPhone): дожидаемся загрузки проекта и запускаем обновление таблицы руководства

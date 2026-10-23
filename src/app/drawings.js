@@ -1,4 +1,4 @@
-// Чертежи проекта (PDF тохнитов) для плана в приложении: файл на Google Диске (папка «Полевой журнал — чертежи», доступ участникам
+// Чертежи проекта (PDF тохнитов) для плана в приложении: файл на Google Диске (папка «Менеджер проектов — чертежи», доступ участникам
 // проекта на чтение) + копия на устройстве (IndexedDB), чтобы план открывался без интернета. В проекте — список project.drawings:
 // [{ id, name, floor, pages:[{w,h}], fileId?, size, addedAt, addedBy }]. Точка привязана к чертежу по pos.sheet === name.
 import { getRepo, currentProject } from './store.js';
@@ -6,7 +6,8 @@ import { getToken, clearToken, useRedirect, storedTokenValid } from './google.js
 import { newId } from './repo.js';
 import { projectFolder, moveInto } from './drivefolders.js';
 
-export const DRAWINGS_FOLDER = 'Полевой журнал — чертежи';
+export const DRAWINGS_FOLDER = // старая папка (до папок проектов), только для поиска прежних файлов
+  'Полевой журнал — чертежи';
 const mem = () => new URLSearchParams(location.search).get('mem');
 
 // ---- копия на устройстве ----

@@ -51,7 +51,7 @@ export async function backupNow(retried = false) {
     toast(`Не получилось: ${e.message || e}`); console.error('backup', e);
   } finally { syncing = false; }
 }
-// «📁 Разложить файлы по папкам»: чертежи, таблицы и резервные копии всех проектов — в «Полевой журнал / <проект> / …» на Диске.
+// «📁 Разложить файлы по папкам»: чертежи, таблицы и резервные копии всех проектов — в «Менеджер проектов / <проект> / …» на Диске.
 // Файлы, созданные другими участниками, Диск переложить не даст — они остаются у них.
 export async function organizeDrive(retried = false) {
   if (syncing) return; syncing = true;
@@ -72,7 +72,7 @@ export async function organizeDrive(retried = false) {
       for (const f of olds) if (await api.placeIn(f.id, p, 'backups')) moved++;
       await api.projectFolder(p);  // папка есть у каждого проекта, даже без файлов
     }
-    toast(`Готово: переложено файлов — ${moved}${uploaded ? `, загружено чертежей — ${uploaded}` : ''}. Всё в папке «Полевой журнал» на Диске.${missing.length ? ` Нет на этом устройстве (загрузите с того, где добавляли): ${missing.join(', ')}` : ''}`);
+    toast(`Готово: переложено файлов — ${moved}${uploaded ? `, загружено чертежей — ${uploaded}` : ''}. Всё в папке «Менеджер проектов» на Диске.${missing.length ? ` Нет на этом устройстве (загрузите с того, где добавляли): ${missing.join(', ')}` : ''}`);
   } catch (e) {
     if (e.status === 401 && retried !== true) { clearToken(); syncing = false; return organizeDrive(true); }
     toast(`Не получилось: ${e.message || e}`); console.error('folders', e);

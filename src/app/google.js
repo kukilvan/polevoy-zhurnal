@@ -1,6 +1,7 @@
 // Доступ к Google Диску и Таблицам от имени пользователя (по кнопке, нужно отдельное согласие).
 import { GoogleAuthProvider, reauthenticateWithPopup } from 'firebase/auth';
-import { auth } from '../firebase.js';
+import * as fbm from '../firebase.js';
+const auth = { get currentUser() { return fbm.auth?.currentUser || null; } };
 
 import { clientId } from '../edition.js';
 const SCOPES = ['https://www.googleapis.com/auth/drive', 'https://www.googleapis.com/auth/spreadsheets'];

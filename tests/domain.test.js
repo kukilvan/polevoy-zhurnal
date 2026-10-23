@@ -776,4 +776,5 @@ test('правила открытой версии: без вшитой почт
   assert.ok(!/erudit/.test(r));
   assert.match(r, /match \/meta\/admin/);
   assert.match(r, /function poolAdmin\(\) \{ return signedIn\(\) && exists/);
+  assert.equal(fs.readFileSync(new URL('../firestore.open.rules', import.meta.url), 'utf8'), r, 'firestore.open.rules устарел: пересоздайте из firestore.rules (openRules)');
 });

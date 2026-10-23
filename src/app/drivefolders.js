@@ -1,9 +1,9 @@
-// Папки приложения на Google Диске: «Полевой журнал» → папка проекта → «Чертежи», «Резервные копии»; таблицы — в папке проекта.
+// Папки приложения на Google Диске: «Менеджер проектов» → папка проекта → «Чертежи», «Резервные копии»; таблицы — в папке проекта.
 // Папки находятся по скрытым меткам (appProperties), поэтому переименование проекта не плодит новые папки — папка просто переименуется.
 // req(method, url, body?) → JSON — любой способ обращения к Диску с токеном.
 const D = 'https://www.googleapis.com/drive/v3/files';
 const FOLDER = 'application/vnd.google-apps.folder';
-export const ROOT_NAME = 'Полевой журнал';
+export const ROOT_NAME = 'Менеджер проектов';
 export const KIND_NAMES = { drawings: 'Чертежи', backups: 'Резервные копии', numbered: 'Чертежи с номерами', managers: 'Для руководства', racks: 'Шкафы', manuals: 'Инструкции' };
 const safe = (s) => String(s || 'Проект').replace(/[\\/:*?"<>|]/g, '_').trim() || 'Проект';
 const esc = (s) => String(s).replace(/\\/g, '\\\\').replace(/'/g, "\\'");
@@ -15,7 +15,7 @@ async function ensureFolder(req, { name, props, parent }) {
   return (await req('POST', `${D}?fields=id`, { name, mimeType: FOLDER, appProperties: props, ...(parent ? { parents: [parent] } : {}) })).id;
 }
 const cache = new Map();
-// Корневые папки ищем/создаём строго по одной (пока идёт поиск/создание): иначе два параллельных запроса создадут по своей «Полевой журнал»
+// Корневые папки ищем/создаём строго по одной (пока идёт поиск/создание): иначе два параллельных запроса создадут по своей «Менеджер проектов»
 const rootLock = new Map();
 const rootOnce = (req, key, mk) => {
   if (!rootLock.has(key)) { const p = mk(); rootLock.set(key, p); p.then(() => rootLock.delete(key), () => rootLock.delete(key)); }
@@ -49,7 +49,7 @@ export async function filesIn(req, folderName, nameStart) {
   return (await req('GET', `${D}?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=1000`)).files || [];
 }
 
-// Общая папка инструкций «Полевой журнал → Инструкции» (не привязана к проекту)
+// Общая папка инструкций «Менеджер проектов → Инструкции» (не привязана к проекту)
 let manualsP = null;
 export function manualsFolder(req) {
   if (!manualsP) {

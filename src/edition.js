@@ -1,18 +1,10 @@
-// Две версии одного кода:
-//  - «своя» (по умолчанию): Полевой журнал Ивана, настройки Firebase вшиты в сборку;
-//  - «открытая» (сборка с VITE_EDITION=open): Менеджер проектов для всех — без вшитых настроек, каждый подключает свой Firebase
-//    в мастере настройки при первом запуске, коллеги подключаются по ссылке-приглашению.
-import { firebaseConfig as OWN_CONFIG } from './firebase-config.js';
-import { CLIENT_ID as OWN_CLIENT_ID } from './client-id.js';
-
-export const OPEN = import.meta.env?.VITE_EDITION === 'open';
-export const APP_NAME = OPEN ? 'Менеджер проектов' : 'Полевой журнал';
-const OWN_ADMIN = 'erudit199867@gmail.com';
+// Подключение к базе. Один сайт для всех: настроек Firebase в коде нет — каждый подключает свой проект Firebase
+// в мастере настройки при первом запуске, коллеги подключаются по ссылке-приглашению (в ней те же настройки).
+export const APP_NAME = 'Менеджер проектов';
 
 const KEY = 'pm.connection';
-/** Подключение открытой версии: { firebase: {...}, clientId?: '...' } */
+/** Подключение: { firebase: {...}, clientId?: '...' } */
 export function connection() {
-  if (!OPEN) return { firebase: OWN_CONFIG, clientId: OWN_CLIENT_ID };
   try { const c = JSON.parse(localStorage.getItem(KEY) || 'null'); return c?.firebase?.projectId ? c : null; } catch { return null; }
 }
 export function saveConnection(c) { localStorage.setItem(KEY, JSON.stringify(c)); }
@@ -20,8 +12,8 @@ export function clearConnection() { try { localStorage.removeItem(KEY); } catch 
 export const firebaseConfig = () => connection()?.firebase || null;
 export const clientId = () => connection()?.clientId || '';
 
-// Администратор общего пула: в своей версии — Иван, в открытой — тот, кто первым вошёл в новую базу (документ meta/admin)
-let admin = OPEN ? '' : OWN_ADMIN;
+// Администратор базы (общий пул, список разрешённых почт) — тот, кто первым вошёл в новую базу (документ meta/admin)
+let admin = '';
 export const setAdminEmail = (e) => { admin = String(e || '').toLowerCase(); };
 export const adminEmail = () => admin;
 export const isAdminEmail = (e) => !!admin && String(e || '').toLowerCase() === admin;

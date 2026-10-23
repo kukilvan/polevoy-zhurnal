@@ -1,6 +1,6 @@
 {
-  "name": "polevoy-zhurnal",
-  "version": "1.0.0",
+  "name": "project-manager-app",
+  "version": "1.1.0",
   "private": true,
   "type": "module",
   "scripts": {

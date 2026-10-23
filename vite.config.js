@@ -4,8 +4,9 @@ import { readFileSync } from 'node:fs';
 
 const VERSION = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version;
 
-// Приложение публикуется на GitHub Pages по адресу /polevoy-zhurnal/
-const BASE = '/polevoy-zhurnal/';
+// Приложение публикуется на GitHub Pages по адресу /project-manager-app/
+const BASE = process.env.VITE_BASE || '/project-manager-app/';
+const NAME = 'Менеджер проектов';
 
 export default defineConfig({
   base: BASE,
@@ -20,15 +21,15 @@ export default defineConfig({
         globPatterns: ['**/*.{js,css,html,png,svg,ico,webmanifest}'],
         navigateFallback: BASE + 'index.html',
         // запросы к Firebase/Google никогда не кэшируем service worker-ом
-        navigateFallbackDenylist: [/^\/__\//, /^\/polevoy-zhurnal\/__\//],
+        navigateFallbackDenylist: [/^\/__\//, new RegExp(`^${BASE}__/`)],
         cleanupOutdatedCaches: true,
         globIgnores: ['**/mupdf*'],  // модуль чтения PDF (≈10 МБ) — не при установке, а при первом разборе чертежа
         runtimeCaching: [{ urlPattern: /mupdf.*\.(?:wasm|js)$/, handler: 'CacheFirst', options: { cacheName: 'mupdf', expiration: { maxEntries: 6 } } }],
       },
       manifest: {
-        name: 'Полевой журнал',
-        short_name: 'Журнал',
-        description: 'Полевой журнал монтажника слаботочных систем',
+        name: NAME,
+        short_name: 'Проекты',
+        description: `${NAME}: точки, работы и ежедневные отчёты монтажника слаботочных систем`,
         lang: 'ru',
         start_url: BASE,
         scope: BASE,

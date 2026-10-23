@@ -9,6 +9,8 @@ import * as store from './app/store.js';
 import { createShell } from './app/shell.js';
 
 import { captureTokenFromUrl } from './app/google.js';
+import { APP_NAME, connection, saveConnection, parseConnect, setAdminEmail } from './edition.js';
+document.title = APP_NAME;
 captureTokenFromUrl();
 const BUILD = typeof __BUILD__ !== 'undefined' ? __BUILD__ : 'dev';
 const app = document.getElementById('app');
@@ -38,7 +40,7 @@ if ('serviceWorker' in navigator) {
 }
 else warn('Service worker не поддерживается');
 
-let fb = null; let shell = null;
+let fb = null; let shell = null; let starting = false;
 
 function showMessage(text) { app.replaceChildren(h('div', { class: 'wrap' }, h('div', { class: 'card mut' }, text))); }
 
@@ -49,18 +51,21 @@ function showLogin(message = '', busy = false) {
     try { await fn(); } catch (e) { error('Вход: ошибка', `${e.code || ''} ${e.message || e}`); showLogin(`Не удалось войти: ${e.code || e.message}`); }
   };
   app.replaceChildren(h('div', { class: 'wrap' },
-    h('h1', {}, 'Полевой журнал'),
+    h('h1', {}, APP_NAME),
     h('div', { class: 'card' },
       h('div', { style: { marginBottom: '10px' } }, 'Войдите через Google, чтобы открыть свои проекты. Работает и без интернета: записи сохраняются на устройстве.'),
       h('button', { class: 'grow', style: { width: '100%' }, disabled: busy, onclick: () => attempt(() => fb.loginPopup()) }, 'Войти через Google'),
       h('div', { class: 'mut', style: { margin: '10px 0 6px' } }, 'Если кнопка выше не сработала на iPhone («Домой»), попробуйте запасной способ:'),
       h('button', { class: 'sec', disabled: busy, onclick: () => attempt(() => fb.loginRedirect()) }, 'Войти (запасной способ)'),
-      message ? h('div', { style: { color: 'var(--err)', marginTop: '10px' } }, message) : null)));
+      message ? h('div', { style: { color: 'var(--err)', marginTop: '10px' } }, message) : null),
+    h('div', { class: 'mut', style: { margin: '10px 2px' } }, `База: ${connection()?.firebase?.projectId || '—'}`,
+      h('button', { class: 'sec', style: { marginLeft: '8px' }, onclick: async () => { if (!confirm('Открыть мастер настройки подключения?')) return; const { setupView } = await import('./app/setup.js'); app.replaceChildren(setupView({ onDone: () => location.reload() })); } }, '⚙ Подключение'))));
 }
 
-function startSession(user) {
+async function startSession(user) {
   const backend = memoryMode ? createMemoryBackend() : createFirestoreBackend(fb.db, user.uid);
   const repo = createRepo(backend, user);
+  if (!memoryMode && !(await resolveAdmin(repo, user))) return;
   if (memoryMode) window.__pzRepo = repo;
   store.start(repo);
   shell = createShell({
@@ -70,12 +75,50 @@ function startSession(user) {
   });
 }
 
+// Открытая версия: ссылка-приглашение (?connect=…) сохраняет подключение; без подключения — мастер настройки
+async function openEditionGate() {
+  const p = new URLSearchParams(location.search).get('connect');
+  if (p) {
+    try { saveConnection(parseConnect(p)); info('Подключение из ссылки-приглашения сохранено'); } catch (e) { error('Ссылка-приглашение', e); toast(`Ссылка-приглашение повреждена: ${e.message}`); }
+    history.replaceState(null, '', location.pathname);
+  }
+  if (connection()) return true;
+  const { setupView } = await import('./app/setup.js');
+  app.replaceChildren(setupView({ onDone: () => location.reload() }));
+  return false;
+}
+
+// Открытая версия: кто администратор базы (первый вошедший становится им сам)
+async function resolveAdmin(repo, user) {
+  try {
+    const email = String(user.email || '').toLowerCase();
+    setAdminEmail(await repo.claimAdmin(email));
+    return true;
+  } catch (e) {
+    error('Администратор базы', `${e.code || ''} ${e.message || e}`);
+    if (e.code === 'permission-denied') {
+      const { OPEN_RULES, copy } = await import('./app/setup.js');
+      app.replaceChildren(h('div', { class: 'wrap' }, h('h1', {}, APP_NAME), h('div', { class: 'card' },
+        h('b', {}, 'База не пускает приложение'),
+        h('div', { style: { margin: '6px 0' } }, 'Скорее всего, не вставлены правила базы (шаг 4 настройки): Firebase Console → Firestore Database → «Правила» (Rules) → вставить → «Опубликовать» (Publish). Потом обновите страницу.'),
+        h('div', { class: 'btns' },
+          h('button', { onclick: () => copy(OPEN_RULES, 'Правила скопированы') }, '📋 Скопировать правила'),
+          h('button', { class: 'sec', onclick: () => location.reload() }, '🔄 Обновить'),
+          h('button', { class: 'sec', onclick: async () => { const { clearConnection } = await import('./edition.js'); if (confirm('Забыть подключение и открыть мастер настройки?')) { clearConnection(); await fb?.logout().catch(() => {}); location.reload(); } } }, 'Сменить подключение')))));
+      return false;
+    }
+    return true;   // нет связи и т. п. — работаем, администратор определится при следующем запуске
+  }
+}
+
 async function boot() {
+  if (!memoryMode && !(await openEditionGate())) return;
   if (memoryMode) { startSession({ uid: 'test-user', displayName: 'Тестовый пользователь', email: new URLSearchParams(location.search).get('memEmail') || 'test@example.com' }); window.__pz = { store, repo: window.__pzRepo }; return; }
   showMessage('Проверяю вход…');
   fb = await import('./firebase.js');
+  fb.initFirebase();
   fb.watchAuth((user) => {
-    if (user) { if (!shell) startSession(user); } else { store.stop(); showLogin(); }
+    if (user) { if (!shell && !starting) { starting = true; startSession(user).finally(() => { starting = false; }); } } else { store.stop(); showLogin(); }
   });
 }
 boot().catch((e) => { error('Запуск', e); showMessage(`Ошибка запуска: ${e.message || e}`); });
