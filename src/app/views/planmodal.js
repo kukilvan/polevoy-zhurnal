@@ -15,6 +15,7 @@ import { exportNumberedPdf, publishNumbered } from './plannumbers.js';
 import { linkPoints } from './planlink.js';
 import { choosePoint } from './pointchooser.js';
 import { bulkEditForm, renameForm } from './points.js';
+import { editForm as historyEditForm } from './journal.js';
 import { doorCfgOf, doorCfgShort, usesConfig } from '../../domain/index.js';
 import { latinKey } from '../../domain/index.js';
 import { cfgMatch, cfgFilterOptions, cfgFilterValid } from '../cfgfilter.js';
@@ -310,6 +311,7 @@ export function planModal({ point = null, placeFor = null } = {}) {
         bar.replaceChildren(h('b', {}, `Выбрано: ${sel.size}`),
           h('button', { class: rectSel ? '' : 'sec', onclick: () => { rectSel = !rectSel; selBar(); } }, rectSel ? '▭ Рамкой (вкл.)' : '▭ Рамкой'),
           h('button', { disabled: !sel.size, onclick: () => { addWorkForPoints([...sel]); } }, `➕ Работа на выбранные (${sel.size})`),
+          h('button', { disabled: !sel.size, onclick: () => historyEditForm([...sel], () => { selBar(); viewer.draw(); }) }, `✔ Работы: сделано / не сделано (${sel.size})`),
           h('button', { disabled: !sel.size, onclick: () => bulkEditForm([...sel], () => { selBar(); viewer.draw(); }) }, `✏️ Изменить (${sel.size})`),
           h('button', { disabled: !sel.size, onclick: () => renameForm([...sel], () => { selBar(); viewer.draw(); }) }, '🏷 Переименовать'),
           h('button', { class: 'sec', onclick: () => { sel.clear(); selBar(); viewer.draw(); } }, 'Снять'));

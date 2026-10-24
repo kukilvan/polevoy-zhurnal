@@ -415,6 +415,9 @@ export function remainingModal() {
   const bar = h('div', { class: 'btns', style: { marginTop: '6px' } });
   const listBox = h('div', {});
   function fill() {
+    // список пересобирается при каждой галочке — запоминаем прокрутку, чтобы не прыгало наверх
+    const oldList = listBox.querySelector('.rem-list'); const sb = body.closest('.sheet-body');
+    const keep = { list: oldList ? oldList.scrollTop : 0, sheet: sb ? sb.scrollTop : 0 };
     const rows = shown(); const ids = new Set(rows.map((r) => r.point.id));
     [...chosen].forEach((id) => { if (!ids.has(id)) chosen.delete(id); });
     const groups = new Map(); rows.forEach((r) => { const k = r.point.cabinet || ''; if (!groups.has(k)) groups.set(k, []); groups.get(k).push(r); });
@@ -438,6 +441,7 @@ export function remainingModal() {
             h('div', { class: 'rem-chips' }, left.map((t) => h('span', { class: `chip ${t.chip}`, style: t.key === fWork ? { outline: '2px solid var(--txt)' } : {} }, t.label))));
         }),
       ])) : '');
+    const nl = listBox.querySelector('.rem-list'); if (nl) nl.scrollTop = keep.list; if (sb) sb.scrollTop = keep.sheet;
   }
   body.replaceChildren(h('div', { class: 'mut', style: { marginBottom: '6px' } }, 'Выберите работу, шкаф или тип — галочками отметьте точки и запишите работу сразу на все. Нажатие на название — карточка точки.'), filters, bar, listBox);
   fill();

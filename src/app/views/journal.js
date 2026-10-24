@@ -25,11 +25,13 @@ function rows() {
   return out.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.label.localeCompare(b.label, 'ru', { numeric: true })));
 }
 
-function editForm() {
+// presetIds — точки, уже выбранные (например, на плане); тогда окно называется «Работы по выбранным точкам»
+export function editForm(presetIds = null, onDone = null) {
   const repo = getRepo(); const pid = currentProject().id; const ctx = state.ctx;
   // добавлять отметки — точкам, которым ещё есть что делать; убирать — только там, где отметки есть
   const anyOpen = (pt) => [...ctx.catalog.values()].some((w) => w.active !== false && workApplicable(pt, ctx, w, infoOf));
   const picker = pointsPicker({ fits: (pt, v) => (v.remove ? (ctx.journalByPoint.get(pt.id) || []).length > 0 : anyOpen(pt)) });
+  if (presetIds?.length) picker.set(presetIds);
   let selected = new Set(); let box = null; let lastKey = '';
   const works = {
     el: (box = h('div', { class: 'picklist' }, h('div', { class: 'mut' }, 'Сначала выберите точки'))),
@@ -51,10 +53,10 @@ function editForm() {
     },
   };
   formModal({
-    title: 'Правка истории', submitLabel: 'Применить',
+    title: presetIds?.length ? 'Работы по выбранным точкам' : 'Правка истории', submitLabel: 'Применить',
     fields: [
       { key: 'date', label: 'Дата', type: 'date', required: true },
-      { key: 'pointIds', label: 'Точки', type: 'custom', required: true, build: (api) => { picker.bind(api.values, api.changed); return picker; } },
+      { key: 'pointIds', label: 'Точки', type: 'custom', required: true, build: (api) => { picker.bind(api.values, api.changed); if (presetIds?.length) picker.set(presetIds); return picker; } },
       { key: 'workIds', label: 'Работы', type: 'custom', required: true, build: () => works },
       { key: 'remove', label: 'Убрать отметки (вместо добавления)', type: 'checkbox', hint: 'Без галочки — отметки добавятся с этой датой, если их ещё нет. В отчёт правка не попадает.' },
     ],
@@ -63,7 +65,7 @@ function editForm() {
       let n = 0;
       if (v.remove) {
         v.pointIds.forEach((pId) => (ctx.journalByPoint.get(pId) || []).filter((r) => v.workIds.includes(r.workId)).forEach((r) => { repo.remove(pid, 'journal', r.id); n += 1; }));
-        toast(`Убрано строк: ${n}`); return;
+        toast(`Убрано строк: ${n}`); onDone?.(); return;
       }
       const ops = [];
       v.pointIds.forEach((pId) => v.workIds.forEach((wId) => {
@@ -71,7 +73,7 @@ function editForm() {
         ops.push({ coll: 'journal', id: `edit_${pId}_${wId}`, data: { pointId: pId, editDate: v.date, editWorkId: wId, entryId: null, deleted: false } });
       }));
       if (ops.length) repo.save(pid, ops);
-      toast(`Добавлено строк: ${ops.length}`);
+      toast(`Добавлено строк: ${ops.length}`); onDone?.();
     },
   });
 }
