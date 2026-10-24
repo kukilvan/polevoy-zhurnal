@@ -190,3 +190,24 @@ body.tour-on .sheet { max-height: 100%; }
 .tour-text { font-size: 15px; line-height: 1.4; }
 .tour-tap { margin-top: 6px; font-weight: 600; }
 .tour-btns { display: flex; gap: 8px; justify-content: flex-end; margin-top: 10px; flex-wrap: wrap; }
+
+/* Дела и заметки */
+.quick-add { display: flex; gap: 8px; align-items: center; }
+.quick-add button { flex: none; }
+.todo-row { display: flex; align-items: center; gap: 10px; padding: 7px 10px; border-bottom: 1px solid var(--line); }
+.todo-row:last-child, .note-row:last-child { border-bottom: 0; }
+.todo-cb { flex: none; width: 18px; height: 18px; margin: 0; accent-color: var(--acc); }
+.todo-text { flex: 1; min-width: 0; font-weight: 600; line-height: 1.35; padding: 4px 0; white-space: pre-wrap; overflow-wrap: anywhere; cursor: pointer; }
+.note-row { display: flex; align-items: flex-start; gap: 4px; padding: 6px 10px 6px 4px; border-bottom: 1px solid var(--line); }
+.note-row .name { flex: 1; min-width: 0; font-weight: 600; padding: 6px 0; cursor: pointer; overflow-wrap: anywhere; }
+.note-chev { flex: none; width: 34px; padding: 4px 0; background: transparent; border: 0; color: var(--mut); font-size: 16px; }
+.note-chev:disabled { opacity: .4; }
+/* заметка на весь экран; при открытой клавиатуре — ровно над ней (--vvh/--vvt ставит keyboard.js) */
+.noteed { position: fixed; left: 0; right: 0; top: 0; height: 100dvh; z-index: 70; background: var(--bg); display: flex; flex-direction: column; gap: 8px; padding: calc(env(safe-area-inset-top) + 8px) 12px calc(env(safe-area-inset-bottom) + 8px); box-sizing: border-box; }
+:root.kb .noteed { top: var(--vvt, 0px); height: var(--vvh, 100%); padding-top: 8px; padding-bottom: 8px; }
+.noteed-head { display: flex; gap: 8px; align-items: center; }
+.noteed-head button { flex: none; }
+.noteed-done { display: none; justify-content: flex-end; }
+.noteed-done button { padding: 4px 14px; }
+.noteed.typing .noteed-head { display: none; }
+.noteed.typing .noteed-done { display: flex; }
